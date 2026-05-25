@@ -1,0 +1,85 @@
+{% extends 'App/base.html' %}
+{% block title %}Nivel de Tanque{% endblock %}
+{% block nav_tanque %}active{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Nivel de Tanque</h1>
+<p class="page-subtitle">Cambiar conversión: Litros (L)</p>
+
+<div class="tanque-layout">
+
+  <!-- Visual del tanque -->
+  <div class="tanque-visual">
+    <div class="capacity-header">
+      <i class="ti ti-droplet capacity-icon"></i>
+      <div class="capacity-text">Capacidad del tanque: <strong>{{ tanque.capacidad }}L</strong></div>
+    </div>
+
+    <div class="cylinder-wrap">
+      <div class="cylinder">
+        <div class="cylinder-fill" style="height: {{ tanque.porcentaje }}%;"></div>
+        <div class="cylinder-label">{{ tanque.litros }} litros ({{ tanque.porcentaje }}%)</div>
+        <!-- Escalera decorativa -->
+        <div class="cylinder-ladder">
+          {% for i in "1234567890" %}
+            <div class="rung"></div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <span class="badge badge-high tank-available">
+      {{ tanque.litros }} litros disponibles ({{ tanque.porcentaje }}%)
+    </span>
+  </div>
+
+  <!-- Info lateral -->
+  <div class="tanque-info">
+
+    <div class="info-card">
+      <i class="ti ti-engine info-icon"></i>
+      <div class="info-card-body">
+        <div class="info-card-label">Bomba</div>
+        <div class="info-card-value">
+          <span class="badge {% if tanque.bomba == 'Encendida' %}badge-normal{% else %}badge-off{% endif %} status-badge">
+            ● {{ tanque.bomba }}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="info-card">
+      <i class="ti ti-clock"></i>
+      <div class="info-card-body">
+        <div class="info-card-label">Autonomía estimada</div>
+        <div class="info-card-value">{{ tanque.autonomia }}</div>
+        <div class="info-card-sub">bajo consumo actual</div>
+      </div>
+    </div>
+
+    <div class="info-card">
+      <i class="ti ti-history"></i>
+      <div class="info-card-body">
+        <div class="info-card-label">Última lectura</div>
+        <div class="info-card-value">{{ tanque.ultima_lectura }}</div>
+      </div>
+    </div>
+
+    <div class="info-card">
+      <i class="ti ti-chart-line info-icon"></i>
+      <div class="info-card-body">
+        <div class="info-card-label">Capacidad total</div>
+        <div class="info-card-value">{{ tanque.capacidad }}L</div>
+        <div class="tank-bar-wrap tank-bar-small">
+          <div class="tank-bar" style="width: {{ tanque.porcentaje }}%;"></div>
+        </div>
+        <div class="tank-legend">
+          <span>0L</span>
+          <span>{{ tanque.capacidad }}L</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

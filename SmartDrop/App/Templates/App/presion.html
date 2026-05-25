@@ -1,0 +1,94 @@
+{% extends 'App/base.html' %}
+{% block title %}Presión del Agua{% endblock %}
+{% block nav_presion %}active{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Presión del Agua</h1>
+
+<div class="presion-layout">
+
+  <!-- Gauge visual -->
+  <div class="presion-main card">
+    <div class="valve-row">
+      <span class="valve-label">Válvula:</span>
+      <span class="badge {% if presion.valvula == 'ABIERTA' %}badge-open{% else %}badge-closed{% endif %} valve-badge">{{ presion.valvula }}</span>
+    </div>
+
+    <!-- SVG Gauge -->
+    <div class="gauge-wrap">
+      <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" class="gauge-svg">
+        <!-- Fondo del arco -->
+        <path d="M 30 150 A 80 80 0 0 1 170 150"
+              fill="none" stroke="#f0e8ff" stroke-width="18" stroke-linecap="round"/>
+        <!-- Arco de progreso -->
+        <path d="M 30 150 A 80 80 0 0 1 170 150"
+              fill="none" stroke="#7c3aed" stroke-width="18" stroke-linecap="round"
+              stroke-dasharray="{{ presion.gauge_dash }} 251"
+              style="transition: stroke-dasharray 1s ease;"/>
+        <!-- Marcas -->
+        <text x="22"  y="162" font-size="11" fill="#aaa" font-weight="700" font-family="Nunito">0</text>
+        <text x="90"  y="58"  font-size="11" fill="#aaa" font-weight="700" font-family="Nunito">2.5</text>
+        <text x="163" y="162" font-size="11" fill="#aaa" font-weight="700" font-family="Nunito">5</text>
+        <!-- Icono central -->
+        <text x="100" y="130" text-anchor="middle" font-size="40" fill="#7c3aed">💧</text>
+      </svg>
+      <div class="gauge-value-text">
+        <span class="gauge-num">{{ presion.valor }}</span>
+        <span class="gauge-unit">Bar</span>
+      </div>
+    </div>
+    <div class="current-pressure">
+      <span class="badge badge-normal pressure-badge">Presión actual: {{ presion.valor }} Bar</span>
+      <div class="update-chip"><i class="ti ti-refresh"></i> {{ presion.actualizado }}</div>
+    </div>
+  </div>
+
+  <!-- Info lateral -->
+  <div class="presion-side">
+
+    <div class="card">
+      <div style="font-size:15px; font-weight:800; color:#2d1a4a; margin-bottom:1rem;">Estado</div>
+
+      <div class="detail-row">
+        <span>Presión</span>
+        <span class="badge badge-normal">{{ presion.estado }}</span>
+      </div>
+      <div class="detail-row">
+        <span>Válvula</span>
+        <span class="badge {% if presion.valvula == 'ABIERTA' %}badge-open{% else %}badge-closed{% endif %}">
+          {{ presion.valvula }}
+        </span>
+      </div>
+      <div class="detail-row">
+        <span>Valor</span>
+        <span class="detail-val">{{ presion.valor }} Bar</span>
+      </div>
+
+      <!-- Barra de presión -->
+      <div style="margin-top:1rem;">
+        <div class="presion-range-label">Rango de presión</div>
+        <div class="presion-bar-wrap">
+          <div class="presion-bar"></div>
+          <div class="presion-bar-needle" style="left: {{ presion.needle_pos }}%;"></div>
+        </div>
+        <div class="presion-bar-labels"><span>Baja</span><span>Normal</span><span>Alta</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="font-size:15px; font-weight:800; color:#2d1a4a; margin-bottom:0.75rem;">Nota</div>
+      <p style="font-size:14px; color:#555; font-weight:600; line-height:1.6;">
+        {{ presion.nota }}
+      </p>
+    </div>
+
+    <div class="card">
+      <div style="font-size:15px; font-weight:800; color:#2d1a4a; margin-bottom:1rem;">Historial del día</div>
+      <div class="detail-row"><span>Mínima</span><span class="detail-val">{{ presion.min_dia }} Bar</span></div>
+      <div class="detail-row"><span>Máxima</span><span class="detail-val">{{ presion.max_dia }} Bar</span></div>
+      <div class="detail-row"><span>Promedio</span><span class="detail-val">{{ presion.prom_dia }} Bar</span></div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

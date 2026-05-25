@@ -1,0 +1,127 @@
+{% extends 'App/base.html' %}
+{% block title %}Consumo{% endblock %}
+{% block nav_consumo %}active{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Consumo de Agua</h1>
+
+<!-- Tabs Día / Semana / Mes -->
+<div class="tab-row">
+  <button class="tab-btn" onclick="cambiarTab('dia',   this)">Día</button>
+  <button class="tab-btn active" onclick="cambiarTab('semana', this)">Semana</button>
+  <button class="tab-btn" onclick="cambiarTab('mes',   this)">Mes</button>
+</div>
+
+<div class="consumo-layout">
+
+  <!-- Gráfica -->
+  <div class="chart-card">
+    <div class="chart-header">
+      <div>
+        <div class="chart-status" id="chart-status">{{ consumo.estado_label }}</div>
+        <div class="chart-value"><span id="chart-value">{{ consumo.valor_semana }}</span>L</div>
+      </div>
+      <span class="badge badge-high" id="chart-badge">{{ consumo.estado_label }}</span>
+    </div>
+    <div class="chart-canvas-wrap">
+      <canvas id="consumoChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Lateral -->
+  <div class="consumo-side">
+
+    <div class="comparison-card">
+      <div class="comparison-label">Comparación</div>
+      <div class="comparison-val up">
+        ↑ {{ consumo.variacion }}% vs semana pasada
+      </div>
+      <div style="font-size:12px; color:#888; font-weight:600; margin-top:4px;">(Ligeramente elevado)</div>
+    </div>
+
+    <div class="historial-card">
+      <div class="historial-title">Historial</div>
+      <div class="month-nav">
+        <button onclick="mesAnterior()">←</button>
+        <span id="mes-label">{{ consumo.mes }}</span>
+        <button onclick="mesSiguiente()">→</button>
+      </div>
+      <div style="margin-top:1rem; display:flex; flex-direction:column; gap:6px;" id="historial-list">
+        {% for semana in consumo.historial %}
+        <div style="display:flex; justify-content:space-between; font-size:13px; font-weight:600; padding:4px 0; border-bottom:1px solid #f0eafa;">
+          <span style="color:#888;">{{ semana.label }}</span>
+          <span style="color:#2d1a4a;">{{ semana.valor }}L</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="font-size:15px; font-weight:800; color:#2d1a4a; margin-bottom:0.75rem;">Resumen</div>
+      <div class="detail-row"><span>Promedio diario</span><span class="detail-val">{{ consumo.prom_dia }}L</span></div>
+      <div class="detail-row"><span>Día más alto</span><span class="detail-val">{{ consumo.dia_alto }}L</span></div>
+      <div class="detail-row"><span>Día más bajo</span><span class="detail-val">{{ consumo.dia_bajo }}L</span></div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+  const dataSemana = {{ consumo.datos_semana|safe }};
+  const dataDia    = {{ consumo.datos_dia|safe }};
+  const dataMes    = {{ consumo.datos_mes|safe }};
+  const labelsSemana = {{ consumo.labels_semana|safe }};
+  const labelsDia    = {{ consumo.labels_dia|safe }};
+  const labelsMes    = {{ consumo.labels_mes|safe }};
+
+  const ctx = document.getElementById('consumoChart').getContext('2d');
+  const chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labelsSemana,
+      datasets: [{
+        label: 'Consumo (L)',
+        data: dataSemana,
+        borderColor: '#7c3aed',
+        backgroundColor: 'rgba(124,58,237,0.08)',
+        borderWidth: 2.5,
+        pointBackgroundColor: '#7c3aed',
+        pointRadius: 4,
+        tension: 0.4,
+        fill: true,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: '#f0eafa' }, ticks: { color: '#888', font: { family: 'Nunito', weight: '600' } } },
+        y: { grid: { color: '#f0eafa' }, ticks: { color: '#888', font: { family: 'Nunito', weight: '600' } } }
+      }
+    }
+  });
+
+  function cambiarTab(tipo, btn) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const configs = {
+      dia:    { data: dataDia,    labels: labelsDia,    val: '{{ consumo.valor_dia }}' },
+      semana: { data: dataSemana, labels: labelsSemana, val: '{{ consumo.valor_semana }}' },
+      mes:    { data: dataMes,    labels: labelsMes,    val: '{{ consumo.valor_mes }}' },
+    };
+    const c = configs[tipo];
+    chart.data.datasets[0].data   = c.data;
+    chart.data.labels             = c.labels;
+    chart.update();
+    document.getElementById('chart-value').textContent = c.val;
+  }
+
+  let mesActual = '{{ consumo.mes }}';
+  function mesAnterior()   { document.getElementById('mes-label').textContent = 'Octubre'; }
+  function mesSiguiente()  { document.getElementById('mes-label').textContent = 'Diciembre'; }
+</script>
+{% endblock %}

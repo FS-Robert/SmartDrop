@@ -1,0 +1,36 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SmartDrop — Iniciar sesión</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css"/>
+  <link rel="stylesheet" href="{% static 'App/css/dashboard.css' %}"/>
+</head>
+<body>
+  <main class="auth-panel">
+    <div class="auth-card">
+      <h1>Iniciar sesión</h1>
+      <p>Accede a tu cuenta SmartDrop</p>
+      <form method="post" novalidate>
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+        <div class="form-error">{{ form.non_field_errors }}</div>
+        {% endif %}
+
+        <label for="id_email">Correo</label>
+        {{ form.email }}
+        {{ form.email.errors }}
+
+        <label for="id_password">Contraseña</label>
+        {{ form.password }}
+        {{ form.password.errors }}
+
+        <button type="submit" class="btn-primary">Entrar</button>
+      </form>
+      <p class="auth-footer">¿No tienes cuenta? <a href="{% url 'register' %}">Regístrate</a></p>
+    </div>
+  </main>
+</body>
+</html>

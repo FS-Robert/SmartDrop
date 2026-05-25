@@ -1,0 +1,60 @@
+{% extends 'App/base.html' %}
+{% block title %}Recomendaciones{% endblock %}
+{% block nav_reco %}active{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Recomendaciones</h1>
+
+<!-- Header decorativo -->
+<div class="reco-header-card">
+  <i class="ti ti-bulb reco-icon"></i>
+  <div>
+    <div class="reco-header-title">Ahorremos agua hoy, para asegurar el mañana</div>
+    <div class="reco-header-sub">Basado en tu consumo reciente, tenemos estas sugerencias para ti.</div>
+  </div>
+</div>
+
+<!-- Grid de tips -->
+<div class="tips-grid">
+  {% for tip in recomendaciones %}
+  <div class="tip-card" id="tip-{{ forloop.counter }}">
+    <div class="tip-check {% if tip.completado %}checked{% endif %}"
+         onclick="toggleTip(this, {{ forloop.counter }})"
+         title="Marcar como completado"></div>
+    <div class="tip-body">
+      <div class="tip-title">TIP: {{ tip.titulo }}</div>
+      <div class="tip-impact">
+        <i class="ti ti-leaf" style="font-size:12px;"></i>
+        IMPACTO: {{ tip.impacto }}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Progreso -->
+<div class="progress-card card">
+  <div class="progress-header">
+    <div class="progress-title">Tu progreso</div>
+    <span class="progress-text" id="progress-text">0 / {{ recomendaciones|length }} completados</span>
+  </div>
+  <div class="progress-bar-outer">
+    <div class="progress-bar-inner" id="progress-bar" style="width:0%"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const total = {{ recomendaciones|length }};
+  let completados = 0;
+
+  function toggleTip(el, idx) {
+    el.classList.toggle('checked');
+    completados = document.querySelectorAll('.tip-check.checked').length;
+    const pct = Math.round((completados / total) * 100);
+    document.getElementById('progress-bar').style.width  = pct + '%';
+    document.getElementById('progress-text').textContent = completados + ' / ' + total + ' completados';
+  }
+</script>
+{% endblock %}

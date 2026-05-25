@@ -1,0 +1,73 @@
+{% extends 'App/base.html' %}
+{% block title %}Mi Perfil{% endblock %}
+{% block nav_usuario %}active{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Información de Usuario</h1>
+
+<div class="usuario-layout">
+
+  <!-- Perfil -->
+  <div class="usuario-profile card">
+    <div class="profile-avatar">
+      <i class="ti ti-user"></i>
+    </div>
+    <div class="profile-name">{{ usuario.nombre }}</div>
+    <div class="profile-address">{{ usuario.direccion }}</div>
+    <div class="location-chip">
+      <i class="ti ti-map-pin location-icon"></i>
+      {{ usuario.ciudad }}
+    </div>
+
+    <div class="profile-details">
+      <div class="detail-row"><span>Email</span><span class="detail-val email-val">{{ usuario.email }}</span></div>
+      <div class="detail-row"><span>Teléfono</span><span class="detail-val">{{ usuario.telefono }}</span></div>
+      <div class="detail-row"><span>Cuenta activa desde</span><span class="detail-val">{{ usuario.miembro_desde }}</span></div>
+    </div>
+  </div>
+
+  <!-- Configuración -->
+  <div class="usuario-settings">
+
+    <div class="settings-card">
+      <div class="settings-title">Notificaciones</div>
+
+      {% for notif in usuario.notificaciones %}
+      <div class="toggle-row">
+        <span class="toggle-label">
+          <i class="ti ti-{{ notif.icono }} toggle-icon"></i>
+          {{ notif.nombre }}
+        </span>
+        <div class="toggle {% if not notif.activo %}off{% endif %}"
+             onclick="this.classList.toggle('off')"
+             title="Activar/desactivar {{ notif.nombre }}">
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="settings-card">
+      <div class="settings-title">Preferencias</div>
+      <div class="toggle-row">
+        <span class="toggle-label"><i class="ti ti-moon toggle-icon"></i> Modo oscuro</span>
+        <div class="toggle off" onclick="this.classList.toggle('off')"></div>
+      </div>
+      <div class="toggle-row">
+        <span class="toggle-label"><i class="ti ti-language toggle-icon"></i> Idioma español</span>
+        <div class="toggle" onclick="this.classList.toggle('off')"></div>
+      </div>
+      <div class="toggle-row">
+        <span class="toggle-label"><i class="ti ti-chart-bar toggle-icon"></i> Reportes semanales</span>
+        <div class="toggle" onclick="this.classList.toggle('off')"></div>
+      </div>
+    </div>
+
+    <div class="settings-card danger-card">
+      <div class="danger-title">Zona de peligro</div>
+      <p class="danger-text">Estas acciones no se pueden deshacer.</p>
+      <button class="danger-button">Cerrar sesión</button>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

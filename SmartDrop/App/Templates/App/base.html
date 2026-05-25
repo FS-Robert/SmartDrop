@@ -1,0 +1,74 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>SmartDrop – {% block title %}Dashboard{% endblock %}</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css"/>
+  <link rel="stylesheet" href="{% static 'App/css/dashboard.css' %}"/>
+  {% block extra_css %}{% endblock %}
+</head>
+<body>
+
+  <!-- ── Topbar ── -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <i class="ti ti-menu-2" style="font-size:22px;"></i>
+      <span class="topbar-title">SmartDrop</span>
+    </div>
+    <div class="topbar-right">
+      <i class="ti ti-bell" style="font-size:20px;"></i>
+      {% if user.is_authenticated %}
+        <a href="{% url 'usuario' %}" class="avatar" title="Mi perfil">{{ user.get_short_name|default:'U' }}</a>
+        <a href="{% url 'logout' %}" class="topbar-link">Cerrar sesión</a>
+      {% else %}
+        <a href="{% url 'login' %}" class="topbar-link">Iniciar sesión</a>
+        <a href="{% url 'register' %}" class="topbar-link">Registro</a>
+      {% endif %}
+    </div>
+  </header>
+
+  <div class="main">
+
+    <!-- ── Sidebar ── -->
+    <nav class="sidebar">
+      <a href="{% url 'dashboard' %}"          class="nav-item {% block nav_dashboard %}{% endblock %}">
+        <i class="ti ti-home"></i> Inicio
+      </a>
+      <a href="{% url 'presion' %}"            class="nav-item {% block nav_presion %}{% endblock %}">
+        <i class="ti ti-gauge"></i> Presión
+      </a>
+      <a href="{% url 'calidad' %}"            class="nav-item {% block nav_calidad %}{% endblock %}">
+        <i class="ti ti-droplet"></i> Calidad
+      </a>
+      <a href="{% url 'tanque' %}"             class="nav-item {% block nav_tanque %}{% endblock %}">
+        <i class="ti ti-building-warehouse"></i> Tanque
+      </a>
+      <a href="{% url 'consumo' %}"            class="nav-item {% block nav_consumo %}{% endblock %}">
+        <i class="ti ti-chart-bar"></i> Consumo
+      </a>
+      <a href="{% url 'retroalimentacion' %}"  class="nav-item {% block nav_retro %}{% endblock %}">
+        <i class="ti ti-refresh"></i> Retroalimentación
+      </a>
+      <a href="{% url 'recomendaciones' %}"    class="nav-item {% block nav_reco %}{% endblock %}">
+        <i class="ti ti-bulb"></i> Recomendaciones
+      </a>
+      <div class="nav-spacer"></div>
+      <a href="{% url 'usuario' %}"            class="nav-item {% block nav_usuario %}{% endblock %}">
+        <i class="ti ti-user"></i> Mi perfil
+      </a>
+    </nav>
+
+    <!-- ── Contenido ── -->
+    <main class="content">
+      {% block content %}{% endblock %}
+    </main>
+
+  </div>
+
+  <footer>SmartDrop · Sistema de Monitoreo de Agua · Actualizado {{ ultima_actualizacion|default:"hace 2 min" }}</footer>
+
+  {% block extra_js %}{% endblock %}
+</body>
+</html>
