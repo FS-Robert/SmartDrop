@@ -1,0 +1,142 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Estado de Agua</title>
+
+  <link rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap"
+    rel="stylesheet"/>
+
+  <!-- CSS separado -->
+  <link rel="stylesheet" href="{% static 'App/css/dashboard.css' %}"/>
+</head>
+<body>
+
+  <!-- Topbar -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <i class="ti ti-menu-2" style="font-size:22px;"></i>
+      <span class="topbar-title">Sistema de Agua</span>
+    </div>
+    <div class="topbar-right">
+      <i class="ti ti-bell" style="font-size:20px;"></i>
+      <div class="avatar">UA</div>
+    </div>
+  </header>
+
+  <div class="main">
+
+    <!-- Sidebar -->
+    <nav class="sidebar">
+      <a href="#" class="nav-item active"><i class="ti ti-home"></i> Inicio</a>
+      <a href="#" class="nav-item"><i class="ti ti-gauge"></i> Presión</a>
+      <a href="#" class="nav-item"><i class="ti ti-droplet"></i> Calidad</a>
+      <a href="#" class="nav-item"><i class="ti ti-building-warehouse"></i> Tanque</a>
+      <a href="#" class="nav-item"><i class="ti ti-chart-bar"></i> Consumo</a>
+      <a href="#" class="nav-item" style="margin-top:auto;">
+        <i class="ti ti-settings"></i> Configuración
+      </a>
+    </nav>
+
+    <!-- Contenido principal -->
+    <main class="content">
+      <h1 class="page-title">ESTADO DE AGUA</h1>
+
+      <div class="cards-grid">
+
+        <!-- Presión -->
+        <a href="#" class="card">
+          <div class="card-top">
+            <div class="icon-wrap">
+              <i class="ti ti-gauge"></i>
+            </div>
+            <div>
+              <div class="card-label">Presión de agua actual</div>
+              <div class="card-value">{{ presion.estado }}</div>
+              <span class="badge badge-normal">● {{ presion.badge }}</span>
+            </div>
+          </div>
+          <div class="card-link"><i class="ti ti-arrow-right"></i> Click para ver más</div>
+        </a>
+
+        <!-- Calidad -->
+        <a href="#" class="card">
+          <div class="card-top">
+            <div class="icon-wrap blue">
+              <i class="ti ti-droplet"></i>
+            </div>
+            <div>
+              <div class="card-label">Calidad del agua actual</div>
+              <div class="card-value">{{ calidad.estado }}</div>
+              <span class="badge badge-perfect">● {{ calidad.badge }}</span>
+            </div>
+          </div>
+          <div class="card-link"><i class="ti ti-arrow-right"></i> Click para ver más</div>
+        </a>
+
+        <!-- Tanque -->
+        <a href="#" class="card">
+          <div class="card-top">
+            <div class="icon-wrap amber">
+              <i class="ti ti-building-warehouse"></i>
+            </div>
+            <div>
+              <div class="card-label">Nivel de tanque actual</div>
+              <div class="card-value">{{ tanque.porcentaje }}%</div>
+              <span class="badge badge-high">{{ tanque.litros }}L disponibles</span>
+            </div>
+          </div>
+          <div class="tank-bar-wrap">
+            <div class="tank-bar" style="width: {{ tanque.porcentaje }}%;"></div>
+          </div>
+          <div class="card-link"><i class="ti ti-arrow-right"></i> Click para ver más</div>
+        </a>
+
+        <!-- Consumo -->
+        <a href="#" class="card">
+          <div class="card-top">
+            <div class="icon-wrap teal">
+              <i class="ti ti-droplet-half-2"></i>
+            </div>
+            <div>
+              <div class="card-label">Consumo de agua actual</div>
+              <div class="card-value">{{ consumo.hoy }}L</div>
+              <span class="card-sub">Hoy</span>
+            </div>
+          </div>
+          <div class="card-link"><i class="ti ti-arrow-right"></i> Click para ver más</div>
+        </a>
+
+      </div>
+
+      <!-- Stats -->
+      <div class="stats-row">
+        <div class="stat">
+          <div class="stat-num">{{ stats.uptime }}</div>
+          <div class="stat-label">Uptime del sistema</div>
+        </div>
+        <div class="stat">
+          <div class="stat-num">{{ stats.presion_exacta }}</div>
+          <div class="stat-label">Presión exacta</div>
+        </div>
+        <div class="stat">
+          <div class="stat-num">{{ stats.ph }}</div>
+          <div class="stat-label">pH del agua</div>
+        </div>
+        <div class="stat">
+          <div class="stat-num">{{ stats.temperatura }}</div>
+          <div class="stat-label">Temperatura</div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <footer>Sistema de Monitoreo de Agua · Actualizado {{ ultima_actualizacion }}</footer>
+
+</body>
+</html>

@@ -1,0 +1,162 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Nunito', sans-serif;
+  background: #f0f4f8;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Topbar ── */
+.topbar {
+  background: #6B21A8;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 2rem;
+  height: 56px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.topbar-left { display: flex; align-items: center; gap: 16px; }
+.topbar-title { font-size: 18px; font-weight: 700; }
+.topbar-right { display: flex; align-items: center; gap: 12px; }
+.avatar {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: rgba(255,255,255,0.2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700;
+}
+
+/* ── Layout ── */
+.main { display: flex; flex: 1; }
+
+/* ── Sidebar ── */
+.sidebar {
+  width: 220px;
+  background: #fff;
+  border-right: 1px solid #e5e0f0;
+  padding: 1.5rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: calc(100vh - 56px);
+}
+.nav-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 1.5rem;
+  font-size: 14px; font-weight: 600;
+  color: #555;
+  text-decoration: none;
+  border-left: 3px solid transparent;
+  transition: background 0.15s, color 0.15s;
+}
+.nav-item:hover { background: #f5f0ff; color: #6B21A8; }
+.nav-item.active { background: #f5f0ff; color: #6B21A8; border-left-color: #6B21A8; }
+.nav-item i { font-size: 18px; }
+
+/* ── Contenido ── */
+.content { flex: 1; padding: 2rem; overflow-y: auto; }
+
+.page-title {
+  font-size: 26px; font-weight: 800;
+  color: #6B21A8; text-align: center;
+  margin-bottom: 1.75rem;
+}
+
+/* ── Grid de tarjetas ── */
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.25rem;
+}
+
+.card {
+  background: #fff;
+  border-radius: 16px;
+  padding: 1.5rem;
+  border: 1px solid #e0d4f5;
+  display: flex; flex-direction: column; gap: 12px;
+  cursor: pointer;
+  transition: box-shadow 0.15s, transform 0.15s;
+  text-decoration: none;
+}
+.card:hover {
+  box-shadow: 0 6px 24px rgba(107,33,168,0.10);
+  transform: translateY(-2px);
+}
+.card-top { display: flex; align-items: center; gap: 14px; }
+
+.icon-wrap {
+  width: 52px; height: 52px; border-radius: 14px;
+  background: #f5f0ff;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.icon-wrap i { font-size: 26px; color: #6B21A8; }
+.icon-wrap.teal { background: #e1f5ee; }
+.icon-wrap.teal i { color: #0F6E56; }
+.icon-wrap.blue { background: #e6f1fb; }
+.icon-wrap.blue i { color: #185FA5; }
+.icon-wrap.amber { background: #faeeda; }
+.icon-wrap.amber i { color: #854F0B; }
+
+.card-label { font-size: 12px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.6px; }
+.card-value { font-size: 22px; font-weight: 800; color: #2d1a4a; line-height: 1.1; }
+.card-sub { font-size: 12px; color: #888; font-weight: 600; }
+
+.badge {
+  display: inline-block; font-size: 11px; font-weight: 700;
+  padding: 3px 10px; border-radius: 20px;
+}
+.badge-normal  { background: #e1f5ee; color: #0F6E56; }
+.badge-perfect { background: #e6f1fb; color: #185FA5; }
+.badge-high    { background: #faeeda; color: #854F0B; }
+
+.card-link {
+  font-size: 12px; color: #a78bcf; font-weight: 600;
+  border-top: 1px solid #ede8f8;
+  padding-top: 10px;
+  display: flex; align-items: center; gap: 4px;
+}
+
+/* ── Barra de tanque ── */
+.tank-bar-wrap {
+  background: #f0e8ff; border-radius: 8px;
+  height: 10px; overflow: hidden;
+}
+.tank-bar {
+  height: 100%; border-radius: 8px;
+  background: #7c3aed;
+  transition: width 0.6s;
+}
+
+/* ── Stats inferiores ── */
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 1rem; margin-top: 1.5rem;
+}
+.stat {
+  background: #fff; border-radius: 12px;
+  border: 1px solid #e0d4f5;
+  padding: 1rem 1.25rem; text-align: center;
+}
+.stat-num { font-size: 28px; font-weight: 800; color: #6B21A8; }
+.stat-label { font-size: 12px; color: #888; font-weight: 600; margin-top: 2px; }
+
+/* ── Footer ── */
+footer {
+  text-align: center; font-size: 11px;
+  color: #bbb; padding: 0.75rem;
+  font-weight: 600; letter-spacing: 0.3px;
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .sidebar { display: none; }
+  .cards-grid { grid-template-columns: 1fr; }
+}
