@@ -277,8 +277,17 @@ footer {
   display: flex;
   justify-content: center;
   align-items: center;
-  min-height: calc(100vh - 56px - 42px);
+  
+  /* CAMBIO 1: Que ocupe el 100% de la pantalla (ideal para login) */
+  min-height: 100vh; 
   padding: 2rem 1rem;
+  
+  /* CAMBIO 2: La ruta. Usa minúscula en "/static/" o una ruta relativa */
+  background-image: url('/static/App/img/fondoSmartDrop.jpg'); 
+  background-size: cover;       
+  background-position: center;  
+  background-repeat: no-repeat; 
+  background-attachment: fixed; 
 }
 .auth-card {
   width: min(460px, 100%);
@@ -511,5 +520,7 @@ footer {
   .toggle { width:40px; height:22px; }
   .toggle.off::after { transform: translateX(18px); }
 }
+
+
 
 

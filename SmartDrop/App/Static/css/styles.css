@@ -42,19 +42,7 @@ body {
 ════════════════════════════ */
 .main { display: flex; flex: 1; }
 
-/* ════════════════════════════
-   SIDEBAR
-════════════════════════════ */
-.sidebar {
-  width: 220px;
-  background: #fff;
-  border-right: 1px solid #e5e0f0;
-  padding: 1.5rem 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-height: calc(100vh - 56px);
-}
+
 .nav-item {
   display: flex; align-items: center; gap: 12px;
   padding: 10px 1.5rem;
@@ -127,12 +115,7 @@ footer {
   font-weight: 600; letter-spacing: 0.3px;
 }
 
-/* ════════════════════════════
-   RESPONSIVE
-════════════════════════════ */
-@media (max-width: 768px) {
-  .sidebar { display: none; }
-}
+
 
 
 /* ════════════════════════════════════════
@@ -568,3 +551,33 @@ footer {
 }
 .toggle.off { background: #ddd; }
 .toggle.off::after { right: 23px; }
+
+/* ════════════════════════════
+   PANTALLA DE AUTENTICACIÓN (LOGIN)
+════════════════════════════ */
+.auth-panel {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  
+  /* Configuración de la imagen de fondo */
+  background-image: url('/Static/App/img/fondoSmartDrop.jpg'); /* Ajusta la ruta si es necesario */
+  background-size: cover;       /* Cubre toda la pantalla sin deformarse */
+  background-position: center;  /* Centra la imagen */
+  background-repeat: no-repeat; /* Evita que la imagen se duplique */
+  background-attachment: fixed; /* Mantiene el fondo fijo al hacer scroll */
+}
+
+/* Estilo para la tarjeta del formulario (para que resalte sobre el fondo) */
+.auth-card {
+  background: rgba(255, 255, 255, 0.92); /* Fondo blanco con una leve transparencia */
+  backdrop-filter: blur(8px);            /* Efecto de desenfoque moderno detrás de la tarjeta */
+  border-radius: 20px;
+  padding: 2.5rem;
+  width: 100%;
+  max-width: 420px;                      /* Ancho ideal para tarjetas de Login */
+  border: 1px solid rgba(224, 212, 245, 0.6);
+  box-shadow: 0 10px 32px rgba(107, 33, 168, 0.15); /* Sombra suave morada */
+}
