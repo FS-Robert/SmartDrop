@@ -1,9 +1,14 @@
 import json
 from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
+from django.http import JsonResponse
 from django.shortcuts import redirect, render
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
 
 from .forms import LoginForm, UsuarioRegisterForm
+from . import supabase_client
+from .backends import sync_user_from_supabase
 
 
 @login_required(login_url='login')
@@ -130,19 +135,42 @@ def consumo(request):
 
 @login_required(login_url='login')
 def retroalimentacion(request):
-    context = {
-        'retro': {
+    # Intentar obtener la última retroalimentación desde Supabase REST
+    retro = None
+    try:
+        row = supabase_client.fetch_latest('retroalimentacion_consumo')
+        if row:
+            retro = {
+                'mensaje':       row.get('mensaje_generado') or '¡Buen trabajo, ahorrando agua!',
+                'estado_agua':   'Agua segura',
+                'consumo_actual': row.get('diferencia_consumo') or 0,
+                'variacion_mes': f"{row.get('diferencia_consumo') or 0}%",
+                'tendencia':     'baja',
+                'fill_y':        90,
+                'fill_h':        70,
+                'total_mes':     row.get('consumo_total') or 150,
+                'prom_dia':      row.get('consumo_promedio') or 5,
+                'ahorro':        row.get('diferencia_consumo') or 30,
+            }
+    except Exception:
+        retro = None
+
+    if not retro:
+        retro = {
             'mensaje':       '¡Buen trabajo, ahorrando agua!',
             'estado_agua':   'Agua segura',
             'consumo_actual': 1,
             'variacion_mes': '-15%',
             'tendencia':     'baja',
-            'fill_y':        90,    # posición Y del relleno en la gota (SVG)
-            'fill_h':        70,    # altura del relleno (SVG)
+            'fill_y':        90,
+            'fill_h':        70,
             'total_mes':     150,
             'prom_dia':       5,
             'ahorro':        30,
-        },
+        }
+
+    context = {
+        'retro': retro,
         'ultima_actualizacion': 'hace 1 hora',
     }
     return render(request, 'App/retroalimentacion.html', context)
@@ -216,10 +244,64 @@ def register(request):
 
     form = UsuarioRegisterForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
-        form.save()
-        return redirect('login')
+        try:
+            form.save()
+        except supabase_client.SupabaseError as exc:
+            form.add_error(None, str(exc))
+        else:
+            return redirect('login')
 
     return render(request, 'App/register.html', {'form': form})
+
+
+def _user_payload(user):
+    return {
+        'id': user.id_usuario,
+        'email': user.email,
+        'nombre': user.nombre,
+        'apellido': user.apellido,
+        'nombre_completo': user.get_full_name(),
+        'rol': user.rol.nombre_rol if user.rol_id else 'user',
+    }
+
+
+@csrf_exempt
+@require_http_methods(['POST'])
+def api_register(request):
+    """Registro JSON para app móvil. Guarda el usuario en Supabase."""
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return JsonResponse({'ok': False, 'error': 'JSON inválido'}, status=400)
+
+    form = UsuarioRegisterForm(data)
+    if not form.is_valid():
+        return JsonResponse({'ok': False, 'errors': form.errors}, status=400)
+
+    try:
+        user = form.save()
+    except supabase_client.SupabaseError as exc:
+        status = exc.status_code or 500
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=status)
+
+    return JsonResponse({'ok': True, 'user': _user_payload(user)}, status=201)
+
+
+@csrf_exempt
+@require_http_methods(['POST'])
+def api_login(request):
+    """Login JSON para app móvil. Valida credenciales contra Supabase."""
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return JsonResponse({'ok': False, 'error': 'JSON inválido'}, status=400)
+
+    form = LoginForm(data)
+    if not form.is_valid():
+        return JsonResponse({'ok': False, 'errors': form.errors}, status=401)
+
+    user = form.cleaned_data['user']
+    return JsonResponse({'ok': True, 'user': _user_payload(user)})
 
 
 def login_view(request):

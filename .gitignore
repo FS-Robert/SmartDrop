@@ -1,0 +1,38 @@
+# Entorno y secretos
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+
+# Entornos virtuales
+venv/
+.venv/
+env/
+
+# Logs y temporales
+*.log
+*.tmp
+*.temp
+*.bak
+*.swp
+*~
+
+# Django / base local
+db.sqlite3
+db.sqlite3-journal
+*.sqlite3
+media/
+staticfiles/
+
+# IDE y sistema
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini

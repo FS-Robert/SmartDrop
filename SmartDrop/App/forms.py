@@ -1,16 +1,16 @@
 from django import forms
 from django.contrib.auth import authenticate
 
-from .models import Rol, Usuario
+from . import supabase_client
+from .backends import sync_user_from_supabase
 
 
-class UsuarioRegisterForm(forms.ModelForm):
+class UsuarioRegisterForm(forms.Form):
+    email = forms.EmailField(label='Correo')
+    nombre = forms.CharField(label='Nombre', max_length=255)
+    apellido = forms.CharField(label='Apellido', max_length=255)
     password1 = forms.CharField(label='Contraseña', widget=forms.PasswordInput(attrs={'autocomplete': 'new-password'}))
     password2 = forms.CharField(label='Confirmar contraseña', widget=forms.PasswordInput(attrs={'autocomplete': 'new-password'}))
-
-    class Meta:
-        model = Usuario
-        fields = ['email', 'nombre', 'apellido']
 
     def clean_password2(self):
         password1 = self.cleaned_data.get('password1')
@@ -21,28 +21,23 @@ class UsuarioRegisterForm(forms.ModelForm):
 
     def clean_email(self):
         email = self.cleaned_data.get('email')
-        if email and Usuario.objects.filter(email__iexact=email).exists():
-            raise forms.ValidationError('Este correo ya está registrado')
-        return Usuario.objects.normalize_email(email)
+        if email:
+            email = email.strip().lower()
+            try:
+                if supabase_client.email_exists(email):
+                    raise forms.ValidationError('Este correo ya está registrado')
+            except supabase_client.SupabaseError as exc:
+                raise forms.ValidationError(f'No se pudo verificar el correo: {exc}') from exc
+        return email
 
-    def clean_rol(self):
-        rol_value = self.cleaned_data.get('rol')
-        return rol_value if rol_value in ('user', 'admin') else 'user'
-
-    def save(self, commit=True):
-        user = super().save(commit=False)
-        # Force normal user role on registration
-        rol_obj, _ = Rol.objects.get_or_create(
-            nombre_rol='user',
-            defaults={'descripcion': 'Usuario estándar'},
+    def save(self):
+        row = supabase_client.create_usuario(
+            nombre=self.cleaned_data['nombre'],
+            apellido=self.cleaned_data['apellido'],
+            email=self.cleaned_data['email'],
+            password=self.cleaned_data['password1'],
         )
-        user.rol = rol_obj
-        user.is_staff = False
-        user.is_superuser = False
-        user.set_password(self.cleaned_data['password1'])
-        if commit:
-            user.save()
-        return user
+        return sync_user_from_supabase(row)
 
 
 class LoginForm(forms.Form):

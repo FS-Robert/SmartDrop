@@ -13,20 +13,36 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 import os
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Carga variables desde .env (prioridad: SmartDrop/.env junto a manage.py).
+try:
+    from dotenv import load_dotenv
+    load_dotenv(BASE_DIR.parent / '.env')
+    load_dotenv(BASE_DIR / '.env', override=True)
+except ImportError:
+    pass
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-9kbc(n3+fmpty*^^dc_fkz*dts0-1kjo8u+9ufw9i7!d7e1tau'
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', '').strip()
+if not SECRET_KEY:
+    raise ImproperlyConfigured(
+        'Falta DJANGO_SECRET_KEY. Copia .env.example a SmartDrop/.env y genera una clave nueva.'
+    )
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DEBUG', 'True').strip().lower() in ('1', 'true', 'yes')
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+    if host.strip()
+]
 
 
 # Application definition
@@ -71,21 +87,22 @@ TEMPLATES = [
 WSGI_APPLICATION = 'SmartDrop.wsgi.application'
 
 
-# Database
-# https://docs.djangoproject.com/en/5.2/ref/settings/#databases
-
+# Database: usar SQLite para el backend de Django.
+# Todas las operaciones hacia Supabase se realizan vía la API REST
+# mediante `App.supabase_client`. Esto evita dependencias de psycopg2
+# y conexiones directas a un servidor PostgreSQL.
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ.get('POSTGRES_DB', 'smartdrop'),
-        'USER': os.environ.get('POSTGRES_USER', 'postgres'),
-        'PASSWORD': os.environ.get('POSTGRES_PASSWORD', '123456'),
-        'HOST': os.environ.get('POSTGRES_HOST', 'localhost'),
-        'PORT': os.environ.get('POSTGRES_PORT', '5432'),
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
 
 AUTH_USER_MODEL = 'App.Usuario'
+AUTHENTICATION_BACKENDS = [
+    'App.backends.SupabaseAuthBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
 LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'dashboard'
 LOGOUT_REDIRECT_URL = 'login'
@@ -131,3 +148,8 @@ STATIC_URL = '/static/'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Supabase REST API settings (usadas por helpers que llaman a la API REST de Supabase)
+# Configure estas variables en el entorno: SUPABASE_URL y SUPABASE_KEY
+SUPABASE_URL = os.environ.get('SUPABASE_URL', '')
+SUPABASE_KEY = os.environ.get('SUPABASE_KEY', '')
