@@ -45,4 +45,4 @@ CREATE INDEX IF NOT EXISTS idx_retro_fecha ON public.retroalimentacion_consumo (
 
 -- Habilitar REST API (PostgREST expone tablas en schema public por defecto)
 -- Con service_role key, Django puede leer/escribir sin RLS adicional.
--- Para app móvil directa a Supabase, configurar RLS aparte (no usar service_role en móvil).
+

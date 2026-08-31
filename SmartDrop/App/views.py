@@ -14,6 +14,9 @@ from .backends import sync_user_from_supabase
 
 @login_required(login_url='login')
 def dashboard(request):
+    if getattr(request.user, 'rol_id', None) == 2:
+        return redirect('admin_panel')
+
     context = {
         'presion':  {'estado': 'Normal',  'badge': 'Estable'},
         'calidad':  {'estado': 'Perfecto', 'badge': 'Óptimo'},
@@ -308,11 +311,15 @@ def api_login(request):
 
 def login_view(request):
     if request.user.is_authenticated:
+        if getattr(request.user, 'rol_id', None) == 2:
+            return redirect('admin_panel')
         return redirect('dashboard')
     form = LoginForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
         user = form.cleaned_data['user']
         login(request, user)
+        if getattr(user, 'rol_id', None) == 2:
+            return redirect('admin_panel')
         return redirect('dashboard')
 
     return render(request, 'App/login.html', {'form': form})
