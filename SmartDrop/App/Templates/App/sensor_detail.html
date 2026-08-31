@@ -1,0 +1,108 @@
+{% extends 'App/base.html' %}
+{% block title %}Sensor: {{ sensor.tipo_sensor|title }}{% endblock %}
+{% block nav_admin %}active{% endblock %}
+
+{% block extra_css %}
+  <style>
+    .sensor-header { display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px }
+    .chart-card { background:#fff;padding:16px;border-radius:12px;border:1px solid #efe5fb }
+    /* Range buttons styled to match site */
+    .range-btn { background:transparent; border:1px solid #efe5fb; color:#6B21A8; padding:6px 10px; border-radius:8px; cursor:pointer; font-weight:700; font-size:13px }
+    .range-btn:hover { background:#f6f0fb }
+    .range-btn.active { background:#6B21A8; color:#fff; border-color:#53148f }
+  </style>
+{% endblock %}
+
+{% block content %}
+  <div class="sensor-header">
+    <div>
+      <h2 style="margin:0">{{ sensor.tipo_sensor|title }}</h2>
+      <div style="color:#6f6f7a">{{ sensor.modelo|default:'—' }} · {{ sensor.unidad|default:sensor.unidad_medida|default:'' }}</div>
+    </div>
+    <div style="text-align:right">
+      <a href="{% url 'admin_panel' %}" class="btn" style="background:#eee;padding:8px 12px;border-radius:8px;color:#333;text-decoration:none;">Volver</a>
+    </div>
+  </div>
+
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:12px">
+    <div style="display:flex;gap:8px;align-items:center">
+      <div style="font-size:13px;color:#6f6f7a;margin-right:8px">Rango:</div>
+      <div id="rangeBtns" style="display:flex;gap:8px">
+        <button class="btn range-btn" data-range="1h">1h</button>
+        <button class="btn range-btn" data-range="1d">1d</button>
+        <button class="btn range-btn" data-range="1w">1sem</button>
+        <button class="btn range-btn" data-range="1m">1mes</button>
+      </div>
+    </div>
+    <div id="pointsInfo" style="color:#6f6f7a;font-size:13px">Mostrando 0 puntos</div>
+  </div>
+
+  <div class="chart-card">
+    <canvas id="trendChart" height="240"></canvas>
+  </div>
+
+{% endblock %}
+
+{% block extra_js %}
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    (function(){
+      const sensorId = '{{ sensor.id_sensor }}';
+      const unitLabel = '{{ sensor.unidad|default:sensor.unidad_medida|default:"" }}';
+      const ctx = document.getElementById('trendChart');
+      if (!ctx) return;
+
+      const chart = new Chart(ctx, {
+        type: 'line',
+        data: { labels: [], datasets: [{ label: '{{ sensor.tipo_sensor|title }}', data: [], borderColor: '#6B21A8', backgroundColor: 'rgba(107,33,168,0.08)', fill:true, tension:0.2, pointRadius:2 }] },
+        options: {
+          responsive: true,
+          scales: {
+            x: { display: true, title: { display: false }, ticks: { autoSkip:true, maxTicksLimit:12 } },
+            y: { display: true, title: { display: true, text: unitLabel } }
+          },
+          plugins: { legend: { display:true, position:'top' } }
+        }
+      });
+
+      const pointsInfo = document.getElementById('pointsInfo');
+
+      function formatShort(labels){
+        return labels.map(l=>{
+          const d=new Date(l);
+          if (isNaN(d)) return l;
+          return d.toLocaleString(undefined,{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+        });
+      }
+
+      async function loadRange(range){
+        try{
+          // highlight active
+          document.querySelectorAll('.range-btn').forEach(b=>b.classList.remove('active'));
+          const btn = document.querySelector('.range-btn[data-range="'+range+'"]');
+          if(btn) btn.classList.add('active');
+
+          const res = await fetch(`/sensor/${sensorId}/data/?range=${range}`);
+          const json = await res.json();
+          if(!json.ok){ console.error(json); return; }
+          const labels = json.labels || [];
+          const data = json.data || [];
+
+          chart.data.labels = formatShort(labels);
+          chart.data.datasets[0].data = data;
+          chart.update();
+
+          if(pointsInfo) pointsInfo.textContent = `Mostrando ${data.length} puntos`;
+        }catch(err){ console.error(err); }
+      }
+
+      // attach buttons
+      document.querySelectorAll('.range-btn').forEach(b=>{
+        b.addEventListener('click', ()=>{ loadRange(b.dataset.range); });
+      });
+
+      // load default range
+      loadRange('1d');
+    })();
+  </script>
+{% endblock %}

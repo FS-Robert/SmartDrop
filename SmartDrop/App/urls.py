@@ -2,6 +2,9 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
+    path('admin-panel/',        views.admin_panel,        name='admin_panel'),
+    path('sensor/<str:sensor_id>/', views.sensor_detail,    name='sensor_detail'),
+    path('sensor/<str:sensor_id>/data/', views.sensor_data, name='sensor_data'),
     path('',                    views.dashboard,          name='dashboard'),
     path('login/',              views.login_view,         name='login'),
     path('register/',           views.register,           name='register'),
@@ -15,4 +18,5 @@ urlpatterns = [
     path('retroalimentacion/',  views.retroalimentacion,  name='retroalimentacion'),
     path('recomendaciones/',    views.recomendaciones,    name='recomendaciones'),
     path('usuario/',            views.usuario,            name='usuario'),
+    
 ]

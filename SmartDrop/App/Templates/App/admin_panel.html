@@ -1,0 +1,144 @@
+{% extends 'App/base.html' %}
+{% block title %}Panel administrativo{% endblock %}
+{% block nav_admin %}active{% endblock %}
+
+{% block extra_css %}
+  <style>
+    .metric-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(200px,1fr)); gap:12px; margin-bottom:16px; }
+    .metric { background:#fff; border-radius:12px; padding:12px; border:1px solid #efe5fb; }
+    .metric .label { font-size:12px; color:#6f6f7a; font-weight:800; text-transform:uppercase }
+    .metric .val { font-size:22px; font-weight:900; color:#2d1a4a }
+    .table-styled { width:100%; border-collapse:collapse; margin-top:12px; }
+    .table-styled th, .table-styled td { padding:8px 10px; border-bottom:1px solid #f0ecf7; font-size:13px; }
+    .table-styled th { text-align:left; color:#6B21A8; font-weight:800; }
+    .chart-wrap { background:#fff; padding:12px; border-radius:12px; border:1px solid #efe5fb; }
+    .cards-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(240px,1fr)); gap:12px; }
+    .dash-card { background:#fff; border-radius:10px; padding:12px; border:1px solid #efe5fb; display:block; text-decoration:none; color:inherit }
+    .card-top { display:flex; gap:12px; align-items:center }
+    .icon-wrap { width:44px;height:44px;border-radius:8px;background:#f7f3fb;display:flex;align-items:center;justify-content:center }
+    /* Sensor cards */
+    .sensor-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap:12px; margin-bottom:16px; }
+    .sensor-card { background:#fff; padding:12px; border-radius:10px; border:1px solid #efe5fb; display:flex; justify-content:space-between; align-items:flex-start; gap:12px; box-shadow: 0 6px 18px rgba(43, 20, 60, 0.04); min-height:72px }
+    .sensor-card .info { overflow:hidden }
+    .sensor-card .info .title { font-weight:800; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+    .sensor-card .info .meta { font-size:12px; color:#6f6f7a; margin-top:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+    .sensor-card .actions { display:flex; flex-direction:column; align-items:flex-end; gap:8px }
+    .sensor-card .status { font-size:12px; color:#6f6f7a; text-transform:capitalize }
+    .btn { display:inline-block; background:#6B21A8; color:#fff; padding:6px 10px; border-radius:8px; text-decoration:none; font-size:13px }
+    .btn:hover { background:#53148f }
+    @media (max-width:600px){ .sensor-card{ flex-direction:column; align-items:stretch } .sensor-card .actions{ align-items:flex-start } }
+  </style>
+{% endblock %}
+
+{% block content %}
+<h1 class="page-title">PANEL ADMINISTRATIVO</h1>
+
+<div class="metric-grid">
+  <div class="metric">
+    <div class="label">Viviendas registradas</div>
+    <div class="val">{{ viviendas|length }}</div>
+  </div>
+  
+  <div class="metric">
+    <div class="label">Sensores</div>
+    <div class="val">{{ sensores|length }}</div>
+  </div>
+
+  <div class="metric">
+    <div class="label">Lecturas recientes</div>
+    <div class="val">{{ lecturas|length }}</div>
+  </div>
+</div>
+
+<div class="consumo-layout">
+  <div>
+    <!-- Panel: cards de sensores -->
+    <h3>Todos los sensores</h3>
+    <div class="sensor-grid">
+      {% if sensores %}
+        {% for s in sensores %}
+          <div class="sensor-card">
+            <div class="info">
+              <div class="title">{{ s.tipo_sensor|default:'Sensor'|title }}</div>
+              <div class="meta">{{ s.modelo|default:'—' }} · {{ s.unidad|default:s.unidad_medida|default:'' }}</div>
+            </div>
+            <div class="actions">
+              <div class="status">{{ s.estado|default:'—' }}</div>
+              <a href="{% url 'sensor_detail' s.id_sensor %}" class="btn">Ver más</a>
+            </div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <p class="muted">No hay sensores registrados.</p>
+      {% endif %}
+    </div>
+
+    <h3 style="margin-top:6px;">Últimas lecturas</h3>
+    {% if lecturas %}
+      <table class="table-styled">
+        <thead>
+          <tr><th>#</th><th>Sensor</th><th>Vivienda</th><th>Valor</th><th>Fecha</th></tr>
+        </thead>
+        <tbody>
+        {% for row in lecturas|slice:":100" %}
+          <tr>
+            <td>{{ forloop.counter }}</td>
+            <td>
+              <span style="display:inline-flex;align-items:center;gap:8px;">
+                <i class="{{ row.sensor_icon }}" style="font-size:16px;color:#6B21A8"></i>
+                <strong>{{ row.sensor_tipo|title }}</strong>
+                {% if row.sensor_unidad %}
+                  <small style="color:#6f6f7a;margin-left:8px">{{ row.sensor_unidad }}</small>
+                {% endif %}
+              </span>
+            </td>
+            <td>{{ row.id_vivienda }}</td>
+            <td style="font-weight:800">
+              {{ row.valor }}
+              {% if row.sensor_unidad %}
+                <small style="color:#6f6f7a;margin-left:8px;font-weight:600">{{ row.sensor_unidad }}</small>
+              {% endif %}
+            </td>
+            <td>{{ row.fecha_registro }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="muted">No hay lecturas disponibles.</p>
+    {% endif %}
+  </div>
+
+  <aside class="consumo-side">
+    <div class="comparison-card">
+      <div class="comparison-label">Resumen</div>
+      <div class="comparison-val">Viviendas: <strong>{{ viviendas|length }}</strong></div>
+      <div class="comparison-val">Lecturas: <strong>{{ lecturas|length }}</strong></div>
+      <div class="comparison-val">Sensores: <strong>{{ sensores|length }}</strong></div>
+    </div>
+
+    <div class="historial-card">
+      <div class="historial-title">Sensores</div>
+      <div id="top-sensors">
+        {% if sensores %}
+          {% for s in sensores|slice:":10" %}
+            <div style="padding:10px 0; display:flex; justify-content:space-between; align-items:center; gap:12px;">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <i class="{% if s.tipo_sensor == 'nivel' %}ti ti-droplet{% elif s.tipo_sensor == 'calidad' %}ti ti-test-tube{% elif s.tipo_sensor == 'flujo' %}ti ti-wave-sine{% elif s.tipo_sensor == 'presion' %}ti ti-gauge{% else %}ti ti-device{% endif %}" style="font-size:18px;color:#6B21A8"></i>
+                <div>
+                  <div style="font-weight:700">{{ s.tipo_sensor|default:'Sensor'|title }}</div>
+                            <div style="font-size:12px;color:#6f6f7a">{{ s.modelo|default:'—' }} · {{ s.unidad }}</div>
+                </div>
+              </div>
+              <div style="text-align:right;color:#6f6f7a">{{ s.estado|title }}</div>
+            </div>
+          {% endfor %}
+        {% else %}
+          <p class="muted">No hay sensores registrados.</p>
+        {% endif %}
+      </div>
+    </div>
+  </aside>
+</div>
+
+{% endblock %}

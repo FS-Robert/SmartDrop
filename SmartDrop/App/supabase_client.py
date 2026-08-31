@@ -27,7 +27,16 @@ class SupabaseError(Exception):
 
 
 def _base_url(table: str) -> str:
-    return f"{_supabase_url().rstrip('/')}/rest/v1/{table}"
+    """Return the full REST endpoint for a table.
+
+    Avoid duplicating `/rest/v1` if `SUPABASE_URL` already contains it.
+    """
+    base = _supabase_url().rstrip('/')
+    # If the provided SUPABASE_URL already points to the REST endpoint,
+    # don't append another `/rest/v1` segment.
+    if base.endswith('/rest/v1'):
+        return f"{base}/{table}"
+    return f"{base}/rest/v1/{table}"
 
 
 def _check_config():
@@ -44,12 +53,16 @@ def _handle_response(resp: requests.Response) -> dict | list | None:
         return resp.json()
 
     detail = resp.text
+    url = getattr(resp.request, 'url', None)
     try:
         payload = resp.json()
         detail = payload.get('message') or payload.get('hint') or payload.get('error') or resp.text
     except ValueError:
         pass
-    raise SupabaseError(str(detail), status_code=resp.status_code)
+    message = str(detail)
+    if url:
+        message = f"{message} (url: {url})"
+    raise SupabaseError(message, status_code=resp.status_code)
 
 
 def insert(table: str, data: dict, return_representation: bool = True) -> dict | None:

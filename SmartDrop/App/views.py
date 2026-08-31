@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timedelta
 from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
@@ -241,6 +242,7 @@ def usuario(request):
 def register(request):
     if request.user.is_authenticated:
         return redirect('dashboard')
+    
 
     form = UsuarioRegisterForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
@@ -307,7 +309,6 @@ def api_login(request):
 def login_view(request):
     if request.user.is_authenticated:
         return redirect('dashboard')
-
     form = LoginForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
         user = form.cleaned_data['user']
@@ -317,6 +318,216 @@ def login_view(request):
     return render(request, 'App/login.html', {'form': form})
 
 
+@login_required(login_url='login')
+def admin_panel(request):
+    """Panel administrativo: accesible sólo a usuarios con rol 'admin'.
+
+    Muestra lecturas recientes, viviendas y sensores para supervisión global.
+    """
+    # Authorize only users that have role id == 2 (admin)
+    if getattr(request.user, 'rol_id', None) != 2:
+        return redirect('dashboard')
+
+    lecturas = []
+    viviendas = []
+    sensores = []
+    try:
+        lecturas = supabase_client.select('lectura', '*', {'order': 'fecha_registro.desc', 'limit': '200'})
+        viviendas = supabase_client.select('vivienda', '*', {'limit': '1000'})
+        sensores = supabase_client.select('sensor', '*', {'limit': '1000'})
+    except Exception:
+        # En caso de fallo con Supabase, devolver listas vacías y permitir que la plantilla lo muestre
+        pass
+
+    # Construir lookup de sensores por id para mostrar tipo/unidad/icono en la UI
+    sensor_lookup = {}
+    try:
+        for s in sensores:
+            # normalizar y garantizar claves para la plantilla
+            if 'unidad' not in s:
+                s['unidad'] = s.get('unidad_medida') or s.get('unidad') or ''
+            if 'tipo_sensor' not in s:
+                s['tipo_sensor'] = s.get('tipo') or s.get('tipo_sensor') or 'desconocido'
+            sid = s.get('id_sensor')
+            try:
+                sid_key = int(sid)
+            except Exception:
+                sid_key = sid
+            sensor_lookup[sid_key] = s
+    except Exception:
+        sensor_lookup = {}
+
+    icon_map = {
+        'nivel': 'ti ti-droplet',
+        'calidad': 'ti ti-test-tube',
+        'flujo': 'ti ti-wave-sine',
+        'presion': 'ti ti-gauge',
+    }
+
+    enriched = []
+    try:
+        for row in lecturas:
+            sid = row.get('id_sensor')
+            try:
+                sid_key = int(sid)
+            except Exception:
+                sid_key = sid
+            sensor = sensor_lookup.get(sid_key) or {}
+            tipo = (sensor.get('tipo_sensor') or sensor.get('tipo') or 'desconocido')
+            unidad = sensor.get('unidad_medida') or sensor.get('unidad') or ''
+            icon = icon_map.get(tipo, 'ti ti-device')
+            newrow = dict(row)
+            newrow['sensor_tipo'] = tipo
+            newrow['sensor_unidad'] = unidad
+            newrow['sensor_icon'] = icon
+            enriched.append(newrow)
+    except Exception:
+        enriched = lecturas
+
+    # Nota: no se construyen arrays de gráfico aquí (limpieza de UI de sensores)
+
+    context = {
+        'lecturas': enriched,
+        'viviendas': viviendas,
+        'sensores': sensores,
+        'ultima_actualizacion': 'hace unos segundos',
+    }
+    return render(request, 'App/admin_panel.html', context)
+
+
+@login_required(login_url='login')
+def sensor_detail(request, sensor_id):
+    # Admin-only
+    if getattr(request.user, 'rol_id', None) != 2:
+        return redirect('dashboard')
+
+    sensores = []
+    lecturas = []
+    try:
+        sensores = supabase_client.select('sensor', '*', {'limit': '1000'})
+        lecturas = supabase_client.select('lectura', '*', {'order': 'fecha_registro.desc', 'limit': '1000'})
+    except Exception:
+        pass
+
+    # buscar sensor
+    sensor = None
+    try:
+        for s in sensores:
+            sid = s.get('id_sensor')
+            try:
+                if str(sid) == str(sensor_id):
+                    sensor = s
+                    break
+            except Exception:
+                continue
+    except Exception:
+        sensor = None
+
+    # filtrar lecturas para este sensor
+    rows = []
+    try:
+        for r in lecturas:
+            try:
+                if str(r.get('id_sensor')) == str(sensor_id):
+                    rows.append(r)
+            except Exception:
+                continue
+    except Exception:
+        rows = []
+
+    # Los datos vienen ordenados desc desde Supabase; invertir para gráfica ascendente
+    rows_asc = list(reversed(rows))
+    labels = [row.get('fecha_registro') for row in rows_asc]
+    data = []
+    for row in rows_asc:
+        try:
+            data.append(float(row.get('valor') or 0))
+        except Exception:
+            data.append(0)
+
+    context = {
+        'sensor': sensor or {'id_sensor': sensor_id, 'tipo_sensor': 'Sensor', 'modelo': '', 'unidad': ''},
+        'labels': json.dumps(labels),
+        'data': json.dumps(data),
+        'ultima_actualizacion': 'hace unos segundos',
+    }
+    return render(request, 'App/sensor_detail.html', context)
+
+
+@login_required(login_url='login')
+def sensor_data(request, sensor_id):
+    """Return JSON labels/data for a sensor filtered by range GET param.
+    range: one of '1h','1d','1w','1m' (defaults to '1d')
+    """
+    if getattr(request.user, 'rol_id', None) != 2:
+        return JsonResponse({'ok': False, 'error': 'unauthorized'}, status=403)
+
+    rng = request.GET.get('range', '1d')
+    now = datetime.utcnow()
+    if rng == '1h':
+        cutoff = now - timedelta(hours=1)
+    elif rng == '1w':
+        cutoff = now - timedelta(days=7)
+    elif rng == '1m':
+        cutoff = now - timedelta(days=30)
+    else:
+        cutoff = now - timedelta(days=1)
+
+    sensores = []
+    lecturas = []
+    try:
+        sensores = supabase_client.select('sensor', '*', {'limit': '1000'})
+        lecturas = supabase_client.select('lectura', '*', {'order': 'fecha_registro.desc', 'limit': '2000'})
+    except Exception:
+        return JsonResponse({'ok': False, 'error': 'db_error'}, status=500)
+
+    # find sensor unit
+    unit = ''
+    try:
+        for s in sensores:
+            if str(s.get('id_sensor')) == str(sensor_id):
+                unit = s.get('unidad_medida') or s.get('unidad') or ''
+                break
+    except Exception:
+        unit = ''
+
+    filtered = []
+    for r in lecturas:
+        try:
+            if str(r.get('id_sensor')) != str(sensor_id):
+                continue
+            raw = r.get('fecha_registro')
+            if not raw:
+                continue
+            try:
+                ts = datetime.fromisoformat(raw)
+            except Exception:
+                # try slicing microseconds or fallback
+                try:
+                    ts = datetime.fromisoformat(raw.split('+')[0])
+                except Exception:
+                    continue
+            if ts >= cutoff:
+                filtered.append((ts, r))
+        except Exception:
+            continue
+
+    # sort ascending
+    filtered.sort(key=lambda x: x[0])
+    labels = [t[0].isoformat() for t in filtered]
+    data = []
+    for _, r in filtered:
+        try:
+            data.append(float(r.get('valor') or 0))
+        except Exception:
+            data.append(0)
+
+    return JsonResponse({'ok': True, 'labels': labels, 'data': data, 'unit': unit})
+
+
 def logout_view(request):
     logout(request)
     return redirect('login')
+
+
+    
