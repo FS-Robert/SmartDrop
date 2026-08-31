@@ -35,6 +35,10 @@
 
     <div class="card">
       <div class="card-header">Parámetros del agua</div>
+        <div class="detail-row">
+          <span>TDS</span>
+          <span class="detail-val">{{ calidad.tds }} ppm</span>
+        </div>
       <div class="detail-row">
         <span>pH</span>
         <span class="detail-val">{{ calidad.ph }}</span>
@@ -62,11 +66,11 @@
       <div class="card-body-col">
         <div class="state-row">
           <span class="state-label">Calidad</span>
-          <span class="badge badge-perfect">{{ calidad.estado }}</span>
+          <span class="badge {% if calidad.estado == 'Buena' %}badge-perfect{% elif calidad.estado == 'Media' %}badge-high{% else %}badge-closed{% endif %}">{{ calidad.estado }}</span>
         </div>
         <div class="state-row">
           <span class="state-label">Potabilidad</span>
-          <span class="badge badge-normal">Apta</span>
+          <span class="badge {% if calidad.estado == 'Mala' %}badge-closed{% else %}badge-normal{% endif %}">{% if calidad.estado == 'Mala' %}No apta{% else %}Apta{% endif %}</span>
         </div>
         <div class="state-row">
           <span class="state-label">Anomalías 30 días</span>

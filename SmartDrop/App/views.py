@@ -4,6 +4,7 @@ from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
@@ -12,186 +13,424 @@ from . import supabase_client
 from .backends import sync_user_from_supabase
 
 
+def _owned_sensor_data(request):
+    """Return only sensor readings belonging to the authenticated user's homes."""
+    propietario_id = getattr(request.user, 'supabase_id', None) or request.user.id_usuario
+    viviendas = supabase_client.select(
+        'vivienda',
+        'id_vivienda,nic,direccion',
+        {'id_usuario_propietario': f'eq.{propietario_id}', 'limit': '1000'},
+    )
+    vivienda_ids = [str(row['id_vivienda']) for row in viviendas if row.get('id_vivienda')]
+    if not vivienda_ids:
+        return viviendas, [], [], []
+
+    lecturas = supabase_client.select(
+        'lectura',
+        '*',
+        {
+            'id_vivienda': f"in.({','.join(vivienda_ids)})",
+            'order': 'fecha_registro.desc',
+            'limit': '2000',
+        },
+    )
+    sensores = supabase_client.select('sensor', '*', {'limit': '1000'})
+    try:
+        tanques = supabase_client.select(
+            'tanque',
+            'id_sensor_nivel,capacidad_maxima_litros,altura_total',
+            {'limit': '1000'},
+        )
+    except Exception:
+        tanques = []
+    sensor_lookup = {str(sensor.get('id_sensor')): sensor for sensor in sensores}
+    for lectura in lecturas:
+        sensor = sensor_lookup.get(str(lectura.get('id_sensor')), {})
+        lectura['tipo_sensor'] = (sensor.get('tipo_sensor') or '').lower()
+        lectura['unidad_medida'] = sensor.get('unidad_medida') or ''
+    return viviendas, sensores, lecturas, tanques
+
+
+def _owned_consumption(request):
+    propietario_id = getattr(request.user, 'supabase_id', None) or request.user.id_usuario
+    viviendas = supabase_client.select(
+        'vivienda',
+        'id_vivienda,nic,direccion',
+        {'id_usuario_propietario': f'eq.{propietario_id}', 'limit': '1000'},
+    )
+    vivienda_ids = [str(row['id_vivienda']) for row in viviendas if row.get('id_vivienda')]
+    if not vivienda_ids:
+        return viviendas, []
+    rows = supabase_client.select(
+        'consumo',
+        '*',
+        {
+            'id_vivienda': f"in.({','.join(vivienda_ids)})",
+            'order': 'fecha.desc',
+            'limit': '1000',
+        },
+    )
+    return viviendas, rows
+
+
+def _safe_float(value, default=0):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _latest_readings_by_type(lecturas):
+    latest = {}
+    for lectura in lecturas:
+        tipo = lectura.get('tipo_sensor', '')
+        if tipo and tipo not in latest:
+            latest[tipo] = lectura
+    return latest
+
+
+def _find_reading(latest, *names):
+    for tipo, lectura in latest.items():
+        if any(name in tipo for name in names):
+            return lectura
+    return None
+
+
+def _quality_status(tds_value):
+    if tds_value is None:
+        return 'Sin datos', 'Sin lectura', 0
+    if tds_value <= 300:
+        return 'Buena', 'Óptima', 5
+    if tds_value <= 600:
+        return 'Media', 'Aceptable', 3
+    return 'Mala', 'Revisar', 1
+
+
+def _tank_level_data(level, sensors):
+    if not level:
+        return 0, 0, 0
+    value = _safe_float(level.get('valor'))
+    sensor = next((item for item in sensors if str(item.get('id_sensor')) == str(level.get('id_sensor'))), {})
+    configured_capacity = _safe_float(sensor.get('capacidad_maxima_litros'))
+    configured_height = _safe_float(sensor.get('altura_total'))
+    sensor_min = _safe_float(sensor.get('rango_min'))
+    sensor_max = _safe_float(sensor.get('rango_max'))
+    capacity = sensor_max if sensor_max > sensor_min else 100
+    percentage = ((value - sensor_min) / (capacity - sensor_min) * 100) if capacity > sensor_min else 0
+    if configured_height > 0:
+        percentage = value / configured_height * 100
+    display_capacity = configured_capacity or capacity
+    liters = display_capacity * percentage / 100
+    return round(liters, 2), round(min(max(percentage, 0), 100), 2), round(display_capacity, 2)
+
+
 @login_required(login_url='login')
 def dashboard(request):
     if getattr(request.user, 'rol_id', None) == 2:
         return redirect('admin_panel')
 
+    try:
+        viviendas, sensores, lecturas, tanques = _owned_sensor_data(request)
+        _, consumption_rows = _owned_consumption(request)
+    except Exception:
+        viviendas, sensores, lecturas, tanques, consumption_rows = [], [], [], [], []
+    latest = _latest_readings_by_type(lecturas)
+    pressure = _find_reading(latest, 'presion', 'pressure')
+    quality = _find_reading(latest, 'tds', 'calidad', 'ph')
+    level = _find_reading(latest, 'nivel', 'level')
+    tds_value = _safe_float(quality.get('valor')) if quality else None
+    quality_state, quality_badge, _ = _quality_status(tds_value)
+    tank = next((item for item in tanques if str(item.get('id_sensor_nivel')) == str(level.get('id_sensor'))), {}) if level else {}
+    level_value, level_percentage, level_capacity = _tank_level_data(level, [dict(sensor, **tank) for sensor in sensores])
+    consumption = _safe_float(
+        consumption_rows[0].get('consumo_total') or consumption_rows[0].get('consumo_promedio')
+    ) if consumption_rows else 0
+
     context = {
-        'presion':  {'estado': 'Normal',  'badge': 'Estable'},
-        'calidad':  {'estado': 'Perfecto', 'badge': 'Óptimo'},
-        'tanque':   {'porcentaje': 90, 'litros': 540},
-        'consumo':  {'hoy': 50},
+        'presion':  {'estado': 'Normal' if pressure else 'Sin datos', 'badge': 'Estable' if pressure else 'Sin lectura'},
+        'calidad':  {'estado': quality_state, 'badge': quality_badge, 'tds': tds_value or 0},
+        'tanque':  {'porcentaje': level_percentage, 'litros': round(level_capacity * level_percentage / 100, 2)},
+        'consumo':  {'hoy': consumption},
         'stats': {
-            'uptime':        '98%',
-            'presion_exacta':'3.2 bar',
-            'ph':            '7.2 pH',
-            'temperatura':   '22°C',
+            'uptime':        'Disponible' if lecturas else 'Sin datos',
+            'presion_exacta':f"{_safe_float(pressure.get('valor')) if pressure else 0} bar",
+            'ph':            f"{_safe_float(_find_reading(latest, 'ph').get('valor')) if _find_reading(latest, 'ph') else 0} pH",
+            'temperatura':   f"{_safe_float(_find_reading(latest, 'temper').get('valor')) if _find_reading(latest, 'temper') else 0}°C",
         },
-        'ultima_actualizacion': 'hace 2 min',
+        'viviendas': viviendas,
+        'ultima_actualizacion': 'hace unos segundos',
     }
     return render(request, 'App/dashboard.html', context)
 
 
 @login_required(login_url='login')
 def tanque(request):
+    try:
+        viviendas, sensores, lecturas, tanques = _owned_sensor_data(request)
+    except Exception:
+        viviendas, sensores, lecturas, tanques = [], [], [], []
+    level = _find_reading(_latest_readings_by_type(lecturas), 'nivel', 'level')
+    tank = next((item for item in tanques if str(item.get('id_sensor_nivel')) == str(level.get('id_sensor'))), {}) if level else {}
+    nivel, porcentaje, capacidad = _tank_level_data(level, [dict(sensor, **tank) for sensor in sensores])
+    litros = round(capacidad * porcentaje / 100, 2)
     context = {
         'tanque': {
-            'capacidad':     600,
-            'porcentaje':    90,
-            'litros':        540,
-            'bomba':         'Apagada',
-            'autonomia':     '2 días',
-            'ultima_lectura':'1:55 AM',
+            'capacidad':     capacidad,
+            'porcentaje':    porcentaje,
+            'litros':        litros,
+            'bomba':         'Sin datos',
+            'autonomia':     'Sin datos',
+            'ultima_lectura': level.get('fecha_registro', 'Sin datos') if level else 'Sin datos',
         },
-        'ultima_actualizacion': 'hace 5 min',
+        'viviendas': viviendas,
+        'ultima_actualizacion': 'hace unos segundos',
     }
     return render(request, 'App/tanque.html', context)
 
 
 @login_required(login_url='login')
 def calidad(request):
+    try:
+        viviendas, _, lecturas, _ = _owned_sensor_data(request)
+    except Exception:
+        viviendas, lecturas = [], []
+    latest = _latest_readings_by_type(lecturas)
+    tds = _find_reading(latest, 'tds', 'calidad')
+    ph = _find_reading(latest, 'ph')
+    chlorine = _find_reading(latest, 'cloro', 'chlorine')
+    turbidity = _find_reading(latest, 'turbidez', 'turbidity')
+    conductivity = _find_reading(latest, 'conductividad', 'conductivity')
+    temperature = _find_reading(latest, 'temper')
+    tds_value = _safe_float(tds.get('valor')) if tds else None
+    quality_state, quality_badge, quality_stars = _quality_status(tds_value)
     context = {
         'calidad': {
-            'titulo':         '¡AGUA SEGURA!',
-            'estado':         'Perfecto',
-            'badge':          'Óptimo',
-            'estrellas':       5,
-            'estrellas_range': range(5),
-            'estrellas_vacias':range(0),
-            'descripcion':    'Se puede tomar agua con seguridad.',
-            'anomalias':      'No se han detectado anomalías en los últimos 30 días.',
-            'ultimo_analisis':'11:30 AM',
-            'ph':             '7.2',
-            'cloro':          '0.3 mg/L',
-            'turbidez':       '0.8 NTU',
-            'conductividad':  '320 µS/cm',
-            'temperatura':    '22°C',
+            'titulo':         f'CALIDAD {quality_state.upper()}' if tds or ph else 'SIN DATOS DE CALIDAD',
+            'estado':         quality_state,
+            'badge':          quality_badge,
+            'estrellas':       quality_stars,
+            'estrellas_range': range(quality_stars),
+            'estrellas_vacias':range(5 - quality_stars),
+            'descripcion':    f'TDS: {tds_value} ppm. Buena: hasta 300, media: 301-600, mala: más de 600.' if tds else 'No hay lecturas de calidad para tu vivienda.',
+            'anomalias':      f'Clasificación TDS: {quality_state}.' if tds else 'No se han recibido lecturas.',
+            'ultimo_analisis':(tds or ph or {}).get('fecha_registro', 'Sin datos'),
+            'tds':            tds_value or 0,
+            'ph':             _safe_float(ph.get('valor')) if ph else 0,
+            'cloro':          _safe_float(chlorine.get('valor')) if chlorine else 0,
+            'turbidez':       _safe_float(turbidity.get('valor')) if turbidity else 0,
+            'conductividad':  _safe_float(conductivity.get('valor')) if conductivity else 0,
+            'temperatura':    _safe_float(temperature.get('valor')) if temperature else 0,
         },
-        'ultima_actualizacion': 'hace 1 min',
+        'viviendas': viviendas,
+        'ultima_actualizacion': 'hace unos segundos',
     }
     return render(request, 'App/calidad.html', context)
 
 
 @login_required(login_url='login')
 def presion(request):
-    valor     = 2.9
+    try:
+        viviendas, _, lecturas, _ = _owned_sensor_data(request)
+    except Exception:
+        viviendas, lecturas = [], []
+    pressure_rows = [row for row in lecturas if 'presion' in row.get('tipo_sensor', '') or 'pressure' in row.get('tipo_sensor', '')]
+    valor = _safe_float(pressure_rows[0].get('valor')) if pressure_rows else 0
     max_bar   = 5.0
-    pct       = (valor / max_bar) * 100
+    pct       = min(max((valor / max_bar) * 100, 0), 100)
     # Arco SVG: longitud total del arco ≈ 251px
-    gauge_dash = int((valor / max_bar) * 251)
+    gauge_dash = int((pct / 100) * 251)
 
     context = {
         'presion': {
-            'estado':     'Normal',
-            'valvula':    'ABIERTA',
+            'estado':     'Normal' if pressure_rows else 'Sin datos',
+            'valvula':    'Sin datos',
             'valor':       valor,
             'gauge_dash':  gauge_dash,
             'needle_pos':  int(pct),
-            'nota':       'La presión es adecuada para el uso de duchas y lavadoras.',
-            'actualizado':'Actualizado hace 10 segundos',
-            'min_dia':    2.4,
-            'max_dia':    3.1,
-            'prom_dia':   2.8,
+            'nota':       'Valor recibido desde el sensor de presión de tu vivienda.' if pressure_rows else 'No hay lecturas de presión para tu vivienda.',
+            'actualizado':'Actualizado ahora' if pressure_rows else 'Sin lectura',
+            'min_dia':    min((_safe_float(row.get('valor')) for row in pressure_rows), default=0),
+            'max_dia':    max((_safe_float(row.get('valor')) for row in pressure_rows), default=0),
+            'prom_dia':   round(sum(_safe_float(row.get('valor')) for row in pressure_rows) / len(pressure_rows), 2) if pressure_rows else 0,
         },
-        'ultima_actualizacion': 'hace 10 seg',
+        'viviendas': viviendas,
+        'ultima_actualizacion': 'hace unos segundos',
     }
     return render(request, 'App/presion.html', context)
 
 
 @login_required(login_url='login')
 def consumo(request):
-    datos_semana  = [8, 12, 7, 15, 10, 9, 5]
-    labels_semana = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
-    datos_dia     = [2, 3, 1, 4, 2, 5, 3, 2, 1, 4, 3, 2]
-    labels_dia    = ['6am','7am','8am','9am','10am','11am','12pm','1pm','2pm','3pm','4pm','5pm']
-    datos_mes     = [180, 210, 195, 220, 190, 205, 215, 200, 185, 210, 198, 220]
-    labels_mes    = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+    viviendas = []
+    rows = []
+    try:
+        propietario_id = getattr(request.user, 'supabase_id', None) or request.user.id_usuario
+        viviendas = supabase_client.select(
+            'vivienda',
+            'id_vivienda,nic,direccion',
+            {
+                'id_usuario_propietario': f'eq.{propietario_id}',
+                'limit': '1000',
+            },
+        )
+        vivienda_ids = [str(vivienda['id_vivienda']) for vivienda in viviendas if vivienda.get('id_vivienda')]
+        if vivienda_ids:
+            vivienda_filter = f"in.({','.join(vivienda_ids)})"
+            rows = supabase_client.select(
+                'consumo',
+                '*',
+                {
+                    'id_vivienda': vivienda_filter,
+                    'order': 'fecha.desc',
+                    'limit': '1000',
+                },
+            )
+    except Exception:
+        # No mostrar datos de otra vivienda si la consulta no está disponible.
+        viviendas = []
+        rows = []
+
+    now = timezone.localtime()
+    today = now.date()
+    parsed_rows = []
+    for row in rows:
+        raw_date = row.get('fecha')
+        if not raw_date:
+            continue
+        try:
+            row_date = datetime.fromisoformat(str(raw_date).replace('Z', '+00:00'))
+            if row_date.tzinfo:
+                row_date = timezone.localtime(row_date)
+            value = float(row.get('consumo_total') or row.get('consumo_promedio') or 0)
+        except (TypeError, ValueError, OverflowError):
+            continue
+        parsed_rows.append((row_date, value))
+
+    week_start = today - timedelta(days=6)
+    month_start = today.replace(day=1)
+    week_values = {week_start + timedelta(days=offset): 0 for offset in range(7)}
+    month_values = {}
+    day_values = []
+    for row_date, value in parsed_rows:
+        row_day = row_date.date()
+        if row_day in week_values:
+            week_values[row_day] += value
+        if row_day == today:
+            day_values.append(value)
+        month_key = row_day.replace(day=1)
+        month_values[month_key] = month_values.get(month_key, 0) + value
+
+    labels_semana = [day.strftime('%a').capitalize()[:3] for day in week_values]
+    datos_semana = [round(value, 2) for value in week_values.values()]
+    recent_months = []
+    cursor = month_start
+    for _ in range(12):
+        recent_months.insert(0, cursor)
+        cursor = (cursor - timedelta(days=1)).replace(day=1)
+    labels_mes = [month.strftime('%b').capitalize()[:3] for month in recent_months]
+    datos_mes = [round(month_values.get(month, 0), 2) for month in recent_months]
+    valor_dia = round(sum(day_values), 2)
+    valor_semana = round(sum(datos_semana), 2)
+    valor_mes = round(month_values.get(month_start, 0), 2)
+    average_day = round(valor_mes / max(today.day, 1), 2)
+    non_zero_values = [value for _, value in parsed_rows if value > 0]
+    highest_day = round(max(non_zero_values), 2) if non_zero_values else 0
+    lowest_day = round(min(non_zero_values), 2) if non_zero_values else 0
+    estado_label = 'SIN DATOS DE CONSUMO' if not parsed_rows else 'CONSUMO REGISTRADO'
 
     context = {
         'consumo': {
-            'valor_semana':  5,
-            'valor_dia':     50,
-            'valor_mes':     200,
-            'estado_label':  'CONSUMO LIGERAMENTE ELEVADO',
-            'variacion':     4.5,
-            'mes':           'Noviembre',
-            'prom_dia':      7,
-            'dia_alto':      15,
-            'dia_bajo':      5,
-            'datos_semana':  json.dumps(datos_semana),
+            'valor_semana': valor_semana,
+            'valor_dia': valor_dia,
+            'valor_mes': valor_mes,
+            'estado_label': estado_label,
+            'variacion': 0,
+            'mes': now.strftime('%B'),
+            'prom_dia': average_day,
+            'dia_alto': highest_day,
+            'dia_bajo': lowest_day,
+            'datos_semana': json.dumps(datos_semana),
             'labels_semana': json.dumps(labels_semana),
-            'datos_dia':     json.dumps(datos_dia),
-            'labels_dia':    json.dumps(labels_dia),
-            'datos_mes':     json.dumps(datos_mes),
-            'labels_mes':    json.dumps(labels_mes),
+            'datos_dia': json.dumps(day_values),
+            'labels_dia': json.dumps([f'{index + 1}' for index in range(len(day_values))]),
+            'datos_mes': json.dumps(datos_mes),
+            'labels_mes': json.dumps(labels_mes),
             'historial': [
-                {'label': 'Semana 1', 'valor': 48},
-                {'label': 'Semana 2', 'valor': 52},
-                {'label': 'Semana 3', 'valor': 45},
-                {'label': 'Semana 4', 'valor': 55},
+                {'label': f'Semana {index + 1}', 'valor': round(sum(datos_semana[index * 7 // 4:(index + 1) * 7 // 4]), 2)}
+                for index in range(4)
             ],
         },
-        'ultima_actualizacion': 'hace 3 min',
+        'viviendas': viviendas,
+        'ultima_actualizacion': 'hace unos segundos',
     }
     return render(request, 'App/consumo.html', context)
 
 
 @login_required(login_url='login')
 def retroalimentacion(request):
-    # Intentar obtener la última retroalimentación desde Supabase REST
     retro = None
     try:
-        row = supabase_client.fetch_latest('retroalimentacion_consumo')
+        viviendas, consumption_rows = _owned_consumption(request)
+        row = consumption_rows[0] if consumption_rows else None
         if row:
+            current = _safe_float(row.get('consumo_total') or row.get('consumo_promedio'))
+            previous = _safe_float(consumption_rows[1].get('consumo_total') or consumption_rows[1].get('consumo_promedio')) if len(consumption_rows) > 1 else current
+            variation = round(((current - previous) / previous) * 100, 2) if previous else 0
             retro = {
-                'mensaje':       row.get('mensaje_generado') or '¡Buen trabajo, ahorrando agua!',
-                'estado_agua':   'Agua segura',
-                'consumo_actual': row.get('diferencia_consumo') or 0,
-                'variacion_mes': f"{row.get('diferencia_consumo') or 0}%",
-                'tendencia':     'baja',
-                'fill_y':        90,
-                'fill_h':        70,
-                'total_mes':     row.get('consumo_total') or 150,
-                'prom_dia':      row.get('consumo_promedio') or 5,
-                'ahorro':        row.get('diferencia_consumo') or 30,
+                'mensaje':       'Resumen generado con tu consumo registrado.',
+                'estado_agua':   'Consumo registrado',
+                'consumo_actual': current,
+                'variacion_mes': f"{variation}%",
+                'tendencia':     'baja' if variation <= 0 else 'alta',
+                'fill_y':        max(10, 160 - min(current, 150)),
+                'fill_h':        min(current, 150),
+                'total_mes':     round(sum(_safe_float(item.get('consumo_total') or item.get('consumo_promedio')) for item in consumption_rows), 2),
+                'prom_dia':      round(sum(_safe_float(item.get('consumo_promedio') or item.get('consumo_total')) for item in consumption_rows) / len(consumption_rows), 2),
+                'ahorro':        max(0, round(-variation, 2)),
             }
     except Exception:
         retro = None
 
     if not retro:
         retro = {
-            'mensaje':       '¡Buen trabajo, ahorrando agua!',
-            'estado_agua':   'Agua segura',
-            'consumo_actual': 1,
-            'variacion_mes': '-15%',
+            'mensaje':       'No hay datos de consumo para generar retroalimentación.',
+            'estado_agua':   'Sin datos',
+            'consumo_actual': 0,
+            'variacion_mes': '0%',
             'tendencia':     'baja',
-            'fill_y':        90,
-            'fill_h':        70,
-            'total_mes':     150,
-            'prom_dia':       5,
-            'ahorro':        30,
+            'fill_y':        160,
+            'fill_h':        0,
+            'total_mes':     0,
+            'prom_dia':       0,
+            'ahorro':        0,
         }
 
     context = {
         'retro': retro,
-        'ultima_actualizacion': 'hace 1 hora',
+        'viviendas': viviendas if 'viviendas' in locals() else [],
+        'ultima_actualizacion': 'hace unos segundos',
     }
     return render(request, 'App/retroalimentacion.html', context)
 
 
 @login_required(login_url='login')
 def recomendaciones(request):
+    try:
+        viviendas, consumption_rows = _owned_consumption(request)
+    except Exception:
+        viviendas, consumption_rows = [], []
+    total_consumption = round(sum(_safe_float(row.get('consumo_total') or row.get('consumo_promedio')) for row in consumption_rows), 2)
+    consumption_note = f'Has registrado {total_consumption}L en tus lecturas recientes.' if consumption_rows else 'Aún no hay consumo registrado para tu vivienda.'
     context = {
         'recomendaciones': [
             {
                 'titulo':     'Cerrar la llave mientras lavas los dientes',
-                'impacto':    'Ahorra hasta 10L diarios',
+                'impacto':    'Ahorro estimado: hasta 10L diarios',
                 'completado':  False,
             },
             {
                 'titulo':     'Reducir el tiempo de ducha a 5 minutos',
-                'impacto':    'Ahorra hasta 50L diarios',
+                'impacto':    f'Consumo reciente: {total_consumption}L',
                 'completado':  False,
             },
             {
@@ -215,7 +454,9 @@ def recomendaciones(request):
                 'completado':  False,
             },
         ],
-        'ultima_actualizacion': 'hace 1 día',
+        'consumo_nota': consumption_note,
+        'viviendas': viviendas,
+        'ultima_actualizacion': 'hace unos segundos',
     }
     return render(request, 'App/recomendaciones.html', context)
 

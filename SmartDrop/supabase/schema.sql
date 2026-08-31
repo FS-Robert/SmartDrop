@@ -29,6 +29,35 @@ VALUES
     ('admin', 'Administrador')
 ON CONFLICT (nombre_rol) DO NOTHING;
 
+-- Vivienda y consumos consultados por la vista del usuario.
+CREATE TABLE IF NOT EXISTS public.vivienda (
+    id_vivienda             BIGSERIAL PRIMARY KEY,
+    nic                     VARCHAR(50) NOT NULL UNIQUE,
+    direccion               TEXT NOT NULL,
+    id_usuario_propietario  BIGINT REFERENCES public.usuario(id_usuario) ON DELETE SET NULL,
+    codigo_medidor          VARCHAR(50) NOT NULL,
+    tipo_establecimiento    VARCHAR(30) NOT NULL,
+    nombre_completo_titular VARCHAR(150) NOT NULL,
+    fecha_vinculacion       TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS public.consumo (
+    id_consumo       BIGSERIAL PRIMARY KEY,
+    id_vivienda      BIGINT NOT NULL REFERENCES public.vivienda(id_vivienda) ON DELETE RESTRICT,
+    fecha            TIMESTAMPTZ NOT NULL,
+    consumo_total    NUMERIC,
+    consumo_promedio NUMERIC,
+    consumo_maximo   NUMERIC,
+    consumo_minimo   NUMERIC,
+    periodo          VARCHAR(20) NOT NULL,
+    estado_pago      VARCHAR(15) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_vivienda_propietario
+    ON public.vivienda (id_usuario_propietario);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_consumo_vivienda_fecha_periodo
+    ON public.consumo (id_vivienda, fecha, periodo);
+
 -- Retroalimentación de consumo (ya usada por la vista web)
 CREATE TABLE IF NOT EXISTS public.retroalimentacion_consumo (
     id                      BIGSERIAL PRIMARY KEY,

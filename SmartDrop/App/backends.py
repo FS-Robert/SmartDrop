@@ -23,6 +23,7 @@ def sync_user_from_supabase(row: dict) -> Usuario:
     user, _ = Usuario.objects.update_or_create(
         email=email,
         defaults={
+            'supabase_id': row.get('id_usuario'),
             'nombre': row.get('nombre', ''),
             'apellido': row.get('apellido', ''),
             'rol': rol,

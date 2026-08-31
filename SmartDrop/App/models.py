@@ -51,6 +51,7 @@ class UsuarioManager(BaseUserManager):
 
 class Usuario(AbstractBaseUser, PermissionsMixin):
     id_usuario = models.BigAutoField(primary_key=True, db_column='id_usuario')
+    supabase_id = models.BigIntegerField(null=True, blank=True, unique=True, db_column='id_usuario_supabase')
     nombre = models.CharField(max_length=255)
     apellido = models.CharField(max_length=255)
     email = models.EmailField(_('correo'), unique=True, db_column='correo')

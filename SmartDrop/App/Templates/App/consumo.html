@@ -4,6 +4,11 @@
 
 {% block content %}
 <h1 class="page-title">Consumo de Agua</h1>
+{% if viviendas %}
+<p class="page-subtitle">Vivienda: {{ viviendas.0.nic }}{% if viviendas.0.direccion %} · {{ viviendas.0.direccion }}{% endif %}</p>
+{% else %}
+<p class="page-subtitle">No tienes una vivienda vinculada.</p>
+{% endif %}
 
 <!-- Tabs Día / Semana / Mes -->
 <div class="tab-row">

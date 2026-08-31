@@ -4,6 +4,11 @@
 
 {% block content %}
 <h1 class="page-title">ESTADO DE AGUA</h1>
+{% if viviendas %}
+<p class="page-subtitle">Datos de {{ viviendas.0.nic }}</p>
+{% else %}
+<p class="page-subtitle">Sin vivienda vinculada o sin lecturas disponibles.</p>
+{% endif %}
 
 <div class="cards-grid">
 
@@ -31,7 +36,7 @@
       <div>
         <div class="card-label">Calidad del agua actual</div>
         <div class="card-value">{{ calidad.estado }}</div>
-        <span class="badge badge-perfect">● {{ calidad.badge }}</span>
+        <span class="badge {% if calidad.estado == 'Buena' %}badge-perfect{% elif calidad.estado == 'Media' %}badge-high{% else %}badge-closed{% endif %}">● {{ calidad.badge }}</span>
       </div>
     </div>
     <div class="card-link"><i class="ti ti-arrow-right"></i> Click para ver más</div>
@@ -83,8 +88,8 @@
     <div class="stat-label">Presión exacta</div>
   </div>
   <div class="stat">
-    <div class="stat-num">{{ stats.ph }}</div>
-    <div class="stat-label">pH del agua</div>
+    <div class="stat-num">{{ calidad.tds }} ppm</div>
+    <div class="stat-label">TDS del agua</div>
   </div>
   <div class="stat">
     <div class="stat-num">{{ stats.temperatura }}</div>
