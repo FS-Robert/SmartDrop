@@ -1,0 +1,4 @@
+Django>=5.2,<6
+requests>=2.32
+python-dotenv>=1.0
+paho-mqtt>=2.1,<3

@@ -40,6 +40,9 @@
         <a href="{% url 'admin_panel' %}" class="nav-item {% block nav_admin %}{% endblock %}">
           <i class="ti ti-shield-check"></i> Panel admin
         </a>
+        <a href="{% url 'valvulas' %}" class="nav-item {% block nav_valvulas %}{% endblock %}">
+          <i class="ti ti-toggle-left"></i> Electroválvulas
+        </a>
       {% else %}
         <!-- Usuario normal: menú completo -->
         <a href="{% url 'dashboard' %}"          class="nav-item {% block nav_dashboard %}{% endblock %}">

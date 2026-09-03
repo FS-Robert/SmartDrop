@@ -153,3 +153,8 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Configure estas variables en el entorno: SUPABASE_URL y SUPABASE_KEY
 SUPABASE_URL = os.environ.get('SUPABASE_URL', '')
 SUPABASE_KEY = os.environ.get('SUPABASE_KEY', '')
+MQTT_BROKER_HOST = os.environ.get('MQTT_BROKER_HOST', '')
+MQTT_BROKER_PORT = os.environ.get('MQTT_BROKER_PORT', '8883')
+MQTT_USERNAME = os.environ.get('MQTT_USERNAME', '')
+MQTT_PASSWORD = os.environ.get('MQTT_PASSWORD', '')
+MQTT_CA_CERT = os.environ.get('MQTT_CA_CERT', '')

@@ -11,6 +11,7 @@ from django.views.decorators.http import require_http_methods
 from .forms import LoginForm, UsuarioRegisterForm
 from . import supabase_client
 from .backends import sync_user_from_supabase
+from .mqtt_service import MqttError, publish_command
 
 
 def _owned_sensor_data(request):
@@ -459,6 +460,77 @@ def recomendaciones(request):
         'ultima_actualizacion': 'hace unos segundos',
     }
     return render(request, 'App/recomendaciones.html', context)
+
+
+def _admin_only(request):
+    return getattr(request.user, 'rol_id', None) == 2
+
+
+@login_required(login_url='login')
+def valvulas(request):
+    if not _admin_only(request):
+        return redirect('dashboard')
+
+    valvulas_disponibles = []
+    error = None
+    try:
+        valvulas_disponibles = supabase_client.select(
+            'valvula',
+            'id_valvula,nombre,ping_gpio,estado_actual,estado_operativo,topic_mqtt_comando,ultima_conexion_mqtt,ultima_apertura',
+            {'order': 'id_valvula.asc', 'limit': '1000'},
+        )
+    except Exception:
+        error = 'No se pudieron cargar las electroválvulas.'
+
+    return render(request, 'App/valvulas.html', {
+        'valvulas': valvulas_disponibles,
+        'error': error,
+        'ultima_actualizacion': 'hace unos segundos',
+    })
+
+
+@login_required(login_url='login')
+@require_http_methods(['POST'])
+def valvula_comando(request, valvula_id):
+    if not _admin_only(request):
+        return redirect('dashboard')
+
+    comando = (request.POST.get('comando') or '').strip().lower()
+    if comando not in {'abrir', 'cerrar'}:
+        return redirect('valvulas')
+
+    valvula = None
+    try:
+        rows = supabase_client.select(
+            'valvula',
+            'id_valvula,nombre,estado_actual,topic_mqtt_comando',
+            {'id_valvula': f'eq.{valvula_id}', 'limit': '1'},
+        )
+        valvula = rows[0] if rows else None
+        if not valvula or not valvula.get('topic_mqtt_comando'):
+            raise MqttError('La electroválvula no tiene un topic MQTT configurado.')
+
+        publish_command(valvula['topic_mqtt_comando'], comando)
+        try:
+            supabase_client.insert('log_valvula', {
+                'id_valvula': valvula['id_valvula'],
+                'accion': comando,
+                'estado_anterior': valvula.get('estado_actual') or 'desconocida',
+                'estado_nuevo': 'abierta' if comando == 'abrir' else 'cerrada',
+                'tipo_activacion': 'manual',
+                'id_usuario': getattr(request.user, 'supabase_id', None) or request.user.id_usuario,
+                'fecha_hora': timezone.now().isoformat(),
+                'origen_accion': 'web',
+            })
+        except Exception:
+            pass
+        return redirect('valvulas')
+    except (MqttError, ValueError, TypeError) as exc:
+        return render(request, 'App/valvulas.html', {
+            'valvulas': [valvula] if valvula else [],
+            'error': str(exc),
+            'ultima_actualizacion': 'hace unos segundos',
+        }, status=502)
 
 
 @login_required(login_url='login')

@@ -61,3 +61,49 @@ class ConsumoViewTests(TestCase):
 		self.assertEqual(consumo_call.args[2]['id_vivienda'], 'in.(17)')
 		self.assertEqual(response.context['viviendas'][0]['id_vivienda'], 17)
 		self.assertEqual(response.context['consumo']['valor_dia'], 12)
+
+
+class AdminValveViewTests(TestCase):
+	def setUp(self):
+		self.admin_role = Rol.objects.create(id_rol=2, nombre_rol='admin')
+		self.user_role = Rol.objects.create(id_rol=3, nombre_rol='user')
+		self.admin = Usuario.objects.create_user(
+			email='admin@example.com', nombre='Admin', apellido='Prueba',
+			password='password-segura', rol=self.admin_role,
+		)
+		self.user = Usuario.objects.create_user(
+			email='user@example.com', nombre='User', apellido='Prueba',
+			password='password-segura', rol=self.user_role,
+		)
+
+	def test_usuario_normal_no_puede_abrir_el_panel(self):
+		self.client.force_login(self.user)
+		response = self.client.get(reverse('valvulas'))
+		self.assertRedirects(response, reverse('dashboard'))
+
+	@patch('App.views.publish_command')
+	@patch('App.views.supabase_client.insert')
+	@patch('App.views.supabase_client.select')
+	def test_admin_lista_todas_y_publica_comando(self, select, insert, publish):
+		valves = [
+			{'id_valvula': 1, 'nombre': 'Principal', 'ping_gpio': 26,
+			 'estado_actual': 'cerrada', 'estado_operativo': 'operativa',
+			 'topic_mqtt_comando': 'smartdrop/1/valvula/comando'},
+			{'id_valvula': 2, 'nombre': 'Jardín', 'ping_gpio': 27,
+			 'estado_actual': 'abierta', 'estado_operativo': 'operativa',
+			 'topic_mqtt_comando': 'smartdrop/2/valvula/comando'},
+		]
+		select.side_effect = [valves, [valves[0]]]
+		self.client.force_login(self.admin)
+
+		response = self.client.get(reverse('valvulas'))
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.context['valvulas'], valves)
+
+		response = self.client.post(
+			reverse('valvula_comando', kwargs={'valvula_id': 1}),
+			{'comando': 'abrir'},
+		)
+		self.assertRedirects(response, reverse('valvulas'))
+		publish.assert_called_once_with('smartdrop/1/valvula/comando', 'abrir')
+		insert.assert_called_once()

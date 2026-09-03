@@ -446,6 +446,26 @@ footer {
 
 /* ===== Presion page styles ===== */
 .presion-layout { display:grid; grid-template-columns: 1fr 360px; gap:1rem; align-items:start; }
+
+/* ===== Electroválvulas page styles ===== */
+.valves-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:1rem; }
+.valve-card { background:#fff; border:1px solid #e0d4f5; border-radius:12px; padding:1.25rem; }
+.valve-card-header { display:flex; align-items:center; gap:12px; }
+.valve-card-header h2 { color:#2d1a4a; font-size:17px; }
+.valve-card-header p, .valve-topic { color:#888; font-size:12px; margin-top:4px; }
+.valve-status-row { display:flex; justify-content:space-between; align-items:center; margin:1.25rem 0; color:#555; font-weight:700; }
+.valve-actions { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.valve-actions form { min-width:0; }
+.valve-button { width:100%; border:0; border-radius:8px; color:#fff; cursor:pointer; padding:10px 8px; font:inherit; font-weight:800; }
+.valve-button:disabled { cursor:not-allowed; opacity:.45; }
+.valve-button-open { background:#0f766e; }
+.valve-button-close { background:#b42318; }
+.valve-topic { border-top:1px solid #ede8f8; margin-top:1rem; padding-top:.75rem; overflow-wrap:anywhere; }
+.valve-message { display:flex; align-items:center; gap:8px; padding:12px 14px; margin-bottom:1rem; border-radius:8px; font-weight:700; }
+.valve-message-error { background:#fcebeb; color:#a32d2d; border:1px solid #f3caca; }
+.empty-state { text-align:center; color:#666; }
+.empty-state i { color:#6b21a8; font-size:32px; }
+.empty-state h2 { color:#2d1a4a; font-size:18px; margin:8px 0; }
 .valve-row { display:flex; align-items:center; gap:12px; font-weight:800; color:#2d1a4a; margin-bottom:8px; }
 .valve-label { font-weight:800; }
 .valve-badge { font-size:13px; padding:6px 12px; }

@@ -1,0 +1,83 @@
+{% extends 'App/base.html' %}
+{% block title %}Electroválvulas{% endblock %}
+{% block nav_valvulas %}active{% endblock %}
+
+{% block extra_css %}
+<style>
+  .valves-page { max-width: 1080px; margin: 0 auto; }
+  .valve-message { display:flex; align-items:center; gap:8px; padding:12px 14px; margin-bottom:16px; border-radius:10px; font-weight:700; }
+  .valve-message-error { background:#fcebeb; color:#a32d2d; border:1px solid #f3caca; }
+  .valves-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:12px; }
+  .valve-card { background:#fff; border:1px solid #efe5fb; border-radius:12px; padding:16px; box-shadow:0 6px 18px rgba(43,20,60,.04); }
+  .valve-card-header { display:flex; align-items:center; gap:12px; }
+  .valve-card-header h2 { color:#2d1a4a; font-size:17px; }
+  .valve-card-header p, .valve-topic { color:#6f6f7a; font-size:12px; margin-top:4px; }
+  .valve-status-row { display:flex; justify-content:space-between; align-items:center; margin:16px 0; color:#555; font-weight:700; }
+  .valve-actions { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .valve-actions form { min-width:0; }
+  .valve-button { width:100%; border:0; border-radius:8px; color:#fff; cursor:pointer; padding:9px 8px; font:inherit; font-weight:800; transition:opacity .15s, transform .15s; }
+  .valve-button:hover:not(:disabled) { transform:translateY(-1px); }
+  .valve-button:disabled { cursor:not-allowed; opacity:.45; }
+  .valve-button-open { background:#0f766e; }
+  .valve-button-close { background:#b42318; }
+  .valve-topic { border-top:1px solid #f0ecf7; margin-top:16px; padding-top:10px; overflow-wrap:anywhere; }
+  .empty-state { text-align:center; color:#6f6f7a; }
+  .empty-state i { color:#6b21a8; font-size:32px; }
+  .empty-state h2 { color:#2d1a4a; font-size:18px; margin:8px 0; }
+  @media (max-width:600px) { .valve-actions { grid-template-columns:1fr; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="valves-page">
+  <h1 class="page-title">ELECTROVÁLVULAS</h1>
+  <p class="page-subtitle">Control administrativo de todas las válvulas conectadas</p>
+
+{% if error %}
+  <div class="valve-message valve-message-error" role="alert">
+    <i class="ti ti-alert-triangle"></i>{{ error }}
+  </div>
+{% endif %}
+
+{% if valvulas %}
+  <section class="valves-grid" aria-label="Electroválvulas disponibles">
+    {% for valvula in valvulas %}
+      <article class="valve-card">
+        <div class="valve-card-header">
+          <div class="icon-wrap teal"><i class="ti ti-toggle-left"></i></div>
+          <div>
+            <h2>{{ valvula.nombre }}</h2>
+            <p>GPIO {{ valvula.ping_gpio }} · {{ valvula.estado_operativo|default:'Estado no indicado'|capfirst }}</p>
+          </div>
+        </div>
+        <div class="valve-status-row">
+          <span>Estado actual</span>
+          {% if valvula.estado_actual|lower == 'abierta' %}
+            <span class="badge badge-open">ABIERTA</span>
+          {% else %}
+            <span class="badge badge-closed">{{ valvula.estado_actual|default:'DESCONOCIDA'|upper }}</span>
+          {% endif %}
+        </div>
+        <div class="valve-actions">
+          <form method="post" action="{% url 'valvula_comando' valvula.id_valvula %}">
+            {% csrf_token %}
+            <button class="valve-button valve-button-open" type="submit" name="comando" value="abrir" {% if valvula.estado_actual|lower == 'abierta' %}disabled{% endif %}>
+              <i class="ti ti-lock-open"></i> Abrir
+            </button>
+          </form>
+          <form method="post" action="{% url 'valvula_comando' valvula.id_valvula %}">
+            {% csrf_token %}
+            <button class="valve-button valve-button-close" type="submit" name="comando" value="cerrar" {% if valvula.estado_actual|lower == 'cerrada' %}disabled{% endif %}>
+              <i class="ti ti-lock"></i> Cerrar
+            </button>
+          </form>
+        </div>
+        <p class="valve-topic">Topic: {{ valvula.topic_mqtt_comando }}</p>
+      </article>
+    {% endfor %}
+  </section>
+{% elif not error %}
+  <div class="card empty-state"><i class="ti ti-toggle-left"></i><h2>No hay electroválvulas registradas</h2><p>Registra una válvula en la tabla valvula para verla aquí.</p></div>
+{% endif %}
+</div>
+{% endblock %}
