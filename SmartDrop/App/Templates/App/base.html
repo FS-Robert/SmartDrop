@@ -8,8 +8,23 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css"/>
   <link rel="stylesheet" href="{% static 'App/css/dashboard.css' %}"/>
   {% block extra_css %}{% endblock %}
+  <script>
+    (function () {
+      const theme = localStorage.getItem('theme');
+      if (theme === 'dark') {
+        document.documentElement.dataset.theme = 'dark';
+        document.documentElement.classList.add('dark-mode');
+      }
+    }());
+  </script>
 </head>
 <body>
+  <script>
+    if (document.documentElement.dataset.theme === 'dark') {
+      document.body.dataset.theme = 'dark';
+      document.body.classList.add('dark-mode');
+    }
+  </script>
 
   <!-- ── Topbar ── -->
   <header class="topbar">

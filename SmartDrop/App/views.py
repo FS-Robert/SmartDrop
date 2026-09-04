@@ -1,3 +1,4 @@
+import calendar
 import json
 from datetime import datetime, timedelta
 from django.contrib.auth import login, logout
@@ -170,6 +171,50 @@ def tanque(request):
         viviendas, sensores, lecturas, tanques = _owned_sensor_data(request)
     except Exception:
         viviendas, sensores, lecturas, tanques = [], [], [], []
+
+    vivienda_id = request.session.get('vivienda_id')
+    viviendas_ids = {str(vivienda.get('id_vivienda')) for vivienda in viviendas}
+    if str(vivienda_id) not in viviendas_ids:
+        vivienda_id = viviendas[0].get('id_vivienda') if viviendas else None
+
+    autonomia = 'Sin estimación'
+    estado_bomba = 'Sin bomba registrada'
+    if vivienda_id:
+        try:
+            predicciones = supabase_client.select(
+                'prediccion_desabasto',
+                '*',
+                {'id_vivienda': f'eq.{vivienda_id}', 'order': 'fecha.desc', 'limit': '1'},
+            )
+            prediccion = predicciones[0] if predicciones else {}
+            horas_restantes = prediccion.get('horas_restantes')
+            if horas_restantes is not None:
+                horas = float(horas_restantes)
+                dias, horas = divmod(int(horas), 24)
+                autonomia = (
+                    f'{dias} día{"s" if dias != 1 else ""} y {horas} hrs aprox.'
+                    if dias else f'{horas} hrs aprox.'
+                )
+            elif prediccion.get('mensaje'):
+                autonomia = str(prediccion['mensaje'])
+        except Exception:
+            pass
+
+        try:
+            bombas = supabase_client.select(
+                'bomba',
+                '*',
+                {'id_vivienda': f'eq.{vivienda_id}', 'limit': '1'},
+            )
+            bomba = bombas[0] if bombas else {}
+            estado = str(bomba.get('estado_actual') or bomba.get('estado') or '').lower()
+            if estado in {'encendida', 'encendido', 'activa', 'automatico', 'automatica'}:
+                estado_bomba = 'Enciende automáticamente'
+            elif bomba:
+                estado_bomba = 'Apagada (Standby)'
+        except Exception:
+            pass
+
     level = _find_reading(_latest_readings_by_type(lecturas), 'nivel', 'level')
     tank = next((item for item in tanques if str(item.get('id_sensor_nivel')) == str(level.get('id_sensor'))), {}) if level else {}
     nivel, porcentaje, capacidad = _tank_level_data(level, [dict(sensor, **tank) for sensor in sensores])
@@ -179,10 +224,10 @@ def tanque(request):
             'capacidad':     capacidad,
             'porcentaje':    porcentaje,
             'litros':        litros,
-            'bomba':         'Sin datos',
-            'autonomia':     'Sin datos',
             'ultima_lectura': level.get('fecha_registro', 'Sin datos') if level else 'Sin datos',
         },
+        'autonomia': autonomia,
+        'estado_bomba': estado_bomba,
         'viviendas': viviendas,
         'ultima_actualizacion': 'hace unos segundos',
     }
@@ -276,12 +321,11 @@ def consumo(request):
         )
         vivienda_ids = [str(vivienda['id_vivienda']) for vivienda in viviendas if vivienda.get('id_vivienda')]
         if vivienda_ids:
-            vivienda_filter = f"in.({','.join(vivienda_ids)})"
             rows = supabase_client.select(
                 'consumo',
-                '*',
+                'id_vivienda,fecha,consumo_total',
                 {
-                    'id_vivienda': vivienda_filter,
+                    'id_vivienda': f"in.({','.join(vivienda_ids)})",
                     'order': 'fecha.desc',
                     'limit': '1000',
                 },
@@ -293,46 +337,102 @@ def consumo(request):
 
     now = timezone.localtime()
     today = now.date()
+    selected_month = today.replace(day=1)
+    requested_month = request.GET.get('mes')
+    if requested_month:
+        try:
+            selected_month = datetime.strptime(requested_month, '%Y-%m').date().replace(day=1)
+        except ValueError:
+            selected_month = today.replace(day=1)
     parsed_rows = []
     for row in rows:
         raw_date = row.get('fecha')
-        if not raw_date:
+        raw_value = row.get('consumo_total')
+        if not raw_date or raw_value is None:
             continue
         try:
             row_date = datetime.fromisoformat(str(raw_date).replace('Z', '+00:00'))
             if row_date.tzinfo:
                 row_date = timezone.localtime(row_date)
-            value = float(row.get('consumo_total') or row.get('consumo_promedio') or 0)
+            value = float(raw_value)
         except (TypeError, ValueError, OverflowError):
             continue
-        parsed_rows.append((row_date, value))
+        parsed_rows.append((row_date.date(), value))
 
     week_start = today - timedelta(days=6)
-    month_start = today.replace(day=1)
     week_values = {week_start + timedelta(days=offset): 0 for offset in range(7)}
     month_values = {}
     day_values = []
     for row_date, value in parsed_rows:
-        row_day = row_date.date()
-        if row_day in week_values:
-            week_values[row_day] += value
-        if row_day == today:
+        if row_date in week_values:
+            week_values[row_date] += value
+        if row_date == today:
             day_values.append(value)
-        month_key = row_day.replace(day=1)
+        month_key = row_date.replace(day=1)
         month_values[month_key] = month_values.get(month_key, 0) + value
 
-    labels_semana = [day.strftime('%a').capitalize()[:3] for day in week_values]
-    datos_semana = [round(value, 2) for value in week_values.values()]
-    recent_months = []
-    cursor = month_start
-    for _ in range(12):
-        recent_months.insert(0, cursor)
-        cursor = (cursor - timedelta(days=1)).replace(day=1)
-    labels_mes = [month.strftime('%b').capitalize()[:3] for month in recent_months]
-    datos_mes = [round(month_values.get(month, 0), 2) for month in recent_months]
+    etiquetas_dias = ('Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom')
+    dias_espanol = ('Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo')
+    meses_espanol = (
+        'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+        'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+    )
+    days_in_month = calendar.monthrange(selected_month.year, selected_month.month)[1]
+    month_days = [selected_month + timedelta(days=offset) for offset in range(days_in_month)]
+    daily_values = {day: 0 for day in month_days}
+    for row_date, value in parsed_rows:
+        if row_date in daily_values:
+            daily_values[row_date] += value
+    historial_dia_semanas = []
+    for week_index in range(0, len(month_days), 7):
+        week_days = month_days[week_index:week_index + 7]
+        items = [
+            {
+                'key': day.isoformat(),
+                'label': f'{dias_espanol[day.weekday()]} {day.day:02d}/{day.month:02d}',
+                'detalle': f'{dias_espanol[day.weekday()]} {day.day:02d}/{day.month:02d}',
+                'valor': round(daily_values[day], 2),
+            }
+            for day in week_days
+        ]
+        historial_dia_semanas.append({
+            'label': f'Semana {len(historial_dia_semanas) + 1}',
+            'items': items,
+        })
+    historial_dia = historial_dia_semanas[0]['items'] if historial_dia_semanas else []
+    month_week_values = [0, 0, 0, 0]
+    for row_date, value in parsed_rows:
+        if row_date.year == selected_month.year and row_date.month == selected_month.month:
+            week_index = min((row_date.day - 1) // 7, 3)
+            month_week_values[week_index] += value
+    historial_semana = [
+        {
+            'key': f'semana-{index + 1}',
+            'label': f'Semana {index + 1}',
+            'detalle': f'Semana {index + 1} de {meses_espanol[selected_month.month - 1]}',
+            'valor': round(value, 2),
+        }
+        for index, value in enumerate(month_week_values)
+    ]
+    year_months = [selected_month.replace(month=month) for month in range(1, 13)]
+    historial_mes = [
+        {
+            'key': month.strftime('%Y-%m'),
+            'label': meses_espanol[month.month - 1].capitalize(),
+            'detalle': f'{meses_espanol[month.month - 1].capitalize()} {month.year}',
+            'valor': round(month_values.get(month, 0), 2),
+        }
+        for month in year_months
+    ]
+    labels_semana = [item['label'] for item in historial_semana]
+    datos_semana = [item['valor'] for item in historial_semana]
+    labels_dia = [item['label'] for item in historial_dia]
+    datos_dia = [item['valor'] for item in historial_dia]
+    labels_mes = [item['label'][:3] for item in historial_mes]
+    datos_mes = [item['valor'] for item in historial_mes]
     valor_dia = round(sum(day_values), 2)
     valor_semana = round(sum(datos_semana), 2)
-    valor_mes = round(month_values.get(month_start, 0), 2)
+    valor_mes = round(month_values.get(selected_month, 0), 2)
     average_day = round(valor_mes / max(today.day, 1), 2)
     non_zero_values = [value for _, value in parsed_rows if value > 0]
     highest_day = round(max(non_zero_values), 2) if non_zero_values else 0
@@ -346,20 +446,22 @@ def consumo(request):
             'valor_mes': valor_mes,
             'estado_label': estado_label,
             'variacion': 0,
-            'mes': now.strftime('%B'),
+            'mes': selected_month.strftime('%B'),
+            'mes_key': selected_month.strftime('%Y-%m'),
             'prom_dia': average_day,
             'dia_alto': highest_day,
             'dia_bajo': lowest_day,
-            'datos_semana': json.dumps(datos_semana),
-            'labels_semana': json.dumps(labels_semana),
-            'datos_dia': json.dumps(day_values),
-            'labels_dia': json.dumps([f'{index + 1}' for index in range(len(day_values))]),
-            'datos_mes': json.dumps(datos_mes),
-            'labels_mes': json.dumps(labels_mes),
-            'historial': [
-                {'label': f'Semana {index + 1}', 'valor': round(sum(datos_semana[index * 7 // 4:(index + 1) * 7 // 4]), 2)}
-                for index in range(4)
-            ],
+            'datos_semana': datos_semana,
+            'labels_semana': labels_semana,
+            'datos_dia': datos_dia,
+            'labels_dia': labels_dia,
+            'datos_mes': datos_mes,
+            'labels_mes': labels_mes,
+            'historial': historial_semana,
+            'historial_dia': historial_dia,
+            'historial_dia_semanas': historial_dia_semanas,
+            'historial_semana': historial_semana,
+            'historial_mes': historial_mes,
         },
         'viviendas': viviendas,
         'ultima_actualizacion': 'hace unos segundos',

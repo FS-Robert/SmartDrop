@@ -50,7 +50,7 @@
       <div class="settings-title">Preferencias</div>
       <div class="toggle-row">
         <span class="toggle-label"><i class="ti ti-moon toggle-icon"></i> Modo oscuro</span>
-        <div class="toggle off" onclick="this.classList.toggle('off')"></div>
+        <div class="toggle off" id="dark-mode-toggle" role="switch" aria-label="Modo oscuro" tabindex="0"></div>
       </div>
       <div class="toggle-row">
         <span class="toggle-label"><i class="ti ti-language toggle-icon"></i> Idioma español</span>
@@ -70,4 +70,43 @@
 
   </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function () {
+    const toggle = document.getElementById('dark-mode-toggle');
+    const root = document.documentElement;
+    const body = document.body;
+    const enabled = localStorage.getItem('theme') === 'dark';
+
+    function applyTheme(dark) {
+      if (dark) {
+        root.dataset.theme = 'dark';
+        body.dataset.theme = 'dark';
+        root.classList.add('dark-mode');
+        body.classList.add('dark-mode');
+        toggle.classList.remove('off');
+      } else {
+        delete root.dataset.theme;
+        delete body.dataset.theme;
+        root.classList.remove('dark-mode');
+        body.classList.remove('dark-mode');
+        toggle.classList.add('off');
+      }
+      localStorage.setItem('theme', dark ? 'dark' : 'light');
+    }
+
+    toggle.addEventListener('click', function () {
+      applyTheme(root.dataset.theme !== 'dark');
+    });
+    toggle.addEventListener('keydown', function (event) {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        applyTheme(root.dataset.theme !== 'dark');
+      }
+    });
+    applyTheme(enabled);
+  }());
+</script>
 {% endblock %}

@@ -31,6 +31,9 @@
     <div class="chart-canvas-wrap">
       <canvas id="consumoChart"></canvas>
     </div>
+    <div id="consumo-detail" style="margin-top:0.75rem; font-size:13px; color:#6b5b7b; font-weight:700;">
+      Selecciona un punto para ver el detalle.
+    </div>
   </div>
 
   <!-- Lateral -->
@@ -39,21 +42,26 @@
     <div class="comparison-card">
       <div class="comparison-label">Comparación</div>
       <div class="comparison-val up">
-        ↑ {{ consumo.variacion }}% vs semana pasada
+        ↑ {{ consumo.variacion }}% vs <span id="comparison-period">semana pasada</span>
       </div>
       <div style="font-size:12px; color:#888; font-weight:600; margin-top:4px;">(Ligeramente elevado)</div>
     </div>
 
     <div class="historial-card">
       <div class="historial-title">Historial</div>
-      <div class="month-nav">
+      <div class="month-nav" id="week-navigation" style="display:none;">
+        <button onclick="semanaAnterior()">←</button>
+        <span id="week-label">Semana 1</span>
+        <button onclick="semanaSiguiente()">→</button>
+      </div>
+      <div class="month-nav" id="month-navigation">
         <button onclick="mesAnterior()">←</button>
         <span id="mes-label">{{ consumo.mes }}</span>
         <button onclick="mesSiguiente()">→</button>
       </div>
-      <div style="margin-top:1rem; display:flex; flex-direction:column; gap:6px;" id="historial-list">
+      <div style="margin-top:1rem; display:flex; flex-direction:column; gap:6px; max-height:320px; overflow-y:auto; padding-right:5px;" id="historial-list">
         {% for semana in consumo.historial %}
-        <div style="display:flex; justify-content:space-between; font-size:13px; font-weight:600; padding:4px 0; border-bottom:1px solid #f0eafa;">
+        <div class="history-item" style="display:flex; justify-content:space-between; font-size:13px; font-weight:600; padding:4px 0; border-bottom:1px solid #f0eafa; cursor:pointer;">
           <span style="color:#888;">{{ semana.label }}</span>
           <span style="color:#2d1a4a;">{{ semana.valor }}L</span>
         </div>
@@ -73,14 +81,38 @@
 {% endblock %}
 
 {% block extra_js %}
+{{ consumo.datos_semana|json_script:"consumo-datos-semana" }}
+{{ consumo.datos_dia|json_script:"consumo-datos-dia" }}
+{{ consumo.datos_mes|json_script:"consumo-datos-mes" }}
+{{ consumo.labels_semana|json_script:"consumo-labels-semana" }}
+{{ consumo.labels_dia|json_script:"consumo-labels-dia" }}
+{{ consumo.labels_mes|json_script:"consumo-labels-mes" }}
+{{ consumo.historial_dia|json_script:"consumo-historial-dia" }}
+{{ consumo.historial_dia_semanas|json_script:"consumo-historial-dia-semanas" }}
+{{ consumo.historial_semana|json_script:"consumo-historial-semana" }}
+{{ consumo.historial_mes|json_script:"consumo-historial-mes" }}
+{{ consumo.valor_dia|json_script:"consumo-valor-dia" }}
+{{ consumo.valor_semana|json_script:"consumo-valor-semana" }}
+{{ consumo.valor_mes|json_script:"consumo-valor-mes" }}
+{{ consumo.mes_key|json_script:"consumo-mes-key" }}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
-  const dataSemana = {{ consumo.datos_semana|safe }};
-  const dataDia    = {{ consumo.datos_dia|safe }};
-  const dataMes    = {{ consumo.datos_mes|safe }};
-  const labelsSemana = {{ consumo.labels_semana|safe }};
-  const labelsDia    = {{ consumo.labels_dia|safe }};
-  const labelsMes    = {{ consumo.labels_mes|safe }};
+  const jsonData = id => JSON.parse(document.getElementById(id).textContent);
+  const dataSemana = jsonData('consumo-datos-semana');
+  const dataDia = jsonData('consumo-datos-dia');
+  const dataMes = jsonData('consumo-datos-mes');
+  const labelsSemana = jsonData('consumo-labels-semana');
+  const labelsDia = jsonData('consumo-labels-dia');
+  const labelsMes = jsonData('consumo-labels-mes');
+  const historialDia = jsonData('consumo-historial-dia');
+  const historialDiaSemanas = jsonData('consumo-historial-dia-semanas');
+  const historialSemana = jsonData('consumo-historial-semana');
+  const historialMes = jsonData('consumo-historial-mes');
+  const valorDia = jsonData('consumo-valor-dia');
+  const valorSemana = jsonData('consumo-valor-semana');
+  const valorMes = jsonData('consumo-valor-mes');
+  let activeHistoryItems = historialSemana;
+  let semanaActual = 0;
 
   const ctx = document.getElementById('consumoChart').getContext('2d');
   const chart = new Chart(ctx, {
@@ -102,31 +134,108 @@
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      onClick(event, elements) {
+        if (elements.length) selectHistory(elements[0].index);
+      },
       plugins: { legend: { display: false } },
       scales: {
         x: { grid: { color: '#f0eafa' }, ticks: { color: '#888', font: { family: 'Nunito', weight: '600' } } },
         y: { grid: { color: '#f0eafa' }, ticks: { color: '#888', font: { family: 'Nunito', weight: '600' } } }
       }
-    }
+    },
   });
+
+  function selectHistory(index) {
+    const item = activeHistoryItems[index];
+    if (!item) return;
+    document.querySelectorAll('.history-item').forEach(row => {
+      row.style.backgroundColor = '';
+      row.style.fontWeight = '600';
+    });
+    const selectedRow = document.querySelector(`[data-history-index="${index}"]`);
+    if (selectedRow) {
+      selectedRow.style.backgroundColor = '#f0eafa';
+      selectedRow.style.fontWeight = '800';
+    }
+    chart.setActiveElements([{ datasetIndex: 0, index }]);
+    chart.tooltip.setActiveElements([{ datasetIndex: 0, index }]);
+    chart.update();
+    document.getElementById('consumo-detail').textContent =
+      `${item.detalle}: ${item.valor}L registrado`;
+  }
 
   function cambiarTab(tipo, btn) {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     const configs = {
-      dia:    { data: dataDia,    labels: labelsDia,    val: '{{ consumo.valor_dia }}' },
-      semana: { data: dataSemana, labels: labelsSemana, val: '{{ consumo.valor_semana }}' },
-      mes:    { data: dataMes,    labels: labelsMes,    val: '{{ consumo.valor_mes }}' },
+      dia:    { data: dataDia,    labels: labelsDia,    val: valorDia },
+      semana: { data: dataSemana, labels: labelsSemana, val: valorSemana },
+      mes:    { data: dataMes,    labels: labelsMes,    val: valorMes },
     };
     const c = configs[tipo];
-    chart.data.datasets[0].data   = c.data;
-    chart.data.labels             = c.labels;
-    chart.update();
-    document.getElementById('chart-value').textContent = c.val;
+    if (tipo === 'dia') {
+      semanaActual = 0;
+      renderDiaSemana(semanaActual);
+    } else {
+      chart.data.datasets[0].data = c.data;
+      chart.data.labels = c.labels;
+      chart.update();
+      document.getElementById('chart-value').textContent = c.val;
+    }
+    document.getElementById('comparison-period').textContent = {
+      dia: 'día anterior',
+      semana: 'semana pasada',
+      mes: 'mes pasado',
+    }[tipo];
+    document.getElementById('week-navigation').style.display = tipo === 'dia' ? 'flex' : 'none';
+    document.getElementById('month-navigation').style.display = tipo === 'mes' || tipo === 'dia' ? 'none' : 'flex';
+    if (tipo !== 'dia') renderHistorial(tipo === 'mes' ? historialMes : historialSemana);
   }
 
-  let mesActual = '{{ consumo.mes }}';
-  function mesAnterior()   { document.getElementById('mes-label').textContent = 'Octubre'; }
-  function mesSiguiente()  { document.getElementById('mes-label').textContent = 'Diciembre'; }
+  function renderDiaSemana(index) {
+    const week = historialDiaSemanas[index];
+    if (!week) return;
+    semanaActual = index;
+    activeHistoryItems = week.items;
+    chart.data.datasets[0].data = week.items.map(item => item.valor);
+    chart.data.labels = week.items.map(item => item.label);
+    chart.update();
+    document.getElementById('chart-value').textContent = week.items.reduce((total, item) => total + item.valor, 0).toFixed(2);
+    document.getElementById('week-label').textContent = week.label;
+    renderHistorial(week.items);
+  }
+
+  function renderHistorial(items) {
+    activeHistoryItems = items;
+    const list = document.getElementById('historial-list');
+    list.replaceChildren();
+    items.forEach((item, index) => {
+      const row = document.createElement('div');
+      row.className = 'history-item';
+      row.dataset.historyIndex = index;
+      row.style.cssText = 'display:flex; justify-content:space-between; font-size:13px; font-weight:600; padding:4px 0; border-bottom:1px solid #f0eafa; cursor:pointer;';
+      row.innerHTML = `<span style="color:#888;">${item.label}</span><span style="color:#2d1a4a;">${item.valor}L</span>`;
+      row.addEventListener('click', () => selectHistory(index));
+      list.appendChild(row);
+    });
+  }
+
+  renderHistorial(historialSemana);
+
+  let mesActual = jsonData('consumo-mes-key');
+  function cambiarMes(meses) {
+    const fecha = new Date(`${mesActual}-01T00:00:00`);
+    fecha.setMonth(fecha.getMonth() + meses);
+    const mes = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}`;
+    window.location.search = `?mes=${mes}`;
+  }
+  function mesAnterior() { cambiarMes(-1); }
+  function mesSiguiente() { cambiarMes(1); }
+  function semanaAnterior() {
+    renderDiaSemana(Math.max(semanaActual - 1, 0));
+  }
+  function semanaSiguiente() {
+    renderDiaSemana(Math.min(semanaActual + 1, historialDiaSemanas.length - 1));
+  }
 </script>
 {% endblock %}

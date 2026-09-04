@@ -17,7 +17,7 @@
 
     <div class="cylinder-wrap">
       <div class="cylinder">
-        <div class="cylinder-fill" style="height: {{ tanque.porcentaje }}%;"></div>
+        <div class="cylinder-fill" data-tank-height="{{ tanque.porcentaje }}"></div>
         <div class="cylinder-label">{{ tanque.litros }} litros ({{ tanque.porcentaje }}%)</div>
         <!-- Escalera decorativa -->
         <div class="cylinder-ladder">
@@ -41,8 +41,8 @@
       <div class="info-card-body">
         <div class="info-card-label">Bomba</div>
         <div class="info-card-value">
-          <span class="badge {% if tanque.bomba == 'Encendida' %}badge-normal{% else %}badge-off{% endif %} status-badge">
-            ● {{ tanque.bomba }}
+          <span class="badge {% if estado_bomba == 'Enciende automáticamente' %}badge-normal{% else %}badge-off{% endif %} status-badge">
+            ● {{ estado_bomba }}
           </span>
         </div>
       </div>
@@ -52,7 +52,7 @@
       <i class="ti ti-clock"></i>
       <div class="info-card-body">
         <div class="info-card-label">Autonomía estimada</div>
-        <div class="info-card-value">{{ tanque.autonomia }}</div>
+        <div class="info-card-value">{{ autonomia }}</div>
         <div class="info-card-sub">bajo consumo actual</div>
       </div>
     </div>
@@ -71,7 +71,7 @@
         <div class="info-card-label">Capacidad total</div>
         <div class="info-card-value">{{ tanque.capacidad }}L</div>
         <div class="tank-bar-wrap tank-bar-small">
-          <div class="tank-bar" style="width: {{ tanque.porcentaje }}%;"></div>
+          <div class="tank-bar" data-tank-width="{{ tanque.porcentaje }}"></div>
         </div>
         <div class="tank-legend">
           <span>0L</span>
@@ -82,4 +82,12 @@
 
   </div>
 </div>
+<script>
+  document.querySelectorAll('[data-tank-height]').forEach((element) => {
+    element.style.height = `${element.dataset.tankHeight}%`;
+  });
+  document.querySelectorAll('[data-tank-width]').forEach((element) => {
+    element.style.width = `${element.dataset.tankWidth}%`;
+  });
+</script>
 {% endblock %}
