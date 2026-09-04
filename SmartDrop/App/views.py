@@ -511,12 +511,21 @@ def valvula_comando(request, valvula_id):
             raise MqttError('La electroválvula no tiene un topic MQTT configurado.')
 
         publish_command(valvula['topic_mqtt_comando'], comando)
+        estado_nuevo = 'abierta' if comando == 'abrir' else 'cerrada'
+        supabase_client.update(
+            'valvula',
+            {
+                'estado_actual': estado_nuevo,
+                'ultima_apertura': timezone.now().isoformat() if comando == 'abrir' else None,
+            },
+            {'id_valvula': f'eq.{valvula_id}'},
+        )
         try:
             supabase_client.insert('log_valvula', {
                 'id_valvula': valvula['id_valvula'],
                 'accion': comando,
                 'estado_anterior': valvula.get('estado_actual') or 'desconocida',
-                'estado_nuevo': 'abierta' if comando == 'abrir' else 'cerrada',
+                'estado_nuevo': estado_nuevo,
                 'tipo_activacion': 'manual',
                 'id_usuario': getattr(request.user, 'supabase_id', None) or request.user.id_usuario,
                 'fecha_hora': timezone.now().isoformat(),

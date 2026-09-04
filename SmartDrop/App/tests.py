@@ -83,8 +83,9 @@ class AdminValveViewTests(TestCase):
 
 	@patch('App.views.publish_command')
 	@patch('App.views.supabase_client.insert')
+	@patch('App.views.supabase_client.update')
 	@patch('App.views.supabase_client.select')
-	def test_admin_lista_todas_y_publica_comando(self, select, insert, publish):
+	def test_admin_lista_todas_y_publica_comando(self, select, update, insert, publish):
 		valves = [
 			{'id_valvula': 1, 'nombre': 'Principal', 'ping_gpio': 26,
 			 'estado_actual': 'cerrada', 'estado_operativo': 'operativa',
@@ -106,4 +107,6 @@ class AdminValveViewTests(TestCase):
 		)
 		self.assertRedirects(response, reverse('valvulas'))
 		publish.assert_called_once_with('smartdrop/1/valvula/comando', 'abrir')
+		update.assert_called_once()
+		self.assertEqual(update.call_args.args[1]['estado_actual'], 'abierta')
 		insert.assert_called_once()
