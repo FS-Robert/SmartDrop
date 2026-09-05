@@ -471,25 +471,58 @@ def consumo(request):
 
 @login_required(login_url='login')
 def retroalimentacion(request):
+    viviendas = []
     retro = None
     try:
         viviendas, consumption_rows = _owned_consumption(request)
-        row = consumption_rows[0] if consumption_rows else None
-        if row:
-            current = _safe_float(row.get('consumo_total') or row.get('consumo_promedio'))
-            previous = _safe_float(consumption_rows[1].get('consumo_total') or consumption_rows[1].get('consumo_promedio')) if len(consumption_rows) > 1 else current
-            variation = round(((current - previous) / previous) * 100, 2) if previous else 0
+        values = [
+            _safe_float(row.get('consumo_total') or row.get('consumo_promedio'))
+            for row in consumption_rows
+        ]
+        if values:
+            current = values[0]
+            historical_values = values[1:]
+            historical_average = round(sum(historical_values) / len(historical_values), 2) if historical_values else current
+            variation = round(((current - historical_average) / historical_average) * 100, 2) if historical_average else 0
+            if variation < 0:
+                trend = 'baja'
+                comparison_message = 'Has reducido tu consumo'
+                motivational_message = '¡Buen trabajo ahorrando agua!'
+                alert_message = ''
+            elif variation > 0:
+                trend = 'alta'
+                comparison_message = 'Has aumentado tu consumo'
+                motivational_message = ''
+                alert_message = 'Consumo elevado de agua'
+            else:
+                trend = 'igual'
+                comparison_message = 'Tu consumo se mantiene estable'
+                motivational_message = ''
+                alert_message = ''
+            recommendations = [
+                'Revisa fugas en grifos y tuberías.',
+                'Cierra la llave mientras te cepillas los dientes.',
+                'Reduce el tiempo de ducha y reutiliza agua cuando sea posible.',
+            ]
+            if trend == 'alta':
+                recommendations.insert(0, 'Reduce el tiempo de ducha y evita dejar llaves abiertas.')
+            elif trend == 'baja':
+                recommendations.insert(0, 'Mantén tus hábitos actuales de ahorro de agua.')
             retro = {
-                'mensaje':       'Resumen generado con tu consumo registrado.',
-                'estado_agua':   'Consumo registrado',
+                'mensaje':       comparison_message,
+                'estado_agua':   alert_message or 'Consumo registrado',
                 'consumo_actual': current,
                 'variacion_mes': f"{variation}%",
-                'tendencia':     'baja' if variation <= 0 else 'alta',
+                'tendencia':     trend,
                 'fill_y':        max(10, 160 - min(current, 150)),
                 'fill_h':        min(current, 150),
-                'total_mes':     round(sum(_safe_float(item.get('consumo_total') or item.get('consumo_promedio')) for item in consumption_rows), 2),
-                'prom_dia':      round(sum(_safe_float(item.get('consumo_promedio') or item.get('consumo_total')) for item in consumption_rows) / len(consumption_rows), 2),
-                'ahorro':        max(0, round(-variation, 2)),
+                'total_mes':     round(sum(values), 2),
+                'prom_dia':      historical_average,
+                'ahorro':        round(max(historical_average - current, 0), 2),
+                'comparacion':   comparison_message,
+                'alerta':        alert_message,
+                'motivacion':    motivational_message,
+                'recomendaciones': recommendations,
             }
     except Exception:
         retro = None
@@ -506,6 +539,13 @@ def retroalimentacion(request):
             'total_mes':     0,
             'prom_dia':       0,
             'ahorro':        0,
+            'comparacion':   'Sin datos de consumo',
+            'alerta':        '',
+            'motivacion':    '',
+            'recomendaciones': [
+                'Registra consumos para recibir recomendaciones personalizadas.',
+                'Revisa periódicamente si existen fugas de agua.',
+            ],
         }
 
     context = {
@@ -938,6 +978,7 @@ def sensor_detail(request, sensor_id):
 
     context = {
         'sensor': sensor or {'id_sensor': sensor_id, 'tipo_sensor': 'Sensor', 'modelo': '', 'unidad': ''},
+        'sensores_comparacion': [s for s in sensores if str(s.get('id_sensor')) != str(sensor_id)],
         'labels': json.dumps(labels),
         'data': json.dumps(data),
         'ultima_actualizacion': 'hace unos segundos',
@@ -963,57 +1004,51 @@ def sensor_data(request, sensor_id):
         cutoff = now - timedelta(days=30)
     else:
         cutoff = now - timedelta(days=1)
-
-    sensores = []
-    lecturas = []
+    compare_id = request.GET.get('compare_id', '').strip()
     try:
         sensores = supabase_client.select('sensor', '*', {'limit': '1000'})
         lecturas = supabase_client.select('lectura', '*', {'order': 'fecha_registro.desc', 'limit': '2000'})
     except Exception:
         return JsonResponse({'ok': False, 'error': 'db_error'}, status=500)
 
-    # find sensor unit
-    unit = ''
-    try:
-        for s in sensores:
-            if str(s.get('id_sensor')) == str(sensor_id):
-                unit = s.get('unidad_medida') or s.get('unidad') or ''
-                break
-    except Exception:
-        unit = ''
-
+    sensor = next((s for s in sensores if str(s.get('id_sensor')) == str(sensor_id)), {})
+    comparison = next((s for s in sensores if str(s.get('id_sensor')) == compare_id), {}) if compare_id else {}
     filtered = []
-    for r in lecturas:
+    comparison_filtered = []
+    for row in lecturas:
         try:
-            if str(r.get('id_sensor')) != str(sensor_id):
-                continue
-            raw = r.get('fecha_registro')
+            raw = row.get('fecha_registro')
             if not raw:
                 continue
-            try:
-                ts = datetime.fromisoformat(raw)
-            except Exception:
-                # try slicing microseconds or fallback
-                try:
-                    ts = datetime.fromisoformat(raw.split('+')[0])
-                except Exception:
-                    continue
-            if ts >= cutoff:
-                filtered.append((ts, r))
-        except Exception:
+            ts = datetime.fromisoformat(raw.replace('Z', '+00:00'))
+            if ts.replace(tzinfo=None) < cutoff:
+                continue
+            if str(row.get('id_sensor')) == str(sensor_id):
+                filtered.append((ts, row))
+            if comparison and str(row.get('id_sensor')) == compare_id:
+                comparison_filtered.append((ts, row))
+        except (TypeError, ValueError):
             continue
 
-    # sort ascending
-    filtered.sort(key=lambda x: x[0])
-    labels = [t[0].isoformat() for t in filtered]
-    data = []
-    for _, r in filtered:
-        try:
-            data.append(float(r.get('valor') or 0))
-        except Exception:
-            data.append(0)
-
-    return JsonResponse({'ok': True, 'labels': labels, 'data': data, 'unit': unit})
+    filtered.sort(key=lambda item: item[0])
+    comparison_filtered.sort(key=lambda item: item[0])
+    labels = [item[0].isoformat() for item in filtered]
+    data = [_safe_float(item[1].get('valor')) for item in filtered]
+    comparison_labels = [item[0].isoformat() for item in comparison_filtered]
+    comparison_data = [_safe_float(item[1].get('valor')) for item in comparison_filtered]
+    return JsonResponse({
+        'ok': True,
+        'labels': labels,
+        'data': data,
+        'unit': sensor.get('unidad_medida') or sensor.get('unidad') or '',
+        'sensor_label': sensor.get('tipo_sensor') or 'Sensor',
+        'compare': {
+            'labels': comparison_labels,
+            'data': comparison_data,
+            'unit': comparison.get('unidad_medida') or comparison.get('unidad') or '',
+            'sensor_label': comparison.get('tipo_sensor') or 'Comparación',
+        } if comparison else None,
+    })
 
 
 def logout_view(request):

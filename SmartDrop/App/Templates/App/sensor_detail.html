@@ -37,6 +37,17 @@
     <div id="pointsInfo" style="color:#6f6f7a;font-size:13px">Mostrando 0 puntos</div>
   </div>
 
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+    <label style="font-size:13px;font-weight:700">Comparar con
+      <select id="compare-sensor" name="compare_id">
+        <option value="">Sin comparación</option>
+        {% for option in sensores_comparacion %}
+        <option value="{{ option.id_sensor }}">{{ option.tipo_sensor|title }}{% if option.unidad_medida %} ({{ option.unidad_medida }}){% endif %}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </div>
+
   <div class="chart-card">
     <canvas id="trendChart" height="240"></canvas>
   </div>
@@ -66,6 +77,7 @@
       });
 
       const pointsInfo = document.getElementById('pointsInfo');
+      const compareSelect = document.getElementById('compare-sensor');
 
       function formatShort(labels){
         return labels.map(l=>{
@@ -82,7 +94,9 @@
           const btn = document.querySelector('.range-btn[data-range="'+range+'"]');
           if(btn) btn.classList.add('active');
 
-          const res = await fetch(`/sensor/${sensorId}/data/?range=${range}`);
+          const params = new URLSearchParams({ range });
+          if (compareSelect.value) params.set('compare_id', compareSelect.value);
+          const res = await fetch(`/sensor/${sensorId}/data/?${params.toString()}`);
           const json = await res.json();
           if(!json.ok){ console.error(json); return; }
           const labels = json.labels || [];
@@ -90,6 +104,18 @@
 
           chart.data.labels = formatShort(labels);
           chart.data.datasets[0].data = data;
+          chart.data.datasets = [chart.data.datasets[0]];
+          if (json.compare) {
+            chart.data.datasets.push({
+              label: json.compare.sensor_label,
+              data: json.compare.data,
+              borderColor: '#0F6E56',
+              backgroundColor: 'rgba(15,110,86,0.08)',
+              fill: false,
+              tension: 0.2,
+              pointRadius: 2,
+            });
+          }
           chart.update();
 
           if(pointsInfo) pointsInfo.textContent = `Mostrando ${data.length} puntos`;
@@ -100,6 +126,7 @@
       document.querySelectorAll('.range-btn').forEach(b=>{
         b.addEventListener('click', ()=>{ loadRange(b.dataset.range); });
       });
+      compareSelect.addEventListener('change', () => loadRange('1d'));
 
       // load default range
       loadRange('1d');
