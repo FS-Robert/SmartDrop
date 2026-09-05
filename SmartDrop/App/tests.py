@@ -2,9 +2,11 @@ from django.test import TestCase
 from unittest.mock import patch
 
 from django.urls import reverse
+from django.utils import timezone
 
 from .backends import sync_user_from_supabase
 from .models import Rol, Usuario
+from .views import _supabase_user_id
 
 # Create your tests here.
 
@@ -44,7 +46,7 @@ class ConsumoViewTests(TestCase):
 		)
 		responses = [
 			[{'id_vivienda': 17, 'nic': 'NIC-17', 'direccion': 'Casa propia'}],
-			[{'id_vivienda': 17, 'fecha': '2026-08-30T10:00:00Z', 'consumo_total': 12}],
+			[{'id_vivienda': 17, 'fecha': f'{timezone.localdate().isoformat()}T10:00:00Z', 'consumo_total': 12}],
 		]
 
 		self.client.force_login(user)
@@ -71,6 +73,8 @@ class AdminValveViewTests(TestCase):
 			email='admin@example.com', nombre='Admin', apellido='Prueba',
 			password='password-segura', rol=self.admin_role,
 		)
+		self.admin.supabase_id = 4
+		self.admin.save(update_fields=['supabase_id'])
 		self.user = Usuario.objects.create_user(
 			email='user@example.com', nombre='User', apellido='Prueba',
 			password='password-segura', rol=self.user_role,
@@ -80,6 +84,16 @@ class AdminValveViewTests(TestCase):
 		self.client.force_login(self.user)
 		response = self.client.get(reverse('valvulas'))
 		self.assertRedirects(response, reverse('dashboard'))
+
+	@patch('App.views.supabase_client.get_user_by_email')
+	def test_movimiento_sincroniza_el_id_remoto_del_administrador(self, get_user_by_email):
+		self.admin.supabase_id = None
+		self.admin.save(update_fields=['supabase_id'])
+		get_user_by_email.return_value = {'id_usuario': 44}
+
+		self.assertEqual(_supabase_user_id(self.admin), 44)
+		self.admin.refresh_from_db()
+		self.assertEqual(self.admin.supabase_id, 44)
 
 	@patch('App.views.publish_command')
 	@patch('App.views.supabase_client.insert')
@@ -94,12 +108,30 @@ class AdminValveViewTests(TestCase):
 			 'estado_actual': 'abierta', 'estado_operativo': 'operativa',
 			 'topic_mqtt_comando': 'smartdrop/2/valvula/comando'},
 		]
-		select.side_effect = [valves, [valves[0]]]
+		movimientos = [
+			{
+				'id_log_valvula': 10, 'id_valvula': 1, 'accion': 'abrir',
+				'estado_anterior': 'cerrada', 'estado_nuevo': 'abierta',
+				'tipo_activacion': 'manual', 'id_usuario': 7,
+				'fecha_hora': '2026-09-04T10:00:00',
+			},
+			{
+				'id_log_valvula': 11, 'id_valvula': 2, 'accion': 'cerrar',
+				'estado_anterior': 'abierta', 'estado_nuevo': 'cerrada',
+				'tipo_activacion': 'automatico', 'id_usuario': None,
+				'fecha_hora': '2026-09-04T09:00:00',
+			},
+		]
+		usuarios = [{'id_usuario': 7, 'nombre': 'Ana', 'apellido': 'López', 'correo': 'ana@example.com'}]
+		select.side_effect = [valves, movimientos, usuarios, [valves[0]]]
 		self.client.force_login(self.admin)
 
 		response = self.client.get(reverse('valvulas'))
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response.context['valvulas'], valves)
+		self.assertEqual(response.context['movimientos'][0]['usuario_mostrar'], 'Ana López')
+		self.assertEqual(response.context['movimientos'][1]['usuario_mostrar'], 'Sistema automático')
+		self.assertEqual(response.context['movimientos'][1]['tipo_mostrar'], 'Automático')
 
 		response = self.client.post(
 			reverse('valvula_comando', kwargs={'valvula_id': 1}),
@@ -110,3 +142,4 @@ class AdminValveViewTests(TestCase):
 		update.assert_called_once()
 		self.assertEqual(update.call_args.args[1]['estado_actual'], 'abierta')
 		insert.assert_called_once()
+		self.assertEqual(insert.call_args.args[1]['id_usuario'], 4)

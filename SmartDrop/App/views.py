@@ -568,6 +568,23 @@ def _admin_only(request):
     return getattr(request.user, 'rol_id', None) == 2
 
 
+def _supabase_user_id(user):
+    """Return the user's real Supabase identifier, synchronizing it when needed."""
+    if getattr(user, 'supabase_id', None):
+        return user.supabase_id
+
+    remote_user = supabase_client.get_user_by_email(user.email)
+    remote_id = remote_user.get('id_usuario') if remote_user else None
+    if not remote_id:
+        raise MqttError(
+            'No se pudo identificar tu cuenta de Supabase; el movimiento no fue enviado.'
+        )
+
+    user.supabase_id = remote_id
+    user.save(update_fields=['supabase_id'])
+    return remote_id
+
+
 @login_required(login_url='login')
 def valvulas(request):
     if not _admin_only(request):
@@ -584,8 +601,53 @@ def valvulas(request):
     except Exception:
         error = 'No se pudieron cargar las electroválvulas.'
 
+    movimientos = []
+    try:
+        movimientos = supabase_client.select(
+            'log_valvula',
+            'id_log_valvula,id_valvula,accion,estado_anterior,estado_nuevo,'
+            'tipo_activacion,id_usuario,fecha_hora,razon,origen_accion',
+            {'order': 'fecha_hora.desc', 'limit': '50'},
+        )
+        user_ids = [str(row['id_usuario']) for row in movimientos if row.get('id_usuario')]
+        usuarios = supabase_client.select(
+            'usuario',
+            'id_usuario,nombre,apellido,correo',
+            {'id_usuario': f"in.({','.join(user_ids)})", 'limit': '1000'},
+        ) if user_ids else []
+        nombres_usuarios = {
+            str(usuario['id_usuario']): (
+                f"{usuario.get('nombre', '')} {usuario.get('apellido', '')}".strip()
+                or usuario.get('correo', '')
+            )
+            for usuario in usuarios
+            if usuario.get('id_usuario')
+        }
+        nombres_valvulas = {
+            str(valvula['id_valvula']): valvula.get('nombre') or f"Válvula #{valvula['id_valvula']}"
+            for valvula in valvulas_disponibles
+            if valvula.get('id_valvula')
+        }
+        for movimiento in movimientos:
+            tipo = str(movimiento.get('tipo_activacion') or '').strip().lower()
+            es_automatico = tipo in {'automatico', 'automática', 'automático', 'auto'}
+            movimiento['tipo_mostrar'] = 'Automático' if es_automatico else 'Manual'
+            movimiento['usuario_mostrar'] = (
+                nombres_usuarios.get(str(movimiento.get('id_usuario')))
+                or ('Sistema automático' if es_automatico else 'Usuario no identificado')
+            )
+            movimiento['valvula_mostrar'] = (
+                nombres_valvulas.get(str(movimiento.get('id_valvula')))
+                or f"Válvula #{movimiento.get('id_valvula', 'desconocida')}"
+            )
+    except Exception:
+        movimientos = []
+        if not error:
+            error = 'No se pudo cargar el historial de movimientos.'
+
     return render(request, 'App/valvulas.html', {
         'valvulas': valvulas_disponibles,
+        'movimientos': movimientos,
         'error': error,
         'ultima_actualizacion': 'hace unos segundos',
     })
@@ -603,6 +665,7 @@ def valvula_comando(request, valvula_id):
 
     valvula = None
     try:
+        admin_supabase_id = _supabase_user_id(request.user)
         rows = supabase_client.select(
             'valvula',
             'id_valvula,nombre,estado_actual,topic_mqtt_comando',
@@ -622,21 +685,18 @@ def valvula_comando(request, valvula_id):
             },
             {'id_valvula': f'eq.{valvula_id}'},
         )
-        try:
-            supabase_client.insert('log_valvula', {
-                'id_valvula': valvula['id_valvula'],
-                'accion': comando,
-                'estado_anterior': valvula.get('estado_actual') or 'desconocida',
-                'estado_nuevo': estado_nuevo,
-                'tipo_activacion': 'manual',
-                'id_usuario': getattr(request.user, 'supabase_id', None) or request.user.id_usuario,
-                'fecha_hora': timezone.now().isoformat(),
-                'origen_accion': 'web',
-            })
-        except Exception:
-            pass
+        supabase_client.insert('log_valvula', {
+            'id_valvula': valvula['id_valvula'],
+            'accion': comando,
+            'estado_anterior': valvula.get('estado_actual') or 'desconocida',
+            'estado_nuevo': estado_nuevo,
+            'tipo_activacion': 'manual',
+            'id_usuario': admin_supabase_id,
+            'fecha_hora': timezone.now().isoformat(),
+            'origen_accion': 'web',
+        })
         return redirect('valvulas')
-    except (MqttError, ValueError, TypeError) as exc:
+    except (MqttError, supabase_client.SupabaseError, ValueError, TypeError) as exc:
         return render(request, 'App/valvulas.html', {
             'valvulas': [valvula] if valvula else [],
             'error': str(exc),
@@ -959,6 +1019,3 @@ def sensor_data(request, sensor_id):
 def logout_view(request):
     logout(request)
     return redirect('login')
-
-
-    

@@ -108,6 +108,31 @@ def select(table: str, select: str = '*', params: dict | None = None) -> list:
     return data if isinstance(data, list) else []
 
 
+def update(
+    table: str,
+    data: dict,
+    params: dict | None = None,
+    return_representation: bool = False,
+) -> dict | None:
+    """Actualiza filas de una tabla de Supabase que cumplan los filtros dados."""
+    _check_config()
+    headers = _headers()
+    if return_representation:
+        headers['Prefer'] = 'return=representation'
+
+    resp = requests.patch(
+        _base_url(table),
+        headers=headers,
+        params=params,
+        json=data,
+        timeout=10,
+    )
+    result = _handle_response(resp)
+    if isinstance(result, list) and result:
+        return result[0]
+    return result if isinstance(result, dict) else None
+
+
 def get_rol_id(nombre_rol: str = 'user') -> int | None:
     """Obtiene el id_rol desde Supabase."""
     rows = select('rol', 'id_rol', {'nombre_rol': f'eq.{nombre_rol}', 'limit': '1'})
