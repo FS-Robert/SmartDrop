@@ -13,8 +13,13 @@
       💧 {{ retro.mensaje }}
     </div>
 
-    <div class="retro-state">
+    <div class="retro-state {% if retro.tendencia == 'alta' %}trend-icon up{% elif retro.tendencia == 'baja' %}trend-icon down{% endif %}">
       {{ retro.estado_agua }}
+    </div>
+
+    <div class="comparison-val {% if retro.tendencia == 'alta' %}trend-icon up{% else %}trend-icon down{% endif %}">
+      {% if retro.tendencia == 'baja' %}↓{% elif retro.tendencia == 'alta' %}↑{% else %}→{% endif %}
+      {{ retro.comparacion }}
     </div>
 
     <!-- Indicador de gota -->
@@ -71,14 +76,29 @@
       <div class="detail-row"><span>Ahorro estimado</span><span class="detail-val" style="color:#0F6E56;">{{ retro.ahorro }}L</span></div>
     </div>
 
-    <div class="alert-box card" style="background:#e1f5ee; border-color:#9FE1CB;">
+    {% if retro.alerta %}
+    <div class="alert-box full-width card">
+      <i class="ti ti-alert-triangle alert-icon"></i>
+      <div>
+        <div class="danger-title">{{ retro.alerta }}</div>
+        <div class="alert-text">Reduce el tiempo de ducha, revisa fugas y evita dejar las llaves abiertas.</div>
+      </div>
+    </div>
+    {% elif retro.motivacion %}
+    <div class="alert-box full-width card">
       <i class="ti ti-award alert-icon"></i>
       <div>
-        <div style="font-size:14px; font-weight:800; color:#0F6E56;">¡Buen trabajo!</div>
-        <div style="font-size:13px; font-weight:600; color:#085041; margin-top:4px;">
-          Estás ahorrando agua comparado con el mes anterior. Sigue así.
-        </div>
+        <div class="retro-state">{{ retro.motivacion }}</div>
+        <div class="alert-text">Continúa con tus hábitos de ahorro de agua.</div>
       </div>
+    </div>
+    {% endif %}
+
+    <div class="card">
+      <div class="card-header">Recomendaciones</div>
+      {% for recomendacion in retro.recomendaciones %}
+      <div class="detail-row"><span>{{ recomendacion }}</span></div>
+      {% endfor %}
     </div>
 
   </div>
