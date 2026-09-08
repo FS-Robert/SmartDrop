@@ -1,11 +1,12 @@
 import calendar
+import csv
 import json
 import logging
 import math
 from datetime import datetime, timedelta
 from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
@@ -630,6 +631,64 @@ def _supabase_user_id(user):
     return remote_id
 
 
+def _parse_valve_timestamp(value):
+    if not value:
+        return None
+    try:
+        timestamp = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+        if timezone.is_naive(timestamp):
+            timestamp = timezone.make_aware(timestamp, timezone.get_current_timezone())
+        return timestamp
+    except (TypeError, ValueError):
+        return None
+
+
+def _valve_statistics(movements, now=None):
+    now = now or timezone.now()
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    month_movements = [
+        movement for movement in movements
+        if (timestamp := _parse_valve_timestamp(movement.get('fecha_hora')))
+        and month_start <= timestamp <= now
+    ]
+    openings = [movement for movement in month_movements if movement.get('accion') == 'abrir']
+    automatic = [
+        movement for movement in month_movements
+        if str(movement.get('tipo_activacion', '')).lower() in {'automatico', 'automático', 'auto'}
+    ]
+    durations = [
+        float(movement.get('duracion_real') or movement.get('duracion_programada'))
+        for movement in month_movements
+        if movement.get('duracion_real') or movement.get('duracion_programada')
+    ]
+    week_start = now - timedelta(days=6)
+    daily_openings = {(now - timedelta(days=offset)).date(): 0 for offset in range(7)}
+    for movement in openings:
+        timestamp = _parse_valve_timestamp(movement.get('fecha_hora'))
+        if timestamp and timestamp >= week_start:
+            daily_openings[timestamp.date()] = daily_openings.get(timestamp.date(), 0) + 1
+    total = len(openings)
+    automatic_count = sum(1 for movement in openings if movement in automatic)
+    manual_count = total - automatic_count
+    return {
+        'total_aperturas_mes': total,
+        'tiempo_promedio_abierta': round(sum(durations) / len(durations) / 3600, 2) if durations else 0,
+        'porcentaje_manual': round(manual_count / total * 100) if total else 0,
+        'porcentaje_automatico': round(automatic_count / total * 100) if total else 0,
+        'labels_dias': [day.strftime('%d/%m') for day in sorted(daily_openings)],
+        'aperturas_dias': [daily_openings[day] for day in sorted(daily_openings)],
+    }
+
+
+def _unusual_valve_activity(movements, now=None):
+    now = now or timezone.now()
+    cutoff = now - timedelta(hours=1)
+    return [
+        movement for movement in movements
+        if (timestamp := _parse_valve_timestamp(movement.get('fecha_hora'))) and timestamp >= cutoff
+    ]
+
+
 @login_required(login_url='login')
 def valvulas(request):
     if not _admin_only(request):
@@ -647,12 +706,15 @@ def valvulas(request):
         error = 'No se pudieron cargar las electroválvulas.'
 
     movimientos = []
+    movimientos_filtrados = []
+    usuarios = []
     try:
         movimientos = supabase_client.select(
             'log_valvula',
             'id_log_valvula,id_valvula,accion,estado_anterior,estado_nuevo,'
-            'tipo_activacion,id_usuario,fecha_hora,razon,origen_accion',
-            {'order': 'fecha_hora.desc', 'limit': '50'},
+            'tipo_activacion,id_usuario,fecha_hora,razon,origen_accion,ip_dispositivo,'
+            'duracion_programada,duracion_real',
+            {'order': 'fecha_hora.desc', 'limit': '1000'},
         )
         user_ids = [str(row['id_usuario']) for row in movimientos if row.get('id_usuario')]
         usuarios = supabase_client.select(
@@ -685,14 +747,72 @@ def valvulas(request):
                 nombres_valvulas.get(str(movimiento.get('id_valvula')))
                 or f"Válvula #{movimiento.get('id_valvula', 'desconocida')}"
             )
+        movimientos = movimientos[:1000]
+        fecha = request.GET.get('fecha', '').strip()
+        usuario = request.GET.get('usuario', '').strip().lower()
+        origen = request.GET.get('origen', '').strip().lower()
+        movimientos_filtrados = [
+            movement for movement in movimientos
+            if (not fecha or str(movement.get('fecha_hora', '')).startswith(fecha))
+            and (not usuario or usuario in movement.get('usuario_mostrar', '').lower())
+            and (not origen or origen in str(movement.get('origen_accion', '')).lower())
+        ]
     except Exception:
         movimientos = []
+        movimientos_filtrados = []
         if not error:
             error = 'No se pudo cargar el historial de movimientos.'
 
+    if request.GET.get('formato') == 'csv':
+        response = HttpResponse(content_type='text/csv; charset=utf-8')
+        response['Content-Disposition'] = 'attachment; filename="historial_valvulas.csv"'
+        writer = csv.writer(response)
+        writer.writerow(['Fecha', 'Válvula', 'Acción', 'Tipo', 'Usuario', 'Origen', 'IP dispositivo'])
+        for movement in movimientos_filtrados:
+            writer.writerow([
+                movement.get('fecha_hora', ''), movement.get('valvula_mostrar', ''),
+                movement.get('accion', ''), movement.get('tipo_mostrar', ''),
+                movement.get('usuario_mostrar', ''), movement.get('origen_accion', ''),
+                movement.get('ip_dispositivo', ''),
+            ])
+        return response
+
+    statistics = _valve_statistics(movimientos)
+    movimientos_filtrados = movimientos_filtrados[:50]
+    unusual_movements = _unusual_valve_activity(movimientos)
+    alerta_actividad = None
+    if len(unusual_movements) > 20:
+        alerta_actividad = f'Actividad inusual detectada - {len(unusual_movements)} cambios en última hora'
+        try:
+            admin_id = _supabase_user_id(request.user)
+            alert = supabase_client.insert('alerta', {
+                'tipo_alerta': 'actividad_valvula',
+                'prioridad': 'alta',
+                'mensaje': alerta_actividad,
+                'estado_confirmacion': 'pendiente',
+                'datos_adicionales': {'sugerencia': 'Revisar sistema - posible mal funcionamiento'},
+            }) or {}
+            if alert.get('id_alerta'):
+                supabase_client.insert('notificacion', {
+                    'id_alerta': alert['id_alerta'],
+                    'id_usario_destino': admin_id,
+                    'canal_envio': 'dashboard',
+                    'estado_visualizacion': 'no_leida',
+                    'fecha_envio': timezone.now().isoformat(),
+                })
+        except Exception:
+            logger.exception('No se pudo generar la alerta de actividad inusual de válvulas')
+
     return render(request, 'App/valvulas.html', {
         'valvulas': valvulas_disponibles,
-        'movimientos': movimientos,
+        'movimientos': movimientos_filtrados,
+        'estadisticas': statistics,
+        'alerta_actividad': alerta_actividad,
+        'filtros': {
+            'fecha': request.GET.get('fecha', ''),
+            'usuario': request.GET.get('usuario', ''),
+            'origen': request.GET.get('origen', ''),
+        },
         'error': error,
         'ultima_actualizacion': 'hace unos segundos',
     })
@@ -738,6 +858,7 @@ def valvula_comando(request, valvula_id):
             'tipo_activacion': 'manual',
             'id_usuario': admin_supabase_id,
             'fecha_hora': timezone.now().isoformat(),
+            'ip_dispositivo': request.META.get('REMOTE_ADDR'),
             'origen_accion': 'web',
         })
         return redirect('valvulas')

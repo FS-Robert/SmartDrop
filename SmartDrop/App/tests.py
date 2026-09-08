@@ -6,7 +6,7 @@ from django.utils import timezone
 
 from .backends import sync_user_from_supabase
 from .models import Rol, Usuario
-from .views import _supabase_user_id
+from .views import _supabase_user_id, _valve_statistics
 
 # Create your tests here.
 
@@ -193,3 +193,63 @@ class AdminValveViewTests(TestCase):
 		self.assertEqual(update.call_args.args[1]['estado_actual'], 'abierta')
 		insert.assert_called_once()
 		self.assertEqual(insert.call_args.args[1]['id_usuario'], 4)
+		self.assertEqual(insert.call_args.args[1]['ip_dispositivo'], '127.0.0.1')
+
+	def test_estadisticas_de_valvulas_calculan_aperturas_y_duracion(self):
+		statistics = _valve_statistics([
+			{
+				'accion': 'abrir', 'tipo_activacion': 'manual',
+				'fecha_hora': '2026-09-07T10:00:00+00:00', 'duracion_real': 7200,
+			},
+			{
+				'accion': 'abrir', 'tipo_activacion': 'automatico',
+				'fecha_hora': '2026-09-07T11:00:00+00:00', 'duracion_real': 3600,
+			},
+		], now=timezone.now().replace(month=9, day=7, hour=12, minute=0, second=0, microsecond=0))
+
+		self.assertEqual(statistics['total_aperturas_mes'], 2)
+		self.assertEqual(statistics['tiempo_promedio_abierta'], 1.5)
+		self.assertEqual(statistics['porcentaje_manual'], 50)
+		self.assertEqual(statistics['porcentaje_automatico'], 50)
+
+	@patch('App.views.supabase_client.select')
+	def test_historial_se_puede_exportar_a_csv(self, select):
+		select.side_effect = [
+			[{'id_valvula': 1, 'nombre': 'Principal'}],
+			[{
+				'id_valvula': 1, 'accion': 'abrir', 'tipo_activacion': 'manual',
+				'id_usuario': None, 'fecha_hora': '2026-09-07T10:00:00+00:00',
+				'origen_accion': 'web',
+			}],
+			[],
+		]
+		self.client.force_login(self.admin)
+
+		response = self.client.get(reverse('valvulas'), {'formato': 'csv'})
+
+		self.assertEqual(response.status_code, 200)
+		self.assertIn('text/csv', response['Content-Type'])
+		self.assertIn('Principal', response.content.decode())
+
+	@patch('App.views.supabase_client.insert')
+	@patch('App.views.supabase_client.select')
+	def test_actividad_inusual_genera_alerta_y_notificacion(self, select, insert):
+		movements = [
+			{
+				'id_valvula': 1, 'accion': 'abrir', 'tipo_activacion': 'manual',
+				'id_usuario': 4, 'fecha_hora': timezone.now().isoformat(),
+				'origen_accion': 'web',
+			}
+		] * 21
+		select.side_effect = [[{'id_valvula': 1, 'nombre': 'Principal'}], movements, [
+			{'id_usuario': 4, 'nombre': 'Admin', 'apellido': 'Prueba'},
+		]]
+		insert.side_effect = [{'id_alerta': 9}, None]
+		self.client.force_login(self.admin)
+
+		response = self.client.get(reverse('valvulas'))
+
+		self.assertEqual(response.status_code, 200)
+		self.assertIn('21 cambios', response.context['alerta_actividad'])
+		self.assertEqual(insert.call_count, 2)
+		self.assertEqual(insert.call_args_list[1].args[0], 'notificacion')

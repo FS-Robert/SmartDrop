@@ -37,7 +37,37 @@
   .movement-type { display:inline-block; padding:4px 8px; border-radius:999px; font-weight:800; font-size:12px; }
   .movement-type-manual { background:#f3e8ff; color:#6b21a8; }
   .movement-type-auto { background:#e1f5ee; color:#0f6e56; }
-  @media (max-width:600px) { .valve-actions { grid-template-columns:1fr; } }
+  .history-toolbar { display:flex; flex-wrap:wrap; align-items:end; gap:10px; padding:14px 16px; background:#fcfaff; border-bottom:1px solid #f0ecf7; }
+  .history-field { display:flex; flex:1 1 150px; flex-direction:column; gap:5px; min-width:140px; }
+  .history-field label { color:#6f6f7a; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; }
+  .history-field input { width:100%; border:1px solid #e0d4f5; border-radius:8px; background:#fff; color:#2d1a4a; font:inherit; font-size:13px; padding:9px 10px; outline:none; transition:border-color .15s, box-shadow .15s; }
+  .history-field input:focus { border-color:#8b5cf6; box-shadow:0 0 0 3px rgba(139,92,246,.12); }
+  .history-actions { display:flex; gap:8px; align-items:center; }
+  .history-button, .history-export { display:inline-flex; align-items:center; justify-content:center; gap:6px; border:0; border-radius:8px; cursor:pointer; font:inherit; font-size:13px; font-weight:800; padding:9px 12px; text-decoration:none; transition:transform .15s, box-shadow .15s, background .15s; }
+  .history-button { background:#6b21a8; color:#fff; }
+  .history-export { background:#e1f5ee; color:#0f6e56; }
+  .history-button:hover, .history-export:hover { transform:translateY(-1px); box-shadow:0 4px 10px rgba(43,20,60,.12); }
+  .history-reset { color:#6f6f7a; font-size:12px; font-weight:700; padding:8px 4px; text-decoration:none; }
+  .history-reset:hover { color:#6b21a8; }
+  .stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; padding:16px; }
+  .stat-tile { background:#fcfaff; border:1px solid #f0ecf7; border-radius:10px; padding:14px; color:#6f6f7a; font-size:13px; line-height:1.45; }
+  .stat-tile strong { display:block; color:#2d1a4a; font-size:19px; line-height:1.2; margin-top:4px; }
+  .stat-tile-accent strong { color:#6b21a8; }
+  .stats-chart { height:340px; padding:14px 22px 22px; }
+  .stats-chart canvas { width:100% !important; height:100% !important; }
+  :root[data-theme="dark"] .history-toolbar, body[data-theme="dark"] .history-toolbar,
+  :root[data-theme="dark"] .stat-tile, body[data-theme="dark"] .stat-tile { background:var(--panel); border-color:var(--border); }
+  :root[data-theme="dark"] .history-field input, body[data-theme="dark"] .history-field input { background:var(--panel); border-color:var(--border); color:var(--text); }
+  :root[data-theme="dark"] .history-field label, body[data-theme="dark"] .history-field label,
+  :root[data-theme="dark"] .stat-tile, body[data-theme="dark"] .stat-tile { color:var(--muted); }
+  :root[data-theme="dark"] .stat-tile strong, body[data-theme="dark"] .stat-tile strong { color:var(--text); }
+  @media (max-width:600px) {
+    .valve-actions { grid-template-columns:1fr; }
+    .history-toolbar { align-items:stretch; }
+    .history-actions { width:100%; }
+    .history-button, .history-export { flex:1; }
+    .history-reset { padding:9px 4px; }
+  }
 </style>
 {% endblock %}
 
@@ -49,6 +79,13 @@
 {% if error %}
   <div class="valve-message valve-message-error" role="alert">
     <i class="ti ti-alert-triangle"></i>{{ error }}
+  </div>
+{% endif %}
+
+{% if alerta_actividad %}
+  <div class="valve-message valve-message-error" role="alert">
+    <i class="ti ti-alert-triangle"></i>
+    <span>{{ alerta_actividad }}. Revisar sistema - posible mal funcionamiento.</span>
   </div>
 {% endif %}
 
@@ -98,6 +135,25 @@
     <h2 id="movement-title">Movimientos recientes</h2>
     <p>Últimas aperturas y cierres registrados para todas las electroválvulas.</p>
   </div>
+  <form method="get" class="history-toolbar">
+    <div class="history-field">
+      <label for="history-date">Fecha</label>
+      <input id="history-date" type="date" name="fecha" value="{{ filtros.fecha }}">
+    </div>
+    <div class="history-field">
+      <label for="history-user">Usuario</label>
+      <input id="history-user" type="search" name="usuario" value="{{ filtros.usuario }}" placeholder="Buscar usuario">
+    </div>
+    <div class="history-field">
+      <label for="history-origin">Origen</label>
+      <input id="history-origin" type="search" name="origen" value="{{ filtros.origen }}" placeholder="Web, app, automático">
+    </div>
+    <div class="history-actions">
+      <button class="history-button" type="submit"><i class="ti ti-filter"></i>Filtrar</button>
+      <a class="history-export" href="?{% if filtros.fecha %}fecha={{ filtros.fecha }}&{% endif %}{% if filtros.usuario %}usuario={{ filtros.usuario }}&{% endif %}{% if filtros.origen %}origen={{ filtros.origen }}&{% endif %}formato=csv"><i class="ti ti-download"></i>CSV</a>
+      <a class="history-reset" href="{% url 'valvulas' %}">Limpiar</a>
+    </div>
+  </form>
   {% if movimientos %}
     <div class="movement-table-wrap">
       <table class="movement-table">
@@ -133,5 +189,30 @@
     <p class="movement-empty">Todavía no hay movimientos registrados.</p>
   {% endif %}
 </section>
+
+<section class="movement-panel" aria-labelledby="stats-title">
+  <div class="movement-panel-header">
+    <h2 id="stats-title">Estadísticas de uso</h2>
+  </div>
+  <div class="stats-grid">
+    <div class="stat-tile stat-tile-accent">Aperturas este mes<strong>{{ estadisticas.total_aperturas_mes }}</strong></div>
+    <div class="stat-tile">Tiempo promedio abierta<strong>{{ estadisticas.tiempo_promedio_abierta }} h</strong></div>
+    <div class="stat-tile">Distribución de activaciones<strong>{{ estadisticas.porcentaje_manual }}% manual · {{ estadisticas.porcentaje_automatico }}% automático</strong></div>
+  </div>
+  <div class="stats-chart"><canvas id="aperturasPorDia" aria-label="Aperturas por día en los últimos 7 días"></canvas></div>
+</section>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+{{ estadisticas.labels_dias|json_script:"valvulas-labels-dias" }}
+{{ estadisticas.aperturas_dias|json_script:"valvulas-aperturas-dias" }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+  new Chart(document.getElementById('aperturasPorDia'), {
+    type: 'bar',
+    data: { labels: JSON.parse(document.getElementById('valvulas-labels-dias').textContent), datasets: [{ label: 'Aperturas', data: JSON.parse(document.getElementById('valvulas-aperturas-dias').textContent), backgroundColor: '#0f766e' }] },
+    options: { responsive: true, plugins: { legend: { display: false } } }
+  });
+</script>
 {% endblock %}
