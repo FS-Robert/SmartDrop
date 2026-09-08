@@ -481,15 +481,34 @@ def retroalimentacion(request):
     retro = None
     try:
         viviendas, consumption_rows = _owned_consumption(request)
-        values = [
-            _safe_float(row.get('consumo_total') or row.get('consumo_promedio'))
-            for row in consumption_rows
-        ]
-        if values:
-            current = values[0]
-            historical_values = values[1:]
-            historical_average = round(sum(historical_values) / len(historical_values), 2) if historical_values else current
-            variation = round(((current - historical_average) / historical_average) * 100, 2) if historical_average else 0
+        now = timezone.localtime()
+        current_month = now.date().replace(day=1)
+        previous_month = (current_month - timedelta(days=1)).replace(day=1)
+        parsed_rows = []
+        for row in consumption_rows:
+            raw_date = row.get('fecha')
+            if not raw_date:
+                continue
+            try:
+                row_date = datetime.fromisoformat(str(raw_date).replace('Z', '+00:00'))
+                if row_date.tzinfo:
+                    row_date = timezone.localtime(row_date)
+                value = _safe_float(row.get('consumo_total') or row.get('consumo_promedio'))
+                parsed_rows.append((row_date.date(), value))
+            except (TypeError, ValueError, OverflowError):
+                continue
+
+        current_rows = [value for row_date, value in parsed_rows if row_date.replace(day=1) == current_month]
+        previous_rows = [value for row_date, value in parsed_rows if row_date.replace(day=1) == previous_month]
+        if parsed_rows:
+            current = round(sum(current_rows), 2) if current_rows else parsed_rows[0][1]
+            comparison_base = round(sum(previous_rows), 2) if previous_rows else round(
+                sum(value for row_date, value in parsed_rows if row_date < current_month)
+                / max(len([row_date for row_date, _ in parsed_rows if row_date < current_month]), 1),
+                2,
+            )
+            comparison_period = 'mes anterior' if previous_rows else 'promedio histórico'
+            variation = round(((current - comparison_base) / comparison_base) * 100, 2) if comparison_base else 0
             if variation < 0:
                 trend = 'baja'
                 comparison_message = 'Has reducido tu consumo'
@@ -503,7 +522,7 @@ def retroalimentacion(request):
             else:
                 trend = 'igual'
                 comparison_message = 'Tu consumo se mantiene estable'
-                motivational_message = ''
+                motivational_message = '¡Excelente! Mantienes un consumo de agua estable. Sigue así.'
                 alert_message = ''
             recommendations = [
                 'Revisa fugas en grifos y tuberías.',
@@ -522,14 +541,41 @@ def retroalimentacion(request):
                 'tendencia':     trend,
                 'fill_y':        max(10, 160 - min(current, 150)),
                 'fill_h':        min(current, 150),
-                'total_mes':     round(sum(values), 2),
-                'prom_dia':      historical_average,
-                'ahorro':        round(max(historical_average - current, 0), 2),
+                'total_mes':     round(sum(current_rows), 2) if current_rows else current,
+                'prom_dia':      comparison_base,
+                'ahorro':        round(max(comparison_base - current, 0), 2),
                 'comparacion':   comparison_message,
+                'periodo_comparacion': comparison_period,
                 'alerta':        alert_message,
                 'motivacion':    motivational_message,
                 'recomendaciones': recommendations,
             }
+            if alert_message:
+                try:
+                    alert = supabase_client.insert('alerta', {
+                        'tipo_alerta': 'consumo_elevado',
+                        'prioridad': 'media',
+                        'mensaje': alert_message,
+                        'estado_confirmacion': 'pendiente',
+                        'datos_adicionales': {
+                            'consumo_actual': current,
+                            'periodo_comparacion': comparison_period,
+                            'consumo_comparacion': comparison_base,
+                            'variacion_porcentual': variation,
+                            'sugerencias': recommendations[:3],
+                        },
+                    }) or {}
+                    if alert.get('id_alerta'):
+                        notification_user_id = getattr(request.user, 'supabase_id', None) or request.user.id_usuario
+                        supabase_client.insert('notificacion', {
+                            'id_alerta': alert['id_alerta'],
+                            'id_usario_destino': notification_user_id,
+                            'canal_envio': 'dashboard',
+                            'estado_visualizacion': 'no_leida',
+                            'fecha_envio': timezone.now().isoformat(),
+                        })
+                except Exception:
+                    logger.exception('No se pudo registrar la alerta de consumo elevado')
     except Exception:
         retro = None
 
@@ -546,6 +592,7 @@ def retroalimentacion(request):
             'prom_dia':       0,
             'ahorro':        0,
             'comparacion':   'Sin datos de consumo',
+            'periodo_comparacion': 'mes anterior',
             'alerta':        '',
             'motivacion':    '',
             'recomendaciones': [

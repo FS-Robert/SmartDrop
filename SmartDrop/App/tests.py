@@ -114,6 +114,56 @@ class ConsumoViewTests(TestCase):
 		self.assertEqual(response.context['viviendas'][0]['id_vivienda'], 17)
 		self.assertEqual(response.context['consumo']['valor_dia'], 12)
 
+	@patch('App.views.supabase_client.select')
+	def test_retroalimentacion_compara_mes_actual_con_mes_anterior(self, select):
+		rol = Rol.objects.create(nombre_rol='user')
+		user = Usuario.objects.create_user(
+			email='retro@example.com', nombre='Retro', apellido='Usuario',
+			password='password-segura', rol=rol,
+		)
+		select.side_effect = [
+			[{'id_vivienda': 17, 'nic': 'NIC-17', 'direccion': 'Casa propia'}],
+			[
+				{'fecha': '2026-09-05T10:00:00Z', 'consumo_total': 12},
+				{'fecha': '2026-08-05T10:00:00Z', 'consumo_total': 20},
+			],
+		]
+		self.client.force_login(user)
+
+		response = self.client.get(reverse('retroalimentacion'))
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.context['retro']['mensaje'], 'Has reducido tu consumo')
+		self.assertEqual(response.context['retro']['periodo_comparacion'], 'mes anterior')
+		self.assertEqual(response.context['retro']['variacion_mes'], '-40.0%')
+
+	@patch('App.views.supabase_client.insert')
+	@patch('App.views.supabase_client.select')
+	def test_consumo_elevado_registra_alerta_y_notificacion(self, select, insert):
+		rol = Rol.objects.create(nombre_rol='user')
+		user = Usuario.objects.create_user(
+			email='alerta@example.com', nombre='Alerta', apellido='Usuario',
+			password='password-segura', rol=rol,
+		)
+		user.supabase_id = 77
+		user.save(update_fields=['supabase_id'])
+		select.side_effect = [
+			[{'id_vivienda': 17, 'nic': 'NIC-17', 'direccion': 'Casa propia'}],
+			[
+				{'fecha': '2026-09-05T10:00:00Z', 'consumo_total': 30},
+				{'fecha': '2026-08-05T10:00:00Z', 'consumo_total': 20},
+			],
+		]
+		insert.side_effect = [{'id_alerta': 31}, None]
+		self.client.force_login(user)
+
+		response = self.client.get(reverse('retroalimentacion'))
+
+		self.assertEqual(response.context['retro']['alerta'], 'Consumo elevado de agua')
+		self.assertEqual(insert.call_args_list[0].args[0], 'alerta')
+		self.assertEqual(insert.call_args_list[1].args[0], 'notificacion')
+		self.assertEqual(insert.call_args_list[1].args[1]['id_usario_destino'], 77)
+
 
 class AdminValveViewTests(TestCase):
 	def setUp(self):
