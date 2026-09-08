@@ -12,6 +12,56 @@ from .views import _supabase_user_id
 
 
 class ConsumoViewTests(TestCase):
+	@patch('App.views.supabase_client.insert')
+	def test_api_lectura_valida_envia_datos_a_supabase(self, insert):
+		insert.return_value = {'id_lectura': 1}
+		response = self.client.post(
+			reverse('api_lectura'),
+			data={
+				'id_sensor': 4,
+				'fecha_registro': '2026-09-07T10:00:00Z',
+				'valor': 21.5,
+			},
+			content_type='application/json',
+		)
+
+		self.assertEqual(response.status_code, 201)
+		insert.assert_called_once_with('lectura', {
+			'id_sensor': 4,
+			'fecha_registro': '2026-09-07T10:00:00Z',
+			'valor': 21.5,
+		})
+
+	def test_api_lectura_rechaza_campos_adicionales(self):
+		with self.assertLogs('App.views', level='WARNING'):
+			response = self.client.post(
+				reverse('api_lectura'),
+				data={
+					'id_sensor': 4,
+					'fecha_registro': '2026-09-07T10:00:00Z',
+					'valor': 21.5,
+					'campo_extra': 'no permitido',
+				},
+				content_type='application/json',
+			)
+
+		self.assertEqual(response.status_code, 400)
+
+	@patch('App.views.supabase_client.insert', side_effect=RuntimeError('Supabase no disponible'))
+	def test_api_lectura_registra_error_de_supabase(self, insert):
+		with self.assertLogs('App.views', level='ERROR'):
+			response = self.client.post(
+				reverse('api_lectura'),
+				data={
+					'id_sensor': 4,
+					'fecha_registro': '2026-09-07T10:00:00Z',
+					'valor': 21.5,
+				},
+				content_type='application/json',
+			)
+
+		self.assertEqual(response.status_code, 502)
+
 	def test_sincronizacion_reutiliza_correo_local_existente(self):
 		rol = Rol.objects.create(nombre_rol='user')
 		local_user = Usuario.objects.create_user(

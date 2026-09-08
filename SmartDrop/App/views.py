@@ -1,5 +1,7 @@
 import calendar
 import json
+import logging
+import math
 from datetime import datetime, timedelta
 from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
@@ -13,6 +15,9 @@ from .forms import LoginForm, UsuarioRegisterForm
 from . import supabase_client
 from .backends import sync_user_from_supabase
 from .mqtt_service import MqttError, publish_command
+
+
+logger = logging.getLogger(__name__)
 
 
 def _owned_sensor_data(request):
@@ -831,6 +836,69 @@ def api_login(request):
 
     user = form.cleaned_data['user']
     return JsonResponse({'ok': True, 'user': _user_payload(user)})
+
+
+@csrf_exempt
+@require_http_methods(['POST'])
+def api_lectura(request):
+    """Valida y envía una lectura del ESP32 a Supabase."""
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return JsonResponse({'ok': False, 'error': 'JSON inválido'}, status=400)
+
+    required_fields = {'id_sensor', 'fecha_registro', 'valor'}
+    if not isinstance(data, dict) or set(data) != required_fields:
+        logger.warning(
+            'Intento de lectura IoT con formato no permitido desde %s. Campos recibidos: %s',
+            request.META.get('REMOTE_ADDR', 'desconocida'),
+            sorted(data.keys()) if isinstance(data, dict) else 'JSON no objeto',
+        )
+        return JsonResponse(
+            {
+                'ok': False,
+                'error': 'El JSON debe contener únicamente id_sensor, fecha_registro y valor',
+            },
+            status=400,
+        )
+
+    sensor_id = data['id_sensor']
+    value = data['valor']
+    timestamp = data['fecha_registro']
+    if (
+        not isinstance(sensor_id, int)
+        or isinstance(sensor_id, bool)
+        or sensor_id <= 0
+        or not isinstance(value, (int, float))
+        or isinstance(value, bool)
+        or not math.isfinite(value)
+        or not isinstance(timestamp, str)
+    ):
+        return JsonResponse({'ok': False, 'error': 'Tipos de datos inválidos'}, status=400)
+
+    try:
+        datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+    except ValueError:
+        return JsonResponse(
+            {'ok': False, 'error': 'fecha_registro debe estar en formato ISO 8601'},
+            status=400,
+        )
+
+    payload = {
+        'id_sensor': sensor_id,
+        'fecha_registro': timestamp,
+        'valor': value,
+    }
+    try:
+        row = supabase_client.insert('lectura', payload)
+    except Exception:
+        logger.exception('Error al guardar lectura IoT en Supabase')
+        return JsonResponse(
+            {'ok': False, 'error': 'No se pudo guardar la lectura'},
+            status=502,
+        )
+
+    return JsonResponse({'ok': True, 'lectura': row}, status=201)
 
 
 def login_view(request):
