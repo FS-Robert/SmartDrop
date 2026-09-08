@@ -212,6 +212,37 @@ class AdminValveViewTests(TestCase):
 		self.assertEqual(statistics['porcentaje_manual'], 50)
 		self.assertEqual(statistics['porcentaje_automatico'], 50)
 
+	@patch('App.views.publish_command')
+	@patch('App.views.supabase_client.insert')
+	@patch('App.views.supabase_client.update')
+	@patch('App.views.supabase_client.select')
+	def test_comando_ajax_devuelve_usuario_ip_y_estado(self, select, update, insert, publish):
+		select.return_value = [{
+			'id_valvula': 1,
+			'nombre': 'Principal',
+			'estado_actual': 'cerrada',
+			'topic_mqtt_comando': 'smartdrop/1/valvula/comando',
+		}]
+		insert.return_value = {
+			'fecha_hora': '2026-09-07T12:00:00+00:00',
+		}
+		self.client.force_login(self.admin)
+
+		response = self.client.post(
+			reverse('valvula_comando', kwargs={'valvula_id': 1}),
+			{'comando': 'abrir'},
+			HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+			REMOTE_ADDR='192.168.1.15',
+		)
+
+		self.assertEqual(response.status_code, 200)
+		payload = response.json()
+		self.assertEqual(payload['id_usuario'], 4)
+		self.assertEqual(payload['ip_dispositivo'], '192.168.1.15')
+		self.assertEqual(payload['estado_nuevo'], 'abierta')
+		self.assertEqual(insert.call_args.args[1]['id_usuario'], 4)
+		self.assertEqual(insert.call_args.args[1]['ip_dispositivo'], '192.168.1.15')
+
 	@patch('App.views.supabase_client.select')
 	def test_historial_se_puede_exportar_a_csv(self, select):
 		select.side_effect = [

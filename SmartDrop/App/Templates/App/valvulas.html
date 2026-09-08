@@ -49,6 +49,11 @@
   .history-button:hover, .history-export:hover { transform:translateY(-1px); box-shadow:0 4px 10px rgba(43,20,60,.12); }
   .history-reset { color:#6f6f7a; font-size:12px; font-weight:700; padding:8px 4px; text-decoration:none; }
   .history-reset:hover { color:#6b21a8; }
+  .valve-button.is-loading { cursor:wait; opacity:.7; }
+  .valve-button.is-loading i { animation: valve-spin .8s linear infinite; }
+  .valve-live-message { min-height:20px; margin:0 0 12px; color:#6f6f7a; font-size:13px; font-weight:700; }
+  .valve-live-message.is-error { color:#a32d2d; }
+  @keyframes valve-spin { to { transform:rotate(360deg); } }
   .stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; padding:16px; }
   .stat-tile { background:#fcfaff; border:1px solid #f0ecf7; border-radius:10px; padding:14px; color:#6f6f7a; font-size:13px; line-height:1.45; }
   .stat-tile strong { display:block; color:#2d1a4a; font-size:19px; line-height:1.2; margin-top:4px; }
@@ -100,7 +105,7 @@
             <p>GPIO {{ valvula.ping_gpio }} · {{ valvula.estado_operativo|default:'Estado no indicado'|capfirst }}</p>
           </div>
         </div>
-        <div class="valve-status-row">
+        <div class="valve-status-row" data-valve-status="{{ valvula.id_valvula }}">
           <span>Estado actual</span>
           {% if valvula.estado_actual|lower == 'abierta' %}
             <span class="badge badge-open">ABIERTA</span>
@@ -109,15 +114,15 @@
           {% endif %}
         </div>
         <div class="valve-actions">
-          <form method="post" action="{% url 'valvula_comando' valvula.id_valvula %}">
+          <form class="valve-command-form" method="post" action="{% url 'valvula_comando' valvula.id_valvula %}">
             {% csrf_token %}
-            <button class="valve-button valve-button-open" type="submit" name="comando" value="abrir" {% if valvula.estado_actual|lower == 'abierta' %}disabled{% endif %}>
+            <button class="valve-button valve-button-open" type="submit" name="comando" value="abrir" data-valve-action="abrir" {% if valvula.estado_actual|lower == 'abierta' %}disabled{% endif %}>
               <i class="ti ti-lock-open"></i> Abrir
             </button>
           </form>
-          <form method="post" action="{% url 'valvula_comando' valvula.id_valvula %}">
+          <form class="valve-command-form" method="post" action="{% url 'valvula_comando' valvula.id_valvula %}">
             {% csrf_token %}
-            <button class="valve-button valve-button-close" type="submit" name="comando" value="cerrar" {% if valvula.estado_actual|lower == 'cerrada' %}disabled{% endif %}>
+            <button class="valve-button valve-button-close" type="submit" name="comando" value="cerrar" data-valve-action="cerrar" {% if valvula.estado_actual|lower == 'cerrada' %}disabled{% endif %}>
               <i class="ti ti-lock"></i> Cerrar
             </button>
           </form>
@@ -135,6 +140,7 @@
     <h2 id="movement-title">Movimientos recientes</h2>
     <p>Últimas aperturas y cierres registrados para todas las electroválvulas.</p>
   </div>
+  <p class="valve-live-message" id="valve-live-message" role="status" aria-live="polite"></p>
   <form method="get" class="history-toolbar">
     <div class="history-field">
       <label for="history-date">Fecha</label>
@@ -167,7 +173,7 @@
             <th>Estado</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody id="valve-history-body">
           {% for movimiento in movimientos %}
             <tr>
               <td>{{ movimiento.fecha_hora }}</td>
@@ -209,6 +215,72 @@
 {{ estadisticas.aperturas_dias|json_script:"valvulas-aperturas-dias" }}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
+  document.querySelectorAll('.valve-command-form').forEach(form => {
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      const button = event.submitter;
+      const buttons = form.closest('.valve-card').querySelectorAll('.valve-button');
+      const message = document.getElementById('valve-live-message');
+      buttons.forEach(item => { item.disabled = true; item.classList.add('is-loading'); });
+      message.className = 'valve-live-message';
+      message.textContent = 'Enviando comando...';
+      try {
+        const response = await fetch(form.action, {
+          method: 'POST',
+          headers: {
+            'X-CSRFToken': form.querySelector('[name=csrfmiddlewaretoken]').value,
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json',
+          },
+          body: new URLSearchParams({ comando: button.value }),
+        });
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+          if (response.redirected || response.url.includes('/login')) {
+            throw new Error('La sesión expiró. Inicia sesión nuevamente.');
+          }
+          throw new Error(`El servidor devolvió una página HTML (HTTP ${response.status}). Revisa la consola de Django.`);
+        }
+        const result = await response.json();
+        if (!response.ok || !result.ok) throw new Error(result.error || 'No se pudo ejecutar el comando.');
+
+        const status = document.querySelector(`[data-valve-status="${result.id_valvula}"]`);
+        const isOpen = result.estado_nuevo === 'abierta';
+        if (status) {
+          status.querySelector('.badge')?.remove();
+          status.insertAdjacentHTML('beforeend', `<span class="badge ${isOpen ? 'badge-open' : 'badge-closed'}">${result.estado_nuevo.toUpperCase()}</span>`);
+        }
+        buttons.forEach(item => {
+          item.disabled = item.dataset.valveAction === result.accion;
+          item.classList.remove('is-loading');
+        });
+        const historyBody = document.getElementById('valve-history-body');
+        if (historyBody) {
+          const row = document.createElement('tr');
+          [
+            result.fecha_hora,
+            result.valvula_mostrar,
+            result.accion,
+            result.tipo_activacion === 'automatico' ? 'Automático' : 'Manual',
+            result.usuario_mostrar,
+            `${result.estado_anterior} → ${result.estado_nuevo}`,
+          ].forEach(value => {
+            const cell = document.createElement('td');
+            cell.textContent = value || '—';
+            row.appendChild(cell);
+          });
+          historyBody.prepend(row);
+          while (historyBody.rows.length > 50) historyBody.deleteRow(-1);
+        }
+        message.textContent = `Cambio guardado: ${result.estado_nuevo.toUpperCase()}`;
+      } catch (error) {
+        buttons.forEach(item => { item.disabled = false; item.classList.remove('is-loading'); });
+        message.className = 'valve-live-message is-error';
+        message.textContent = error.message;
+      }
+    });
+  });
+
   new Chart(document.getElementById('aperturasPorDia'), {
     type: 'bar',
     data: { labels: JSON.parse(document.getElementById('valvulas-labels-dias').textContent), datasets: [{ label: 'Aperturas', data: JSON.parse(document.getElementById('valvulas-aperturas-dias').textContent), backgroundColor: '#0f766e' }] },

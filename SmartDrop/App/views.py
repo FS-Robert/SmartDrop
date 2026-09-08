@@ -850,7 +850,7 @@ def valvula_comando(request, valvula_id):
             },
             {'id_valvula': f'eq.{valvula_id}'},
         )
-        supabase_client.insert('log_valvula', {
+        log_payload = {
             'id_valvula': valvula['id_valvula'],
             'accion': comando,
             'estado_anterior': valvula.get('estado_actual') or 'desconocida',
@@ -860,9 +860,27 @@ def valvula_comando(request, valvula_id):
             'fecha_hora': timezone.now().isoformat(),
             'ip_dispositivo': request.META.get('REMOTE_ADDR'),
             'origen_accion': 'web',
-        })
+        }
+        log_row = supabase_client.insert('log_valvula', log_payload) or log_payload
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.headers.get('Accept') == 'application/json':
+            return JsonResponse({
+                'ok': True,
+                'id_valvula': valvula['id_valvula'],
+                'estado_anterior': valvula.get('estado_actual') or 'desconocida',
+                'estado_nuevo': estado_nuevo,
+                'accion': comando,
+                'tipo_activacion': 'manual',
+                'id_usuario': admin_supabase_id,
+                'ip_dispositivo': request.META.get('REMOTE_ADDR'),
+                'fecha_hora': log_row.get('fecha_hora', log_payload['fecha_hora']),
+                'origen_accion': 'web',
+                'usuario_mostrar': request.user.get_full_name(),
+                'valvula_mostrar': valvula.get('nombre') or f"Válvula #{valvula['id_valvula']}",
+            })
         return redirect('valvulas')
     except (MqttError, supabase_client.SupabaseError, ValueError, TypeError) as exc:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.headers.get('Accept') == 'application/json':
+            return JsonResponse({'ok': False, 'error': str(exc)}, status=502)
         return render(request, 'App/valvulas.html', {
             'valvulas': [valvula] if valvula else [],
             'error': str(exc),
