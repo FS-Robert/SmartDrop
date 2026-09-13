@@ -33,6 +33,15 @@
       <span class="topbar-title">SmartDrop</span>
     </div>
     <div class="topbar-right">
+      {% if user.is_authenticated %}
+        <form class="global-search" method="get" action="{% url 'busqueda_global' %}">
+          <label class="sr-only" for="search-input">Buscar en SmartDrop</label>
+          <i class="ti ti-search" aria-hidden="true"></i>
+          <input id="search-input" name="q" type="search" value="{{ request.GET.q|default:'' }}" placeholder="Buscar..." autocomplete="off"/>
+          <button id="search-clear" class="search-clear" type="button" title="Limpiar búsqueda" aria-label="Limpiar búsqueda" hidden><i class="ti ti-x"></i></button>
+          <button type="submit" title="Buscar" aria-label="Buscar"><i class="ti ti-arrow-right"></i></button>
+        </form>
+      {% endif %}
       <i class="ti ti-bell" style="font-size:20px;"></i>
       {% if user.is_authenticated %}
         {% if user.rol_id != 2 %}
@@ -99,6 +108,100 @@
   </div>
 
   <footer>SmartDrop · Sistema de Monitoreo de Agua · Actualizado {{ ultima_actualizacion|default:"hace 2 min" }}</footer>
+
+  <script>
+    (function () {
+      const form = document.querySelector('.global-search');
+      const input = document.getElementById('search-input');
+      const clearButton = document.getElementById('search-clear');
+      const content = document.querySelector('main, .content-container');
+      const resultsPath = "{% url 'busqueda_global' %}";
+      const markClass = 'global-search-highlight';
+      const markSelector = 'mark.global-search-highlight, mark.bg-warning';
+
+      if (!form || !input) return;
+
+      function removeHighlights() {
+        document.querySelectorAll(markSelector).forEach((mark) => {
+          mark.replaceWith(document.createTextNode(mark.textContent || ''));
+        });
+      }
+
+      function highlightContent(term) {
+        removeHighlights();
+        if (!term || !content) return;
+
+        const escapedTerm = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const matcher = new RegExp(escapedTerm, 'gi');
+        const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT, {
+          acceptNode(node) {
+            const parent = node.parentElement;
+            if (!parent || parent.closest('script, style, textarea, input, select, option, button, mark')) {
+              return NodeFilter.FILTER_REJECT;
+            }
+            matcher.lastIndex = 0;
+            return matcher.test(node.nodeValue || '')
+              ? NodeFilter.FILTER_ACCEPT
+              : NodeFilter.FILTER_REJECT;
+          },
+        });
+        const textNodes = [];
+        let node;
+        while ((node = walker.nextNode())) textNodes.push(node);
+
+        textNodes.forEach((textNode) => {
+          matcher.lastIndex = 0;
+          const fragment = document.createDocumentFragment();
+          let lastIndex = 0;
+          let match;
+          while ((match = matcher.exec(textNode.nodeValue || ''))) {
+            fragment.append(document.createTextNode(textNode.nodeValue.slice(lastIndex, match.index)));
+            const mark = document.createElement('mark');
+            mark.className = `bg-warning text-dark px-1 rounded ${markClass}`;
+            mark.textContent = match[0];
+            fragment.append(mark);
+            lastIndex = match.index + match[0].length;
+          }
+          fragment.append(document.createTextNode(textNode.nodeValue.slice(lastIndex)));
+          textNode.replaceWith(fragment);
+        });
+      }
+
+      function setSearchTerm(term) {
+        const normalized = term.trim();
+        if (normalized) {
+          sessionStorage.setItem('search_term', normalized);
+        } else {
+          sessionStorage.removeItem('search_term');
+        }
+        input.value = normalized;
+        clearButton.hidden = !normalized;
+        highlightContent(normalized);
+      }
+
+      const params = new URLSearchParams(window.location.search);
+      if (params.has('q')) {
+        setSearchTerm(params.get('q') || '');
+      } else {
+        setSearchTerm(sessionStorage.getItem('search_term') || '');
+      }
+
+      form.addEventListener('submit', function () {
+        setSearchTerm(input.value);
+      });
+
+      input.addEventListener('input', function () {
+        if (!input.value.trim()) setSearchTerm('');
+      });
+
+      clearButton.addEventListener('click', function () {
+        setSearchTerm('');
+        if (window.location.pathname === resultsPath) {
+          window.location.href = "{% url 'dashboard' %}";
+        }
+      });
+    }());
+  </script>
 
   {% block extra_js %}{% endblock %}
 </body>

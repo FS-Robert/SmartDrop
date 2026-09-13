@@ -1,5 +1,6 @@
 from django.contrib.auth.backends import BaseBackend
-from django.contrib.auth.hashers import check_password
+from django.contrib.auth.hashers import check_password as django_check_password
+from passlib.hash import bcrypt
 
 from . import supabase_client
 from .models import Rol, Usuario
@@ -49,7 +50,15 @@ class SupabaseAuthBackend(BaseBackend):
             return None
 
         stored_hash = row.get('contrasena', '')
-        if not stored_hash or not check_password(password, stored_hash):
+        if not stored_hash:
+            return None
+
+        if stored_hash.startswith(('$2b$', '$2a$')):
+            password_valid = bcrypt.verify(password, stored_hash)
+        else:
+            password_valid = django_check_password(password, stored_hash)
+
+        if not password_valid:
             return None
 
         if not row.get('estado_usuario', True):

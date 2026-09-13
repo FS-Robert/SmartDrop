@@ -4,6 +4,8 @@ certifi==2026.7.22
 charset-normalizer==3.5.1
 idna==3.19
 paho-mqtt==2.1.0
+passlib==1.7.4
+bcrypt==4.0.1
 psycopg2-binary==2.9.12
 python-dotenv==1.2.3
 requests==2.34.2

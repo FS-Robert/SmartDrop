@@ -1,0 +1,73 @@
+{% extends 'App/base.html' %}
+{% load busqueda_extras %}
+{% block title %}Búsqueda{% endblock %}
+
+{% block extra_css %}
+<style>
+  .search-heading { display:flex; justify-content:space-between; align-items:end; gap:16px; margin-bottom:18px; }
+  .search-heading h1 { margin:0; color:#6B21A8; font-size:24px; }
+  .search-heading p { margin:5px 0 0; color:var(--muted); }
+  .search-count { color:var(--muted); font-size:13px; white-space:nowrap; }
+  .search-section { margin-bottom:22px; }
+  .search-section h2 { display:flex; align-items:center; gap:8px; font-size:16px; margin:0 0 10px; color:var(--text); }
+  .search-section h2 i { color:#6B21A8; }
+  .search-results { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; }
+  .search-result { display:flex; align-items:center; gap:12px; background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:13px; color:var(--text); text-decoration:none; }
+  .search-result:hover { border-color:#6B21A8; box-shadow:0 4px 14px rgba(107,33,168,.10); }
+  .search-result-icon { display:flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:8px; background:#f5f0ff; color:#6B21A8; flex-shrink:0; }
+  .search-result strong, .search-result small { display:block; overflow-wrap:anywhere; }
+  .search-result small { color:var(--muted); margin-top:3px; }
+  .search-result mark, .search-heading mark {
+    background:#fff1a8; color:#3b2f00; border:1px solid #e8c84a;
+    border-radius:4px; padding:0 4px;
+  }
+  body[data-theme="dark"] .search-result mark, body[data-theme="dark"] .search-heading mark {
+    background:#665b1a; color:#fff8c7; border-color:#b69b2d;
+  }
+  .empty-search { background:var(--panel); border:1px dashed var(--border); border-radius:10px; padding:28px; text-align:center; color:var(--muted); }
+  @media (max-width:600px) { .search-heading { display:block; } .search-count { display:block; margin-top:8px; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="search-heading">
+  <div>
+    <h1>Resultados de búsqueda</h1>
+    {% if query %}<p>Coincidencias para <strong>“{{ query|resaltar:query }}”</strong></p>{% else %}<p>Escribe un término para buscar en SmartDrop.</p>{% endif %}
+  </div>
+  {% if query %}<div class="search-count">{{ total_resultados }} resultado{{ total_resultados|pluralize }}</div>{% endif %}
+</div>
+
+{% if query and total_resultados %}
+  {% if resultados.secciones %}
+    <section class="search-section">
+      <h2><i class="ti ti-layout-grid"></i> Secciones y Contenido de la Aplicación</h2>
+      <div class="search-results">
+        {% for item in resultados.secciones %}
+          <a class="search-result" href="{{ item.url }}">
+            <span class="search-result-icon"><i class="ti ti-arrow-up-right"></i></span>
+            <span><strong>{{ item.titulo|resaltar:query }}</strong><small>{{ item.contenido|resaltar:query }}</small></span>
+          </a>
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
+  {% if resultados.registros %}
+    <section class="search-section">
+      <h2><i class="ti ti-database"></i> Registros del Sistema</h2>
+      <div class="search-results">
+        {% for item in resultados.registros %}
+          <a class="search-result" href="{{ item.url }}">
+            <span class="search-result-icon"><i class="ti {{ item.icono }}"></i></span>
+            <span><strong>{{ item.tipo|resaltar:query }}: {{ item.titulo|resaltar:query }}</strong><small>{{ item.detalle|resaltar:query }}</small></span>
+          </a>
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
+{% elif query %}
+  <div class="empty-search"><i class="ti ti-search-off" style="font-size:28px"></i><p>No encontramos coincidencias para <strong>“{{ query }}”</strong>.</p></div>
+{% else %}
+  <div class="empty-search"><i class="ti ti-search" style="font-size:28px"></i><p>Usa la barra superior para buscar usuarios, sensores, alertas y operaciones.</p></div>
+{% endif %}
+{% endblock %}

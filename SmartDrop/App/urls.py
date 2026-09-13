@@ -10,6 +10,7 @@ urlpatterns = [
     path('login/',              views.login_view,         name='login'),
     path('register/',           views.register,           name='register'),
     path('logout/',             views.logout_view,        name='logout'),
+    path('buscar/',             views.busqueda_global_view, name='busqueda_global'),
     path('api/register/',       views.api_register,       name='api_register'),
     path('api/login/',          views.api_login,          name='api_login'),
     path('api/lecturas/',       views.api_lectura,        name='api_lectura'),

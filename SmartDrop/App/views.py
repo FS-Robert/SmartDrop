@@ -3,11 +3,13 @@ import csv
 import json
 import logging
 import math
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -86,6 +88,147 @@ def _safe_float(value, default=0):
         return float(value)
     except (TypeError, ValueError):
         return default
+
+
+def _search_rows(table, search_term):
+    try:
+        rows = supabase_client.select(table, '*', {'limit': '1000'})
+    except Exception:
+        logger.exception('No se pudo consultar %s para la búsqueda global', table)
+        return []
+
+    return [
+        row for row in rows
+        if search_term in ' '.join(
+            str(value) for value in row.values()
+            if value is not None and not isinstance(value, (dict, list))
+        ).casefold()
+    ]
+
+
+@login_required(login_url='login')
+def busqueda_global_view(request):
+    query = request.GET.get('q', '').strip()
+    resultados = {
+        'secciones': [],
+        'registros': [],
+    }
+
+    search_term = query.casefold()
+    sections = [
+        {
+            'titulo': 'Inicio / Estado de Agua',
+            'url': reverse('dashboard'),
+            'contenido': 'estado de agua, presión actual, calidad del agua, TDS, nivel de tanque, litros disponibles, consumo de agua, uptime del sistema, temperatura, pH, vivienda, lecturas y sensores',
+        },
+        {
+            'titulo': 'Retroalimentación e Indicadores de Consumo',
+            'url': reverse('retroalimentacion'),
+            'contenido': 'retroalimentación, indicadores de consumo, consumo total, consumo promedio, diferencia de consumo, fecha de registro, análisis y comparación',
+        },
+        {
+            'titulo': 'Presión del Agua',
+            'url': reverse('presion'),
+            'contenido': 'presión del agua, presión, bar, psi, valor, mínimo del día, máximo del día, promedio del día, válvula, lectura y actualizado ahora',
+        },
+        {
+            'titulo': 'Calidad del Agua - TDS',
+            'url': reverse('calidad'),
+            'contenido': 'calidad del agua, TDS, ppm, pH, cloro, turbidez, conductividad, temperatura, buena, media, mala, óptima, aceptable y anomalías',
+        },
+        {
+            'titulo': 'Nivel de Tanque',
+            'url': reverse('tanque'),
+            'contenido': 'nivel de tanque, tanque, porcentaje, litros, capacidad, autonomía, horas restantes, bomba, suministro y última lectura',
+        },
+        {
+            'titulo': 'Consumo Diario',
+            'url': reverse('consumo'),
+            'contenido': 'consumo diario, consumo de agua, litros, L, fecha, mes, consumo total, consumo promedio, consumo máximo, consumo mínimo, período y estado de pago',
+        },
+        {
+            'titulo': 'Recomendaciones de Ahorro',
+            'url': reverse('recomendaciones'),
+            'contenido': 'recomendaciones de ahorro, ahorrar agua, impacto, reutilizar agua, reparar fugas, suministro y consumo elevado',
+        },
+        {
+            'titulo': 'Mi Perfil',
+            'url': reverse('usuario'),
+            'contenido': 'mi perfil, usuario, nombre, correo, dirección, ciudad, teléfono, miembro desde, notificaciones y preferencias',
+        },
+    ]
+    if _admin_only(request):
+        sections.extend([
+            {
+                'titulo': 'Panel Administrativo',
+                'url': reverse('admin_panel'),
+                'contenido': 'panel administrativo, usuarios, viviendas, sensores, lecturas, monitoreo global, datos recientes y supervisión',
+            },
+            {
+                'titulo': 'Electroválvulas',
+                'url': reverse('valvulas'),
+                'contenido': 'electroválvulas, abrir, cerrar, estado actual, estado operativo, MQTT, historial, logs, acciones manuales y automáticas',
+            },
+        ])
+    resultados['secciones'] = [
+        section for section in sections
+        if search_term and (
+            search_term in section['titulo'].casefold()
+            or search_term in section['contenido'].casefold()
+        )
+    ]
+
+    if _admin_only(request) and search_term:
+        search_jobs = {
+            'usuarios': 'usuario',
+            'logs': 'log_valvula',
+            'alertas': 'alerta',
+        }
+        with ThreadPoolExecutor(max_workers=len(search_jobs)) as executor:
+            futures = {
+                executor.submit(_search_rows, table, search_term): key
+                for key, table in search_jobs.items()
+            }
+            fetched = {
+                futures[future]: future.result()
+                for future in as_completed(futures)
+            }
+
+        resultados['registros'] = [
+            {
+                'tipo': 'Usuario',
+                'titulo': row.get('nombre') or row.get('correo') or 'Usuario',
+                'detalle': row.get('correo', ''),
+                'icono': 'ti-user',
+                'url': reverse('admin_panel'),
+            }
+            for row in fetched.get('usuarios', [])
+        ] + [
+            {
+                'tipo': 'Log de válvula',
+                'titulo': row.get('accion') or row.get('razon') or 'Registro de válvula',
+                'detalle': row.get('fecha_hora') or row.get('origen_accion', ''),
+                'icono': 'ti-list-details',
+                'url': reverse('valvulas'),
+            }
+            for row in fetched.get('logs', [])
+        ] + [
+            {
+                'tipo': 'Alerta',
+                'titulo': row.get('tipo_alerta') or row.get('mensaje') or 'Alerta',
+                'detalle': row.get('prioridad') or row.get('estado_confirmacion', ''),
+                'icono': 'ti-alert-triangle',
+                'url': reverse('admin_panel'),
+            }
+            for row in fetched.get('alertas', [])
+        ]
+
+    return render(request, 'App/busqueda_resultados.html', {
+        'query': query,
+        'resultados': resultados,
+        'total_resultados': sum(len(items) for items in resultados.values()),
+        'ultima_actualizacion': 'hace unos segundos',
+    })
 
 
 def _latest_readings_by_type(lecturas):

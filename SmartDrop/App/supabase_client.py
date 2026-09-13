@@ -1,6 +1,6 @@
 import requests
 from django.conf import settings
-from django.contrib.auth.hashers import make_password
+from passlib.hash import bcrypt
 
 
 def _supabase_url() -> str:
@@ -159,7 +159,7 @@ def create_usuario(nombre: str, apellido: str, email: str, password: str) -> dic
         'nombre': nombre,
         'apellido': apellido,
         'correo': email,
-        'contrasena': make_password(password),
+        'contrasena': bcrypt.using(rounds=12, ident='2b').hash(password),
         'estado_usuario': True,
     }
     if id_rol is not None:

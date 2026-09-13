@@ -51,6 +51,28 @@ body {
 .topbar-left { display: flex; align-items: center; gap: 16px; }
 .topbar-title { font-size: 18px; font-weight: 700; }
 .topbar-right { display: flex; align-items: center; gap: 12px; }
+.global-search {
+  display: flex; align-items: center; gap: 7px;
+  width: min(260px, 32vw); min-width: 150px;
+  background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.35);
+  border-radius: 8px; padding: 4px 6px 4px 10px;
+}
+.global-search i { font-size: 17px; }
+.global-search input {
+  width: 100%; min-width: 0; border: 0; outline: 0; background: transparent;
+  color: #fff; font: inherit;
+}
+.global-search input::placeholder { color: rgba(255,255,255,0.78); }
+.global-search button {
+  border: 0; background: #fff; color: #6B21A8; border-radius: 6px;
+  width: 28px; height: 28px; cursor: pointer; flex-shrink: 0;
+}
+.global-search .search-clear {
+  background: transparent; color: rgba(255,255,255,0.85); width: 22px; height: 28px;
+  padding: 0;
+}
+.global-search .search-clear:hover { color: #fff; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 .avatar {
   width: 36px; height: 36px; border-radius: 50%;
   background: rgba(255,255,255,0.2);
@@ -73,6 +95,12 @@ body {
 .topbar-link:hover {
   background: rgba(255,255,255,0.16);
   transform: translateY(-1px);
+}
+@media (max-width: 720px) {
+  .topbar { padding: 0 1rem; }
+  .topbar-title { display: none; }
+  .global-search { width: min(42vw, 210px); }
+  .topbar-link { font-size: 0.8rem; padding: 6px 8px; }
 }
 
 /* ── Layout ── */
