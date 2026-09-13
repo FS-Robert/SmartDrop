@@ -164,6 +164,61 @@ class ConsumoViewTests(TestCase):
 		self.assertEqual(insert.call_args_list[1].args[0], 'notificacion')
 		self.assertEqual(insert.call_args_list[1].args[1]['id_usario_destino'], 77)
 
+	@patch('App.views.supabase_client.select')
+	def test_usuario_normal_ve_estado_de_valvula(self, select):
+		rol = Rol.objects.create(nombre_rol='user')
+		user = Usuario.objects.create_user(
+			email='estado@example.com', nombre='Estado', apellido='Usuario',
+			password='password-segura', rol=rol,
+		)
+		select.side_effect = [[], [], [{
+			'id_valvula': 1,
+			'nombre': 'Principal',
+			'estado_actual': 'abierta',
+			'ultima_apertura': timezone.now().isoformat(),
+		}]]
+		self.client.force_login(user)
+
+		response = self.client.get(reverse('dashboard'))
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.context['valvula']['estado'], 'ABIERTA')
+		self.assertNotContains(response, 'Solo administradores pueden controlar la válvula')
+
+	@patch('App.views.supabase_client.select')
+	def test_api_estado_valvula_devuelve_estado_actual(self, select):
+		rol = Rol.objects.create(nombre_rol='user')
+		user = Usuario.objects.create_user(
+			email='apiestado@example.com', nombre='API', apellido='Estado',
+			password='password-segura', rol=rol,
+		)
+		select.return_value = [{'id_valvula': 1, 'estado_actual': 'cerrada'}]
+		self.client.force_login(user)
+
+		response = self.client.get(reverse('api_estado_valvula'))
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.json()['valvula']['estado'], 'CERRADA')
+
+	@patch('App.views.supabase_client.select', return_value=[{
+		'id_valvula': 1,
+		'estado_actual': 'abierta',
+		'ultima_apertura': timezone.now().isoformat(),
+	}])
+	def test_usuario_normal_puede_abrir_estado_del_sistema(self, select):
+		rol = Rol.objects.create(nombre_rol='user')
+		user = Usuario.objects.create_user(
+			email='sistema@example.com', nombre='Sistema', apellido='Usuario',
+			password='password-segura', rol=rol,
+		)
+		self.client.force_login(user)
+
+		response = self.client.get(reverse('estado_sistema'))
+
+		self.assertEqual(response.status_code, 200)
+		self.assertContains(response, 'Válvula: ABIERTA')
+		self.assertContains(response, 'Última actualización:')
+
 
 class AdminValveViewTests(TestCase):
 	def setUp(self):

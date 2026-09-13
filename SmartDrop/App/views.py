@@ -114,6 +114,53 @@ def _quality_status(tds_value):
     return 'Mala', 'Revisar', 1
 
 
+def _friendly_quality_message(tds_value):
+    """Retorna un mensaje amigable sobre la calidad del agua basado en TDS."""
+    if tds_value is None:
+        return 'Sin datos de calidad disponibles', 0
+    tds = _safe_float(tds_value)
+    if tds <= 300:
+        return '✓ El agua es segura para beber. Excelente calidad.', 5
+    elif tds <= 600:
+        return '⚠ El agua es consumible pero con sales disueltas. Aceptable.', 3
+    else:
+        return '✗ El agua no es recomendable para beber. Requiere tratamiento.', 1
+
+
+def _friendly_pressure_message(pressure_value):
+    """Retorna un mensaje amigable sobre la presión del agua."""
+    if pressure_value is None:
+        return 'Sin datos de presión', 'desconocido'
+    pressure = _safe_float(pressure_value)
+    if pressure < 1:
+        return '✗ Presión muy baja. Poco flujo de agua.', 'baja'
+    elif pressure < 2:
+        return '⚠ Presión baja. El flujo puede ser lento.', 'baja'
+    elif pressure <= 3.5:
+        return '✓ Presión normal. Sistema funcionando correctamente.', 'normal'
+    elif pressure <= 5:
+        return '⚠ Presión alta. Dentro de rango aceptable.', 'alta'
+    else:
+        return '✗ Presión muy alta. Riesgo para el sistema.', 'muy_alta'
+
+
+def _friendly_tank_message(percentage, liters):
+    """Retorna un mensaje amigable sobre el nivel del tanque."""
+    if percentage is None or percentage < 0:
+        return 'Sin datos del nivel', 'desconocido'
+    pct = _safe_float(percentage)
+    if pct < 5:
+        return f'✗ Tanque casi vacío. {liters}L disponibles.', 'critico'
+    elif pct < 25:
+        return f'⚠ Tanque bajo. {liters}L disponibles.', 'bajo'
+    elif pct < 75:
+        return f'✓ Tanque en nivel normal. {liters}L disponibles.', 'normal'
+    elif pct < 95:
+        return f'✓ Tanque lleno. {liters}L disponibles.', 'lleno'
+    else:
+        return f'✓ Tanque a máxima capacidad. {liters}L disponibles.', 'maximo'
+
+
 def _tank_level_data(level, sensors):
     if not level:
         return 0, 0, 0
@@ -130,6 +177,43 @@ def _tank_level_data(level, sensors):
     display_capacity = configured_capacity or capacity
     liters = display_capacity * percentage / 100
     return round(liters, 2), round(min(max(percentage, 0), 100), 2), round(display_capacity, 2)
+
+
+def _public_valve_status():
+    rows = supabase_client.select(
+        'valvula',
+        'id_valvula,nombre,estado_actual,ultima_apertura',
+        {'order': 'id_valvula.asc', 'limit': '1'},
+    )
+    valve = rows[0] if rows else {}
+    state = str(valve.get('estado_actual') or '').lower()
+    is_open = state in {'abierta', 'abierto', 'open'}
+    updated_at = valve.get('ultima_apertura') if is_open else None
+    updated_label = 'Sin actualización registrada'
+    if updated_at:
+        try:
+            updated_time = datetime.fromisoformat(str(updated_at).replace('Z', '+00:00'))
+            if timezone.is_naive(updated_time):
+                updated_time = timezone.make_aware(updated_time, timezone.get_current_timezone())
+            elapsed = max(0, int((timezone.now() - updated_time).total_seconds()))
+            if elapsed < 60:
+                updated_label = f'hace {elapsed} segundo' + ('s' if elapsed != 1 else '')
+            elif elapsed < 3600:
+                minutes = elapsed // 60
+                updated_label = f'hace {minutes} minuto' + ('s' if minutes != 1 else '')
+            else:
+                hours = elapsed // 3600
+                updated_label = f'hace {hours} hora' + ('s' if hours != 1 else '')
+        except (TypeError, ValueError):
+            updated_label = str(updated_at)
+    return {
+        'disponible': bool(valve),
+        'id_valvula': valve.get('id_valvula'),
+        'nombre': valve.get('nombre') or 'Válvula principal',
+        'estado': 'ABIERTA' if is_open else 'CERRADA',
+        'clase': 'open' if is_open else 'closed',
+        'ultima_actualizacion': updated_label,
+    }
 
 
 @login_required(login_url='login')
@@ -153,15 +237,50 @@ def dashboard(request):
     consumption = _safe_float(
         consumption_rows[0].get('consumo_total') or consumption_rows[0].get('consumo_promedio')
     ) if consumption_rows else 0
+    try:
+        valve_status = _public_valve_status()
+    except Exception:
+        valve_status = {
+            'disponible': False,
+            'estado': 'SIN DATOS',
+            'clase': 'unknown',
+            'ultima_actualizacion': 'No disponible',
+        }
 
+    # Obtener mensajes amigables
+    pressure_value = _safe_float(pressure.get('valor')) if pressure else None
+    pressure_msg, pressure_status = _friendly_pressure_message(pressure_value)
+    
+    quality_msg, quality_icon = _friendly_quality_message(tds_value)
+    
+    tank_liters = round(level_capacity * level_percentage / 100, 2)
+    tank_msg, tank_status = _friendly_tank_message(level_percentage, tank_liters)
+    
     context = {
-        'presion':  {'estado': 'Normal' if pressure else 'Sin datos', 'badge': 'Estable' if pressure else 'Sin lectura'},
-        'calidad':  {'estado': quality_state, 'badge': quality_badge, 'tds': tds_value or 0},
-        'tanque':  {'porcentaje': level_percentage, 'litros': round(level_capacity * level_percentage / 100, 2)},
+        'presion': {
+            'estado': 'Normal' if pressure else 'Sin datos',
+            'badge': 'Estable' if pressure else 'Sin lectura',
+            'valor_exacto': f"{pressure_value} bar",
+            'mensaje_amigable': pressure_msg,
+            'estado_amigable': pressure_status,
+        },
+        'calidad': {
+            'estado': quality_state,
+            'badge': quality_badge,
+            'tds': tds_value or 0,
+            'mensaje_amigable': quality_msg,
+        },
+        'tanque': {
+            'porcentaje': level_percentage,
+            'litros': tank_liters,
+            'mensaje_amigable': tank_msg,
+            'estado_amigable': tank_status,
+        },
         'consumo':  {'hoy': consumption},
+        'valvula': valve_status,
         'stats': {
             'uptime':        'Disponible' if lecturas else 'Sin datos',
-            'presion_exacta':f"{_safe_float(pressure.get('valor')) if pressure else 0} bar",
+            'presion_exacta':f"{pressure_value} bar",
             'ph':            f"{_safe_float(_find_reading(latest, 'ph').get('valor')) if _find_reading(latest, 'ph') else 0} pH",
             'temperatura':   f"{_safe_float(_find_reading(latest, 'temper').get('valor')) if _find_reading(latest, 'temper') else 0}°C",
         },
@@ -169,6 +288,38 @@ def dashboard(request):
         'ultima_actualizacion': 'hace unos segundos',
     }
     return render(request, 'App/dashboard.html', context)
+
+
+@login_required(login_url='login')
+def estado_sistema(request):
+    if getattr(request.user, 'rol_id', None) == 2:
+        return redirect('admin_panel')
+    try:
+        valve_status = _public_valve_status()
+    except Exception:
+        valve_status = {
+            'disponible': False,
+            'estado': 'SIN DATOS',
+            'clase': 'unknown',
+            'ultima_actualizacion': 'No disponible',
+        }
+    return render(request, 'App/estado_sistema.html', {
+        'valvula': valve_status,
+        'ultima_actualizacion': 'hace unos segundos',
+    })
+
+
+@login_required(login_url='login')
+@require_http_methods(['GET'])
+def api_estado_valvula(request):
+    """Devuelve el estado de la válvula para usuarios en modo consulta."""
+    if getattr(request.user, 'rol_id', None) == 2:
+        return JsonResponse({'ok': False, 'error': 'Los administradores usan el panel de control'}, status=403)
+    try:
+        return JsonResponse({'ok': True, 'valvula': _public_valve_status()})
+    except Exception:
+        logger.exception('No se pudo consultar el estado público de la válvula')
+        return JsonResponse({'ok': False, 'error': 'No se pudo consultar el estado de la válvula'}, status=502)
 
 
 @login_required(login_url='login')

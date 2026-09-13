@@ -116,6 +116,7 @@ body {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 1.25rem;
+  align-items: stretch;
 }
 
 .card, .dash-card {
@@ -147,6 +148,13 @@ body {
 .icon-wrap.blue i { color: #185FA5; }
 .icon-wrap.amber { background: #faeeda; }
 .icon-wrap.amber i { color: #854F0B; }
+.icon-wrap.red { background: #fcebeb; }
+.icon-wrap.red i { color: #A32D2D; }
+.valve-status-card { cursor: default; justify-content: space-between; min-height: 154px; }
+.valve-status-card:hover { transform: none; box-shadow: none; }
+.valve-last-update { color: var(--muted); font-size: 12px; font-weight: 600; }
+.valve-readonly-note { border-top: 1px solid var(--border); color: var(--muted); font-size: 11px; font-weight: 700; padding-top: 8px; }
+.valve-readonly-note i { color: #6B21A8; margin-right: 4px; }
 
 .card-label { font-size: 11px; font-weight: 700; color: #666; text-transform: uppercase; letter-spacing: 0.6px; }
 .card-value { font-size: 18px; font-weight: 800; color: #2d1a4a; line-height: 1.1; }

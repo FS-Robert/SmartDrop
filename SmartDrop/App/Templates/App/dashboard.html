@@ -10,17 +10,32 @@
 <p class="page-subtitle">Sin vivienda vinculada o sin lecturas disponibles.</p>
 {% endif %}
 
+<!-- Toggle para ver números exactos -->
+<div class="toggle-exact-data-container">
+  <label for="toggle-exact" class="toggle-exact-label">
+    <input type="checkbox" id="toggle-exact" class="toggle-checkbox">
+    <span class="toggle-text">Ver números exactos</span>
+  </label>
+</div>
+
 <div class="cards-grid">
 
   <!-- Presión -->
-  <a href="{% url 'presion' %}" class="dash-card">
+  <a href="{% url 'presion' %}" class="dash-card pressure-card">
     <div class="card-top">
       <div class="icon-wrap">
         <i class="ti ti-gauge"></i>
       </div>
-      <div>
+      <div class="card-content">
         <div class="card-label">Presión de agua actual</div>
-        <div class="card-value">{{ presion.estado }}</div>
+        <!-- Vista amigable -->
+        <div class="card-value friendly-view" style="display: block;">
+          {{ presion.mensaje_amigable }}
+        </div>
+        <!-- Vista exacta (oculta por defecto) -->
+        <div class="card-value exact-view" style="display: none;">
+          {{ presion.valor_exacto }}
+        </div>
         <span class="badge badge-normal">● {{ presion.badge }}</span>
       </div>
     </div>
@@ -28,14 +43,21 @@
   </a>
 
   <!-- Calidad -->
-  <a href="{% url 'calidad' %}" class="dash-card">
+  <a href="{% url 'calidad' %}" class="dash-card quality-card">
     <div class="card-top">
       <div class="icon-wrap blue">
         <i class="ti ti-droplet"></i>
       </div>
-      <div>
+      <div class="card-content">
         <div class="card-label">Calidad del agua actual</div>
-        <div class="card-value">{{ calidad.estado }}</div>
+        <!-- Vista amigable -->
+        <div class="card-value friendly-view" style="display: block;">
+          {{ calidad.mensaje_amigable }}
+        </div>
+        <!-- Vista exacta (oculta por defecto) -->
+        <div class="card-value exact-view" style="display: none;">
+          {{ calidad.tds }} ppm TDS
+        </div>
         <span class="badge {% if calidad.estado == 'Buena' %}badge-perfect{% elif calidad.estado == 'Media' %}badge-high{% else %}badge-closed{% endif %}">● {{ calidad.badge }}</span>
       </div>
     </div>
@@ -43,15 +65,25 @@
   </a>
 
   <!-- Tanque -->
-  <a href="{% url 'tanque' %}" class="dash-card">
+  <a href="{% url 'tanque' %}" class="dash-card tank-card">
     <div class="card-top">
       <div class="icon-wrap amber">
         <i class="ti ti-building-warehouse"></i>
       </div>
-      <div>
+      <div class="card-content">
         <div class="card-label">Nivel de tanque actual</div>
-        <div class="card-value">{{ tanque.porcentaje }}%</div>
-        <span class="badge badge-high">{{ tanque.litros }}L disponibles</span>
+        <!-- Vista amigable -->
+        <div class="card-value friendly-view" style="display: block;">
+          {{ tanque.mensaje_amigable }}
+        </div>
+        <!-- Vista exacta (oculta por defecto) -->
+        <div class="card-value exact-view" style="display: none;">
+          {{ tanque.porcentaje }}%
+        </div>
+        <span class="badge badge-high">
+          <span class="friendly-view">{{ tanque.litros }}L disponibles</span>
+          <span class="exact-view" style="display: none;">{{ tanque.porcentaje }}%</span>
+        </span>
       </div>
     </div>
     <div class="tank-bar-wrap">
@@ -75,6 +107,23 @@
     <div class="card-link"><i class="ti ti-arrow-right"></i> Click para ver más</div>
   </a>
 
+  <!-- Estado de la válvula: solo lectura para usuarios normales -->
+  <section class="dash-card valve-status-card" aria-live="polite">
+    <div class="card-top">
+      <div class="icon-wrap {% if valvula.clase == 'open' %}teal{% else %}red{% endif %}" id="valve-status-icon">
+        <i class="ti ti-toggle-left"></i>
+      </div>
+      <div>
+        <div class="card-label">Estado del sistema</div>
+        <div class="card-value" id="dashboard-valve-state">Válvula: {{ valvula.estado }}</div>
+        <span class="badge {% if valvula.clase == 'open' %}badge-normal{% else %}badge-closed{% endif %}" id="dashboard-valve-badge">
+          ● {{ valvula.estado|title }}
+        </span>
+      </div>
+    </div>
+    <div class="valve-last-update">Última actualización: <span id="dashboard-valve-updated">{{ valvula.ultima_actualizacion }}</span></div>
+  </section>
+
 </div>
 
 <!-- Stats -->
@@ -84,16 +133,128 @@
     <div class="stat-label">Uptime del sistema</div>
   </div>
   <div class="stat">
-    <div class="stat-num">{{ stats.presion_exacta }}</div>
-    <div class="stat-label">Presión exacta</div>
+    <div class="stat-num friendly-view">Presión exacta</div>
+    <div class="stat-num exact-view" style="display: none;">{{ stats.presion_exacta }}</div>
+    <div class="stat-label">Presión</div>
   </div>
   <div class="stat">
-    <div class="stat-num">{{ calidad.tds }} ppm</div>
-    <div class="stat-label">TDS del agua</div>
+    <div class="stat-num friendly-view">Calidad del agua</div>
+    <div class="stat-num exact-view" style="display: none;">{{ calidad.tds }} ppm</div>
+    <div class="stat-label">TDS</div>
   </div>
   <div class="stat">
     <div class="stat-num">{{ stats.temperatura }}</div>
     <div class="stat-label">Temperatura</div>
   </div>
 </div>
+
+<style>
+  /* ════════════════════════════════════════
+     TOGGLE PARA VER NÚMEROS EXACTOS
+  ════════════════════════════════════════ */
+  .toggle-exact-data-container {
+    margin-bottom: 2rem;
+    display: flex;
+    justify-content: center;
+  }
+
+  .toggle-exact-label {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #fff;
+    border: 1px solid #e0d4f5;
+    border-radius: 16px;
+    padding: 12px 18px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-weight: 600;
+    color: #555;
+    user-select: none;
+  }
+
+  .toggle-exact-label:hover {
+    box-shadow: 0 4px 12px rgba(107, 33, 168, 0.08);
+    border-color: #d0bae8;
+  }
+
+  .toggle-checkbox {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: #6B21A8;
+  }
+
+  .toggle-text {
+    font-size: 14px;
+    color: #555;
+  }
+
+  .card-content {
+    flex: 1;
+  }
+
+  /* Animación suave para cambio de vista */
+  .friendly-view, .exact-view {
+    transition: opacity 0.3s ease, display 0.3s ease;
+  }
+</style>
+
+{% endblock %}
+{% block extra_js %}
+<script>
+  const toggleExact = document.getElementById('toggle-exact');
+  const friendlyViews = document.querySelectorAll('.friendly-view');
+  const exactViews = document.querySelectorAll('.exact-view');
+
+  // Cargar estado guardado del toggle
+  const savedToggleState = localStorage.getItem('showExactData') === 'true';
+  toggleExact.checked = savedToggleState;
+  updateViews();
+
+  // Evento del toggle
+  toggleExact.addEventListener('change', () => {
+    localStorage.setItem('showExactData', toggleExact.checked);
+    updateViews();
+  });
+
+  function updateViews() {
+    if (toggleExact.checked) {
+      // Mostrar vista exacta
+      friendlyViews.forEach(el => el.style.display = 'none');
+      exactViews.forEach(el => el.style.display = 'block');
+    } else {
+      // Mostrar vista amigable
+      friendlyViews.forEach(el => el.style.display = 'block');
+      exactViews.forEach(el => el.style.display = 'none');
+    }
+  }
+
+  // Código existente para valve status
+  const valveStateUrl = '{% url "api_estado_valvula" %}';
+  const valveState = document.getElementById('dashboard-valve-state');
+  const valveBadge = document.getElementById('dashboard-valve-badge');
+  const valveUpdated = document.getElementById('dashboard-valve-updated');
+  const valveIcon = document.getElementById('valve-status-icon');
+
+  async function refreshValveStatus() {
+    try {
+      const response = await fetch(valveStateUrl, { headers: { 'Accept': 'application/json' } });
+      if (!response.ok) return;
+      const result = await response.json();
+      if (!result.ok) return;
+      const valve = result.valvula;
+      const isOpen = valve.clase === 'open';
+      valveState.textContent = `Válvula: ${valve.estado}`;
+      valveBadge.textContent = `● ${isOpen ? 'Abierta' : 'Cerrada'}`;
+      valveBadge.className = `badge ${isOpen ? 'badge-normal' : 'badge-closed'}`;
+      valveIcon.className = `icon-wrap ${isOpen ? 'teal' : 'red'}`;
+      valveUpdated.textContent = valve.ultima_actualizacion;
+    } catch (error) {
+      // El estado inicial permanece visible si una actualización temporal falla.
+    }
+  }
+
+  window.setInterval(refreshValveStatus, 10000);
+</script>
 {% endblock %}
