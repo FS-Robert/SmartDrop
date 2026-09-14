@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS public.usuario (
     nombre          VARCHAR(255) NOT NULL,
     apellido        VARCHAR(255) NOT NULL,
     correo          VARCHAR(254) NOT NULL UNIQUE,
-    contrasena      VARCHAR(128) NOT NULL,  -- hash Django PBKDF2
+    contrasena      VARCHAR(128) NOT NULL,  -- BCrypt $2b$ nuevo; PBKDF2 legacy compatible
     id_rol          BIGINT REFERENCES public.rol(id_rol),
     estado_usuario  BOOLEAN DEFAULT TRUE,
     fecha_registro  TIMESTAMPTZ DEFAULT NOW()
