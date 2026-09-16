@@ -3,6 +3,7 @@ import csv
 import json
 import logging
 import math
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from django.contrib.auth import login, logout
@@ -21,6 +22,133 @@ from .mqtt_service import MqttError, publish_command
 
 
 logger = logging.getLogger(__name__)
+
+_VALVE_TIMER_REGISTRY = {}
+_VALVE_TIMER_LOCK = threading.Lock()
+
+
+def _parse_duracion_seg(request):
+    raw_value = (request.POST.get('duracion_seg') or '').strip()
+    if raw_value == '':
+        return None
+
+    try:
+        duration = int(float(raw_value))
+    except (TypeError, ValueError):
+        raise ValueError('La duración programada debe ser un número entero válido.')
+
+    if duration < 5:
+        raise ValueError('El tiempo mínimo permitido es de 5 segundos')
+
+    if duration > 120:
+        raise ValueError('Tiempo máximo permitido: 120 seg (2 min).')
+
+    return duration
+
+
+def _timer_info_for_valvula(valvula_id):
+    key = str(valvula_id)
+    timer_entry = _VALVE_TIMER_REGISTRY.get(key)
+    if not timer_entry:
+        return {
+            'timer_activo': False,
+            'timer_remaining': 0,
+            'timer_end_at': None,
+            'duracion_seg': 0,
+        }
+
+    expires_at = timer_entry.get('expires_at')
+    timer_remaining = 0
+    if expires_at is not None:
+        timer_remaining = max(0, int((expires_at - timezone.now()).total_seconds()))
+
+    return {
+        'timer_activo': True,
+        'timer_remaining': timer_remaining,
+        'timer_end_at': expires_at.isoformat() if expires_at is not None else None,
+        'duracion_seg': timer_entry.get('duracion_seg', 0),
+    }
+
+
+def _cancel_active_timer(valvula_id):
+    key = str(valvula_id)
+    timer_entry = None
+    with _VALVE_TIMER_LOCK:
+        timer_entry = _VALVE_TIMER_REGISTRY.pop(key, None)
+
+    if timer_entry is not None:
+        timer = timer_entry.get('timer')
+        if timer is not None and timer.is_alive():
+            timer.cancel()
+
+    return timer_entry
+
+
+def _execute_cierre_automatico(valvula_id, duracion_seg):
+    try:
+        rows = supabase_client.select(
+            'valvula',
+            'id_valvula,nombre,estado_actual,topic_mqtt_comando',
+            {'id_valvula': f'eq.{valvula_id}', 'limit': '1'},
+        )
+        valvula = rows[0] if rows else None
+        if not valvula:
+            logger.warning('No se encontró la válvula %s para cierre automático.', valvula_id)
+            return
+
+        topic = valvula.get('topic_mqtt_comando')
+        if topic:
+            publish_command(topic, 'cerrar')
+
+        supabase_client.update(
+            'valvula',
+            {
+                'estado_actual': 'cerrada',
+                'ultima_apertura': None,
+            },
+            {'id_valvula': f'eq.{valvula_id}'},
+        )
+
+        origen_accion = 'web'
+        log_payload = {
+            'id_valvula': valvula['id_valvula'],
+            'accion': 'cerrar',
+            'estado_anterior': valvula.get('estado_actual') or 'desconocida',
+            'estado_nuevo': 'cerrada',
+            'tipo_activacion': 'temporizado',
+            'id_usuario': None,
+            'fecha_hora': timezone.now().isoformat(),
+            'ip_dispositivo': 'temporizador',
+            'origen_accion': origen_accion,
+            'duracion_programada': duracion_seg,
+            'duracion_real': duracion_seg,
+            'razon': 'Cierre automático - Tiempo completado',
+        }
+        supabase_client.insert('log_valvula', log_payload)
+    except Exception:
+        logger.exception('No se pudo ejecutar el cierre automático de la válvula %s.', valvula_id)
+    finally:
+        _cancel_active_timer(valvula_id)
+
+
+def _start_timer_for_valvula(valvula_id, duracion_seg):
+    _cancel_active_timer(valvula_id)
+    expires_at = timezone.now() + timedelta(seconds=duracion_seg)
+    timer = threading.Timer(duracion_seg, _execute_cierre_automatico, args=(valvula_id, duracion_seg))
+    timer.daemon = True
+    with _VALVE_TIMER_LOCK:
+        _VALVE_TIMER_REGISTRY[str(valvula_id)] = {
+            'timer': timer,
+            'duracion_seg': duracion_seg,
+            'expires_at': expires_at,
+        }
+    timer.start()
+    return {
+        'timer_activo': True,
+        'timer_remaining': duracion_seg,
+        'timer_end_at': expires_at.isoformat(),
+        'duracion_seg': duracion_seg,
+    }
 
 
 def _owned_sensor_data(request):
@@ -1055,7 +1183,7 @@ def valvulas(request):
             'id_log_valvula,id_valvula,accion,estado_anterior,estado_nuevo,'
             'tipo_activacion,id_usuario,fecha_hora,razon,origen_accion,ip_dispositivo,'
             'duracion_programada,duracion_real',
-            {'order': 'fecha_hora.desc', 'limit': '1000'},
+            {'order': 'fecha_hora.desc', 'limit': '50'},
         )
         user_ids = [str(row['id_usuario']) for row in movimientos if row.get('id_usuario')]
         usuarios = supabase_client.select(
@@ -1079,7 +1207,22 @@ def valvulas(request):
         for movimiento in movimientos:
             tipo = str(movimiento.get('tipo_activacion') or '').strip().lower()
             es_automatico = tipo in {'automatico', 'automática', 'automático', 'auto'}
-            movimiento['tipo_mostrar'] = 'Automático' if es_automatico else 'Manual'
+            es_temporizado = tipo == 'temporizado'
+
+            if es_temporizado:
+                duracion = movimiento.get('duracion_programada')
+                detalle = f"Temporizado ({duracion}s)" if duracion is not None else 'Temporizado'
+                movimiento['tipo_mostrar'] = detalle
+                movimiento['estado_mostrar'] = (
+                    movimiento.get('razon')
+                    or f"{movimiento.get('estado_anterior') or '—'} → {movimiento.get('estado_nuevo') or '—'}"
+                )
+            else:
+                movimiento['tipo_mostrar'] = 'Automático' if es_automatico else 'Manual'
+                movimiento['estado_mostrar'] = (
+                    f"{movimiento.get('estado_anterior') or '—'} → {movimiento.get('estado_nuevo') or '—'}"
+                )
+
             movimiento['usuario_mostrar'] = (
                 nombres_usuarios.get(str(movimiento.get('id_usuario')))
                 or ('Sistema automático' if es_automatico else 'Usuario no identificado')
@@ -1144,6 +1287,13 @@ def valvulas(request):
         except Exception:
             logger.exception('No se pudo generar la alerta de actividad inusual de válvulas')
 
+    for valvula in valvulas_disponibles:
+        timer_info = _timer_info_for_valvula(valvula.get('id_valvula'))
+        valvula['timer_activo'] = timer_info['timer_activo']
+        valvula['timer_remaining'] = timer_info['timer_remaining']
+        valvula['timer_end_at'] = timer_info['timer_end_at']
+        valvula['duracion_seg'] = timer_info['duracion_seg']
+
     return render(request, 'App/valvulas.html', {
         'valvulas': valvulas_disponibles,
         'movimientos': movimientos_filtrados,
@@ -1169,9 +1319,22 @@ def valvula_comando(request, valvula_id):
     if comando not in {'abrir', 'cerrar'}:
         return redirect('valvulas')
 
+    duracion_seg = None
+    try:
+        duracion_seg = _parse_duracion_seg(request)
+    except ValueError as exc:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.headers.get('Accept') == 'application/json':
+            return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
+        return render(request, 'App/valvulas.html', {
+            'valvulas': [],
+            'error': str(exc),
+            'ultima_actualizacion': 'hace unos segundos',
+        }, status=400)
+
     valvula = None
     try:
         admin_supabase_id = _supabase_user_id(request.user)
+        origen_accion = 'web'
         rows = supabase_client.select(
             'valvula',
             'id_valvula,nombre,estado_actual,topic_mqtt_comando',
@@ -1181,28 +1344,59 @@ def valvula_comando(request, valvula_id):
         if not valvula or not valvula.get('topic_mqtt_comando'):
             raise MqttError('La electroválvula no tiene un topic MQTT configurado.')
 
+        timer_ya_activo = _timer_info_for_valvula(valvula_id)['timer_activo']
+        if comando == 'cerrar' and timer_ya_activo:
+            _cancel_active_timer(valvula_id)
+
         publish_command(valvula['topic_mqtt_comando'], comando)
         estado_nuevo = 'abierta' if comando == 'abrir' else 'cerrada'
+
+        update_payload = {
+            'estado_actual': estado_nuevo,
+            'ultima_apertura': timezone.now().isoformat() if comando == 'abrir' else None,
+        }
+        if comando == 'abrir' and duracion_seg:
+            update_payload['ultima_apertura'] = timezone.now().isoformat()
+
         supabase_client.update(
             'valvula',
-            {
-                'estado_actual': estado_nuevo,
-                'ultima_apertura': timezone.now().isoformat() if comando == 'abrir' else None,
-            },
+            update_payload,
             {'id_valvula': f'eq.{valvula_id}'},
         )
+
+        razon = None
+        if comando == 'cerrar' and timer_ya_activo:
+            razon = 'Cierre manual durante temporizador'
+        elif comando == 'abrir' and duracion_seg:
+            razon = f'Apertura temporizada de {duracion_seg} segundos'
+
         log_payload = {
             'id_valvula': valvula['id_valvula'],
             'accion': comando,
             'estado_anterior': valvula.get('estado_actual') or 'desconocida',
             'estado_nuevo': estado_nuevo,
-            'tipo_activacion': 'manual',
+            'tipo_activacion': 'temporizado' if comando == 'abrir' and duracion_seg else 'manual',
             'id_usuario': admin_supabase_id,
             'fecha_hora': timezone.now().isoformat(),
             'ip_dispositivo': request.META.get('REMOTE_ADDR'),
-            'origen_accion': 'web',
+            'origen_accion': origen_accion,
+            'duracion_programada': duracion_seg,
+            'duracion_real': duracion_seg if comando == 'abrir' and duracion_seg else None,
+            'razon': razon,
         }
+
+        if comando == 'abrir' and duracion_seg:
+            timer_info = _start_timer_for_valvula(valvula_id, duracion_seg)
+        else:
+            timer_info = {
+                'timer_activo': False,
+                'timer_remaining': 0,
+                'timer_end_at': None,
+                'duracion_seg': 0,
+            }
+
         log_row = supabase_client.insert('log_valvula', log_payload) or log_payload
+
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.headers.get('Accept') == 'application/json':
             return JsonResponse({
                 'ok': True,
@@ -1210,13 +1404,17 @@ def valvula_comando(request, valvula_id):
                 'estado_anterior': valvula.get('estado_actual') or 'desconocida',
                 'estado_nuevo': estado_nuevo,
                 'accion': comando,
-                'tipo_activacion': 'manual',
+                'tipo_activacion': log_payload['tipo_activacion'],
                 'id_usuario': admin_supabase_id,
                 'ip_dispositivo': request.META.get('REMOTE_ADDR'),
                 'fecha_hora': log_row.get('fecha_hora', log_payload['fecha_hora']),
                 'origen_accion': 'web',
                 'usuario_mostrar': request.user.get_full_name(),
                 'valvula_mostrar': valvula.get('nombre') or f"Válvula #{valvula['id_valvula']}",
+                'timer_activo': timer_info['timer_activo'],
+                'timer_end_at': timer_info['timer_end_at'],
+                'timer_remaining': timer_info['timer_remaining'],
+                'duracion_programada': duracion_seg,
             })
         return redirect('valvulas')
     except (MqttError, supabase_client.SupabaseError, ValueError, TypeError) as exc:

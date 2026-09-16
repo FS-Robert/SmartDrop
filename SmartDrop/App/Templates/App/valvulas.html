@@ -20,6 +20,20 @@
   .valve-button:disabled { cursor:not-allowed; opacity:.45; }
   .valve-button-open { background:#0f766e; }
   .valve-button-close { background:#b42318; }
+  .valve-timer-panel { margin-top:16px; padding-top:12px; border-top:1px solid #f0ecf7; }
+  .valve-timer-label { display:block; margin-bottom:6px; font-size:11px; font-weight:800; letter-spacing:.04em; color:#6f6f7a; text-transform:uppercase; }
+  .valve-timer-buttons { display:flex; flex-wrap:wrap; gap:6px; }
+  .valve-timer-button { border:1px solid #d8c8f3; background:#f7f2ff; border-radius:8px; color:#4c1d95; cursor:pointer; font:inherit; font-size:12px; font-weight:800; padding:6px 8px; }
+  .valve-timer-button:hover { background:#efe4ff; }
+  .valve-timer-custom { display:flex; gap:8px; margin-top:8px; }
+  .valve-custom-duration { flex:1; border:1px solid #e0d4f5; border-radius:8px; background:#fff; color:#2d1a4a; font:inherit; font-size:13px; padding:8px 10px; }
+  .valve-custom-duration:focus { border-color:#8b5cf6; box-shadow:0 0 0 3px rgba(139,92,246,.12); outline:none; }
+  .valve-timer-status { margin-top:10px; padding:10px 12px; border-radius:10px; background:#f8f5ff; border:1px solid #eadcff; }
+  .valve-timer-status-header { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .valve-timer-status-label { font-size:12px; font-weight:800; color:#6b21a8; }
+  .valve-timer-countdown { font-size:13px; font-weight:800; color:#2d1a4a; }
+  .valve-timer-cancel { margin-top:8px; width:100%; border:1px solid #f3caca; background:#fff1f2; border-radius:8px; color:#a32d2d; cursor:pointer; font:inherit; font-size:12px; font-weight:800; padding:8px 10px; }
+  .valve-timer-cancel.is-hidden { display:none; }
   .valve-topic { border-top:1px solid #f0ecf7; margin-top:16px; padding-top:10px; overflow-wrap:anywhere; }
   .empty-state { text-align:center; color:#6f6f7a; }
   .empty-state i { color:#6b21a8; font-size:32px; }
@@ -53,6 +67,15 @@
   .valve-button.is-loading i { animation: valve-spin .8s linear infinite; }
   .valve-live-message { min-height:20px; margin:0 0 12px; color:#6f6f7a; font-size:13px; font-weight:700; }
   .valve-live-message.is-error { color:#a32d2d; }
+  .timer-confirm-modal { position:fixed; inset:0; background:rgba(29,18,38,.45); display:flex; align-items:center; justify-content:center; padding:20px; z-index:1000; }
+  .timer-confirm-modal.is-hidden { display:none; }
+  .timer-confirm-dialog { width:min(420px, 100%); background:#fff; border-radius:12px; border:1px solid #efe5fb; box-shadow:0 18px 40px rgba(43,20,60,.18); padding:22px 20px; }
+  .timer-confirm-dialog h3 { margin:0 0 8px; color:#2d1a4a; font-size:20px; }
+  .timer-confirm-dialog p { margin:0; color:#6f6f7a; line-height:1.6; }
+  .timer-confirm-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:18px; }
+  .timer-confirm-button { border:0; border-radius:8px; padding:9px 14px; font:inherit; font-weight:800; cursor:pointer; }
+  .timer-confirm-button-cancel { background:#f3e8ff; color:#6b21a8; }
+  .timer-confirm-button-confirm { background:#0f766e; color:#fff; }
   @keyframes valve-spin { to { transform:rotate(360deg); } }
   .stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; padding:16px; }
   .stat-tile { background:#fcfaff; border:1px solid #f0ecf7; border-radius:10px; padding:14px; color:#6f6f7a; font-size:13px; line-height:1.45; }
@@ -127,6 +150,29 @@
             </button>
           </form>
         </div>
+
+        <div class="valve-timer-panel">
+          <label class="valve-timer-label">Temporizador</label>
+          <div class="valve-timer-buttons">
+            <button type="button" class="valve-timer-button" data-duration="10">10s</button>
+            <button type="button" class="valve-timer-button" data-duration="30">30s</button>
+            <button type="button" class="valve-timer-button" data-duration="60">60s</button>
+            <button type="button" class="valve-timer-button" data-duration="120">120s</button>
+          </div>
+          <div class="valve-timer-custom">
+            <input type="number" class="valve-custom-duration" min="1" max="120" placeholder="Segundos">
+            <button type="button" class="valve-button valve-button-open valve-timer-apply" data-valve-action="abrir">Aplicar</button>
+          </div>
+        </div>
+
+        <div class="valve-timer-status" data-valve-timer-status="{{ valvula.id_valvula }}" data-timer-end-at="{{ valvula.timer_end_at|default:'' }}" data-duration="{{ valvula.duracion_seg|default:0 }}">
+          <div class="valve-timer-status-header">
+            <span class="valve-timer-status-label">Temporizador</span>
+            <span class="valve-timer-countdown"><span class="valve-timer-countdown-value">{% if valvula.timer_activo %}{{ valvula.timer_remaining }}{% else %}0{% endif %}</span>s</span>
+          </div>
+          <button type="button" class="valve-timer-cancel {% if not valvula.timer_activo %}is-hidden{% endif %}" data-valve-id="{{ valvula.id_valvula }}">Cancelar temporizador</button>
+        </div>
+
         <p class="valve-topic">Topic: {{ valvula.topic_mqtt_comando }}</p>
       </article>
     {% endfor %}
@@ -134,6 +180,17 @@
 {% elif not error %}
   <div class="card empty-state"><i class="ti ti-toggle-left"></i><h2>No hay electroválvulas registradas</h2><p>Registra una válvula en la tabla valvula para verla aquí.</p></div>
 {% endif %}
+
+<div id="timer-confirm-modal" class="timer-confirm-modal is-hidden" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="timer-confirm-title">
+  <div class="timer-confirm-dialog">
+    <h3 id="timer-confirm-title">Confirmar ajuste</h3>
+    <p>Tiempo máximo permitido: 120 seg (2 min). La duración se ajustará a 120 seg. ¿Deseas continuar?</p>
+    <div class="timer-confirm-actions">
+      <button type="button" class="timer-confirm-button timer-confirm-button-cancel" id="timer-confirm-cancel">Cancelar</button>
+      <button type="button" class="timer-confirm-button timer-confirm-button-confirm" id="timer-confirm-accept">Continuar</button>
+    </div>
+  </div>
+</div>
 
 <section class="movement-panel" aria-labelledby="movement-title">
   <div class="movement-panel-header">
@@ -180,12 +237,18 @@
               <td>{{ movimiento.valvula_mostrar }}</td>
               <td>{{ movimiento.accion|capfirst }}</td>
               <td>
-                <span class="movement-type {% if movimiento.tipo_mostrar == 'Automático' %}movement-type-auto{% else %}movement-type-manual{% endif %}">
+                <span class="movement-type {% if movimiento.tipo_mostrar == 'Automático' %}movement-type-auto{% elif movimiento.tipo_mostrar == 'Temporizado' or movimiento.tipo_mostrar|slice:':10' == 'Temporizado' %}movement-type-auto{% else %}movement-type-manual{% endif %}">
                   {{ movimiento.tipo_mostrar }}
                 </span>
               </td>
               <td>{{ movimiento.usuario_mostrar }}</td>
-              <td>{{ movimiento.estado_anterior|default:'—'|capfirst }} → {{ movimiento.estado_nuevo|default:'—'|capfirst }}</td>
+              <td>
+                {% if movimiento.estado_mostrar %}
+                  {{ movimiento.estado_mostrar }}
+                {% else %}
+                  {{ movimiento.estado_anterior|default:'—'|capfirst }} → {{ movimiento.estado_nuevo|default:'—'|capfirst }}
+                {% endif %}
+              </td>
             </tr>
           {% endfor %}
         </tbody>
@@ -215,70 +278,358 @@
 {{ estadisticas.aperturas_dias|json_script:"valvulas-aperturas-dias" }}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
+  const TIMER_MIN_SECONDS = 5;
+  const TIMER_MAX_SECONDS = 120;
+  const timerConfirmModal = document.getElementById('timer-confirm-modal');
+  const timerConfirmAccept = document.getElementById('timer-confirm-accept');
+  const timerConfirmCancel = document.getElementById('timer-confirm-cancel');
+  let timerConfirmResolver = null;
+
+  function showLiveMessage(message, isError = false) {
+    const liveMessage = document.getElementById('valve-live-message');
+    if (!liveMessage) return;
+    liveMessage.className = `valve-live-message${isError ? ' is-error' : ''}`;
+    liveMessage.textContent = message;
+  }
+
+  function openTimerConfirmModal() {
+    if (timerConfirmModal) {
+      timerConfirmModal.classList.remove('is-hidden');
+      timerConfirmModal.setAttribute('aria-hidden', 'false');
+    }
+  }
+
+  function closeTimerConfirmModal() {
+    if (timerConfirmModal) {
+      timerConfirmModal.classList.add('is-hidden');
+      timerConfirmModal.setAttribute('aria-hidden', 'true');
+    }
+  }
+
+  function askTimerConfirmation() {
+    return new Promise((resolve) => {
+      timerConfirmResolver = resolve;
+      openTimerConfirmModal();
+    });
+  }
+
+  async function refreshRecentMovements() {
+    const historyBody = document.getElementById('valve-history-body');
+    if (!historyBody) return;
+
+    try {
+      const response = await fetch(window.location.href, {
+        method: 'GET',
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+          'Accept': 'text/html',
+        },
+        cache: 'no-store',
+      });
+
+      if (!response.ok) return;
+
+      const html = await response.text();
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, 'text/html');
+      const freshHistoryBody = doc.getElementById('valve-history-body');
+
+      if (freshHistoryBody) {
+        historyBody.innerHTML = freshHistoryBody.innerHTML;
+      }
+    } catch (error) {
+      console.warn('No se pudo actualizar el historial de movimientos.', error);
+    }
+  }
+
+  function getTimerDurationConfig(rawValue) {
+    const trimmedValue = (rawValue ?? '').trim();
+
+    if (!trimmedValue) {
+      return {
+        ok: false,
+        message: 'Introduce una duración personalizada antes de aplicar el temporizador.',
+      };
+    }
+
+    const parsedValue = Number(trimmedValue);
+    if (!Number.isFinite(parsedValue) || !Number.isInteger(parsedValue)) {
+      return {
+        ok: false,
+        message: 'La duración programada debe ser un número entero válido.',
+      };
+    }
+
+    if (parsedValue < TIMER_MIN_SECONDS) {
+      return {
+        ok: false,
+        message: 'El tiempo mínimo permitido es de 5 segundos',
+      };
+    }
+
+    if (parsedValue > TIMER_MAX_SECONDS) {
+      return {
+        ok: true,
+        duration: TIMER_MAX_SECONDS,
+        requiresConfirmation: true,
+      };
+    }
+
+    return {
+      ok: true,
+      duration: parsedValue,
+      requiresConfirmation: false,
+    };
+  }
+
+  function updateValveStatus(card, result) {
+    const status = card.querySelector('[data-valve-status]');
+    const isOpen = result.estado_nuevo === 'abierta';
+    if (status) {
+      status.querySelector('.badge')?.remove();
+      status.insertAdjacentHTML('beforeend', `<span class="badge ${isOpen ? 'badge-open' : 'badge-closed'}">${result.estado_nuevo.toUpperCase()}</span>`);
+    }
+
+    const openButton = card.querySelector('.valve-button-open');
+    const closeButton = card.querySelector('.valve-button-close');
+    if (openButton) openButton.disabled = isOpen;
+    if (closeButton) closeButton.disabled = !isOpen;
+
+    const timerStatus = card.querySelector('[data-valve-timer-status]');
+    const countdownValue = timerStatus?.querySelector('.valve-timer-countdown-value');
+    const cancelButton = timerStatus?.querySelector('.valve-timer-cancel');
+
+    if (result.timer_activo && result.timer_end_at) {
+      if (timerStatus) {
+        timerStatus.dataset.timerEndAt = result.timer_end_at;
+        timerStatus.dataset.duration = result.duracion_programada || 0;
+        timerStatus.classList.add('is-active');
+      }
+      if (cancelButton) cancelButton.classList.remove('is-hidden');
+      if (countdownValue) countdownValue.textContent = result.timer_remaining || 0;
+    } else {
+      if (timerStatus) {
+        timerStatus.dataset.timerEndAt = '';
+        timerStatus.dataset.duration = '0';
+      }
+      if (cancelButton) cancelButton.classList.add('is-hidden');
+      if (countdownValue) countdownValue.textContent = '0';
+    }
+  }
+
+  function stopTimerCountdown(card) {
+    const timerStatus = card?.querySelector('[data-valve-timer-status]');
+    if (!timerStatus) return;
+
+    if (timerStatus._countdownInterval) {
+      clearInterval(timerStatus._countdownInterval);
+      timerStatus._countdownInterval = null;
+    }
+
+    timerStatus.dataset.timerEndAt = '';
+    timerStatus.dataset.duration = '0';
+
+    const countdownValue = timerStatus.querySelector('.valve-timer-countdown-value');
+    if (countdownValue) countdownValue.textContent = '0';
+
+    const cancelButton = timerStatus.querySelector('.valve-timer-cancel');
+    if (cancelButton) cancelButton.classList.add('is-hidden');
+  }
+
+  function setupTimerCountdown(timerStatus) {
+    if (!timerStatus) return;
+
+    const endAt = timerStatus.dataset.timerEndAt;
+    const countdownValue = timerStatus.querySelector('.valve-timer-countdown-value');
+    const cancelButton = timerStatus.querySelector('.valve-timer-cancel');
+    if (!endAt || !countdownValue) {
+      if (timerStatus._countdownInterval) {
+        clearInterval(timerStatus._countdownInterval);
+        timerStatus._countdownInterval = null;
+      }
+      if (cancelButton) cancelButton.classList.add('is-hidden');
+      if (countdownValue) countdownValue.textContent = '0';
+      return;
+    }
+
+    if (cancelButton) cancelButton.classList.remove('is-hidden');
+
+    timerStatus.dataset.countdownExpired = 'false';
+
+    const updateCountdown = () => {
+      const remainingSeconds = Math.max(0, Math.ceil((new Date(endAt).getTime() - Date.now()) / 1000));
+      countdownValue.textContent = remainingSeconds;
+
+      if (remainingSeconds <= 0) {
+        const card = timerStatus.closest('.valve-card');
+        const statusBadge = card?.querySelector('[data-valve-status] .badge');
+        if (statusBadge) {
+          statusBadge.className = 'badge badge-closed';
+          statusBadge.textContent = 'CERRADA';
+        }
+
+        const openButton = card?.querySelector('.valve-button-open');
+        const closeButton = card?.querySelector('.valve-button-close');
+        if (openButton) openButton.disabled = false;
+        if (closeButton) closeButton.disabled = true;
+
+        timerStatus.dataset.timerEndAt = '';
+        timerStatus.dataset.duration = '0';
+        if (cancelButton) cancelButton.classList.add('is-hidden');
+        countdownValue.textContent = '0';
+
+        if (timerStatus.dataset.countdownExpired !== 'true') {
+          timerStatus.dataset.countdownExpired = 'true';
+          refreshRecentMovements();
+        }
+      }
+    };
+
+    updateCountdown();
+
+    if (timerStatus._countdownInterval) {
+      clearInterval(timerStatus._countdownInterval);
+    }
+    timerStatus._countdownInterval = setInterval(updateCountdown, 1000);
+  }
+
+  async function sendValveCommand(button, comando, duracionSeg = null) {
+    const card = button.closest('.valve-card');
+    const form = card.querySelector('.valve-command-form');
+    const buttons = card.querySelectorAll('.valve-button, .valve-timer-button, .valve-timer-apply, .valve-timer-cancel');
+
+    if (comando === 'cerrar') {
+      stopTimerCountdown(card);
+    }
+
+    buttons.forEach(item => {
+      if (item !== button) item.disabled = true;
+      item.classList.add('is-loading');
+    });
+
+    const params = new URLSearchParams({ comando });
+    if (duracionSeg) {
+      params.append('duracion_seg', duracionSeg);
+    }
+
+    showLiveMessage('Enviando comando...');
+
+    try {
+      const response = await fetch(form.action, {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': form.querySelector('[name=csrfmiddlewaretoken]').value,
+          'X-Requested-With': 'XMLHttpRequest',
+          'Accept': 'application/json',
+        },
+        body: params,
+      });
+
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        if (response.redirected || response.url.includes('/login')) {
+          throw new Error('La sesión expiró. Inicia sesión nuevamente.');
+        }
+        throw new Error(`El servidor devolvió una página HTML (HTTP ${response.status}). Revisa la consola de Django.`);
+      }
+
+      const result = await response.json();
+      if (!response.ok || !result.ok) throw new Error(result.error || 'No se pudo ejecutar el comando.');
+
+      updateValveStatus(card, result);
+      setupTimerCountdown(card.querySelector('[data-valve-timer-status]'));
+
+      await refreshRecentMovements();
+
+      showLiveMessage(
+        result.tipo_activacion === 'temporizado'
+          ? `Temporizador activado: ${result.duracion_programada} segundos`
+          : `Cambio guardado: ${result.estado_nuevo.toUpperCase()}`
+      );
+    } catch (error) {
+      showLiveMessage(error.message, true);
+    } finally {
+      buttons.forEach(item => {
+        item.disabled = false;
+        item.classList.remove('is-loading');
+      });
+    }
+  }
+
   document.querySelectorAll('.valve-command-form').forEach(form => {
     form.addEventListener('submit', async event => {
       event.preventDefault();
       const button = event.submitter;
-      const buttons = form.closest('.valve-card').querySelectorAll('.valve-button');
-      const message = document.getElementById('valve-live-message');
-      buttons.forEach(item => { item.disabled = true; item.classList.add('is-loading'); });
-      message.className = 'valve-live-message';
-      message.textContent = 'Enviando comando...';
-      try {
-        const response = await fetch(form.action, {
-          method: 'POST',
-          headers: {
-            'X-CSRFToken': form.querySelector('[name=csrfmiddlewaretoken]').value,
-            'X-Requested-With': 'XMLHttpRequest',
-            'Accept': 'application/json',
-          },
-          body: new URLSearchParams({ comando: button.value }),
-        });
-        const contentType = response.headers.get('content-type') || '';
-        if (!contentType.includes('application/json')) {
-          if (response.redirected || response.url.includes('/login')) {
-            throw new Error('La sesión expiró. Inicia sesión nuevamente.');
-          }
-          throw new Error(`El servidor devolvió una página HTML (HTTP ${response.status}). Revisa la consola de Django.`);
-        }
-        const result = await response.json();
-        if (!response.ok || !result.ok) throw new Error(result.error || 'No se pudo ejecutar el comando.');
-
-        const status = document.querySelector(`[data-valve-status="${result.id_valvula}"]`);
-        const isOpen = result.estado_nuevo === 'abierta';
-        if (status) {
-          status.querySelector('.badge')?.remove();
-          status.insertAdjacentHTML('beforeend', `<span class="badge ${isOpen ? 'badge-open' : 'badge-closed'}">${result.estado_nuevo.toUpperCase()}</span>`);
-        }
-        buttons.forEach(item => {
-          item.disabled = item.dataset.valveAction === result.accion;
-          item.classList.remove('is-loading');
-        });
-        const historyBody = document.getElementById('valve-history-body');
-        if (historyBody) {
-          const row = document.createElement('tr');
-          [
-            result.fecha_hora,
-            result.valvula_mostrar,
-            result.accion,
-            result.tipo_activacion === 'automatico' ? 'Automático' : 'Manual',
-            result.usuario_mostrar,
-            `${result.estado_anterior} → ${result.estado_nuevo}`,
-          ].forEach(value => {
-            const cell = document.createElement('td');
-            cell.textContent = value || '—';
-            row.appendChild(cell);
-          });
-          historyBody.prepend(row);
-          while (historyBody.rows.length > 50) historyBody.deleteRow(-1);
-        }
-        message.textContent = `Cambio guardado: ${result.estado_nuevo.toUpperCase()}`;
-      } catch (error) {
-        buttons.forEach(item => { item.disabled = false; item.classList.remove('is-loading'); });
-        message.className = 'valve-live-message is-error';
-        message.textContent = error.message;
-      }
+      const command = button.value;
+      sendValveCommand(button, command);
     });
+  });
+
+  document.querySelectorAll('.valve-timer-button').forEach(button => {
+    button.addEventListener('click', () => {
+      const duration = button.dataset.duration;
+      sendValveCommand(button, 'abrir', duration);
+    });
+  });
+
+  document.querySelectorAll('.valve-timer-apply').forEach(button => {
+    button.addEventListener('click', async () => {
+      const card = button.closest('.valve-card');
+      const customInput = card.querySelector('.valve-custom-duration');
+      const durationConfig = getTimerDurationConfig(customInput.value);
+
+      if (!durationConfig.ok) {
+        showLiveMessage(durationConfig.message, true);
+        return;
+      }
+
+      if (durationConfig.requiresConfirmation) {
+        const confirmed = await askTimerConfirmation();
+        if (!confirmed) {
+          closeTimerConfirmModal();
+          return;
+        }
+      }
+
+      closeTimerConfirmModal();
+      sendValveCommand(button, 'abrir', String(durationConfig.duration));
+    });
+  });
+
+  document.querySelectorAll('.valve-timer-cancel').forEach(button => {
+    button.addEventListener('click', () => {
+      sendValveCommand(button, 'cerrar');
+    });
+  });
+
+  timerConfirmAccept?.addEventListener('click', () => {
+    closeTimerConfirmModal();
+    if (timerConfirmResolver) {
+      timerConfirmResolver(true);
+      timerConfirmResolver = null;
+    }
+  });
+
+  timerConfirmCancel?.addEventListener('click', () => {
+    closeTimerConfirmModal();
+    if (timerConfirmResolver) {
+      timerConfirmResolver(false);
+      timerConfirmResolver = null;
+    }
+  });
+
+  timerConfirmModal?.addEventListener('click', (event) => {
+    if (event.target === timerConfirmModal) {
+      closeTimerConfirmModal();
+      if (timerConfirmResolver) {
+        timerConfirmResolver(false);
+        timerConfirmResolver = null;
+      }
+    }
+  });
+
+  document.querySelectorAll('[data-valve-timer-status]').forEach(timerStatus => {
+    setupTimerCountdown(timerStatus);
   });
 
   new Chart(document.getElementById('aperturasPorDia'), {
