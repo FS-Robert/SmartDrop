@@ -3,9 +3,11 @@
 {% block nav_estado_sistema %}active{% endblock %}
 
 {% block content %}
+<div class="system-dashboard">
 <h1 class="page-title">ESTADO DEL SISTEMA</h1>
 <p class="page-subtitle">Consulta en tiempo real la disponibilidad del suministro</p>
 
+<div class="system-dashboard-top">
 <section class="system-status-panel" aria-live="polite">
   <div class="system-status-icon {% if valvula.clase == 'open' %}is-open{% else %}is-closed{% endif %}" id="system-valve-icon">
     <i class="ti ti-toggle-left"></i>
@@ -25,6 +27,7 @@
     <p>Solo administradores pueden controlar la válvula</p>
   </div>
 </section>
+</div>
 
 <section class="system-notification-card" aria-label="Notificaciones de suministro">
   <i class="ti ti-bell"></i>
@@ -34,30 +37,7 @@
   </div>
   <button type="button" id="enable-notifications" class="notification-button">Activar</button>
 </section>
-{% endblock %}
-
-{% block extra_css %}
-<style>
-  .system-status-panel { align-items:center; background:var(--panel); border:1px solid var(--border); border-radius:16px; display:flex; gap:22px; margin:2rem auto; max-width:720px; padding:2rem; }
-  .system-status-icon { align-items:center; border-radius:18px; display:flex; flex:0 0 92px; height:92px; justify-content:center; }
-  .system-status-icon i { font-size:48px; }
-  .system-status-icon.is-open { background:#e1f5ee; color:#0f6e56; }
-  .system-status-icon.is-closed { background:#fcebeb; color:#a32d2d; }
-  .system-status-copy { display:flex; flex-direction:column; gap:8px; }
-  .system-status-value { color:var(--text); font-size:28px; font-weight:800; }
-  .system-status-updated { color:var(--muted); font-size:13px; font-weight:600; margin:4px 0 0; }
-  .system-info-card { align-items:center; background:#f5f0ff; border:1px solid #e0d4f5; border-radius:12px; color:#4b2f7a; display:flex; gap:12px; margin:0 auto; max-width:720px; padding:14px 18px; }
-  .system-info-card > i { color:#6b21a8; font-size:22px; }
-  .system-info-card strong { display:block; color:#2d1a4a; font-size:13px; margin-bottom:3px; }
-  .system-info-card p { font-size:13px; font-weight:700; margin:0; }
-  .system-notification-card { align-items:center; background:var(--panel); border:1px solid var(--border); border-radius:12px; color:var(--muted); display:flex; gap:12px; margin:12px auto 0; max-width:720px; padding:14px 18px; }
-  .system-notification-card > i { color:#6b21a8; font-size:22px; }
-  .system-notification-card strong { color:var(--text); display:block; font-size:13px; margin-bottom:3px; }
-  .system-notification-card p { font-size:12px; font-weight:600; margin:0; }
-  .notification-button { background:#6b21a8; border:0; border-radius:8px; color:#fff; cursor:pointer; font:inherit; font-size:12px; font-weight:800; margin-left:auto; padding:8px 12px; }
-  .notification-button:disabled { cursor:default; opacity:.55; }
-  @media (max-width:600px) { .system-status-panel { align-items:flex-start; flex-direction:column; margin:1rem 0; padding:1.25rem; } .system-status-value { font-size:23px; } }
-</style>
+</div>
 {% endblock %}
 
 {% block extra_js %}

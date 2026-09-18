@@ -1,91 +1,92 @@
 {% extends 'App/base.html' %}
+{% load static %}
 {% block title %}Inicio{% endblock %}
 {% block nav_dashboard %}active{% endblock %}
 
 {% block content %}
-<h1 class="page-title">ESTADO DE AGUA</h1>
-{% if viviendas %}
-<p class="page-subtitle">Datos de {{ viviendas.0.nic }}</p>
-{% else %}
-<p class="page-subtitle">Sin vivienda vinculada o sin lecturas disponibles.</p>
-{% endif %}
+<section class="dashboard-hero" aria-label="Resumen de SmartDrop">
+  <img class="dashboard-hero-image" src="{% static 'App/img/Imagen principal.jpg' %}" alt="Sistema de agua SmartDrop">
+  <div class="dashboard-hero-copy">
+    <h1>SmartDrop</h1>
+    <p>Consulta el estado actual de tu sistema de agua</p>
+  </div>
+</section>
 
-<!-- Toggle para ver números exactos -->
-<div class="toggle-exact-data-container">
-  <label for="toggle-exact" class="toggle-exact-label">
-    <input type="checkbox" id="toggle-exact" class="toggle-checkbox">
-    <span class="toggle-text">Ver números exactos</span>
-  </label>
+<div class="dashboard-heading">
+  <h2 class="page-title">ESTADO DEL AGUA</h2>
 </div>
 
-<div class="cards-grid">
+<div class="dashboard-overview-cards">
+  <div class="overview-card housing-overview">
+    <i class="ti ti-link overview-card-icon" aria-hidden="true"></i>
+    <div>
+      {% if viviendas %}
+      <strong>Vivienda vinculada</strong>
+      <span>{{ viviendas.0.nic }}</span>
+      {% else %}
+      <strong>Sin vivienda vinculada</strong>
+      <button type="button" class="overview-action">Vincular vivienda</button>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="overview-card exact-overview">
+    <label for="toggle-exact" class="toggle-exact-label">
+      <span class="toggle-text">Ver números exactos</span>
+      <input type="checkbox" id="toggle-exact" class="toggle-checkbox">
+    </label>
+  </div>
+
+  <div class="overview-card update-overview">
+    <strong>Última actualización</strong>
+    <span>{{ ultima_actualizacion|default:"Sin actualización registrada" }}</span>
+  </div>
+</div>
+
+<div class="cards-grid dashboard-metrics">
 
   <!-- Presión -->
   <a href="{% url 'presion' %}" class="dash-card pressure-card">
-    <div class="card-top">
+    <div class="metric-head">
       <div class="icon-wrap">
         <i class="ti ti-gauge"></i>
       </div>
-      <div class="card-content">
-        <div class="card-label">Presión de agua actual</div>
-        <!-- Vista amigable -->
-        <div id="dashboard-pressure-friendly" class="card-value friendly-view" style="display: block;">
-          {{ presion.mensaje_amigable }}
-        </div>
-        <!-- Vista exacta (oculta por defecto) -->
-        <div id="dashboard-pressure-exact" class="card-value exact-view" style="display: none;">
-          {{ presion.valor_exacto }}
-        </div>
-        <span class="badge badge-normal">● {{ presion.badge }}</span>
-      </div>
+      <div class="card-label">Presión de agua actual</div>
+      <span class="badge {{ presion.badge_class }}">● {{ presion.badge }}</span>
     </div>
+    <div id="dashboard-pressure-friendly" class="card-value friendly-view friendly-message" style="display: block;">{{ presion.mensaje_amigable }}</div>
+    <div id="dashboard-pressure-exact" class="card-value exact-view exact-value" style="display: none;">{{ presion.valor_exacto }}</div>
     <div class="card-link"><i class="ti ti-arrow-right"></i> Click para ver más</div>
   </a>
 
   <!-- Calidad -->
   <a href="{% url 'calidad' %}" class="dash-card quality-card">
-    <div class="card-top">
+    <div class="metric-head">
       <div class="icon-wrap blue">
         <i class="ti ti-droplet"></i>
       </div>
-      <div class="card-content">
-        <div class="card-label">Calidad del agua actual</div>
-        <!-- Vista amigable -->
-        <div id="dashboard-quality-friendly" class="card-value friendly-view" style="display: block;">
-          {{ calidad.mensaje_amigable }}
-        </div>
-        <!-- Vista exacta (oculta por defecto) -->
-        <div id="dashboard-quality-exact" class="card-value exact-view" style="display: none;">
-          {{ calidad.tds }} ppm TDS
-        </div>
-        <span class="badge {% if calidad.estado == 'Buena' %}badge-perfect{% elif calidad.estado == 'Media' %}badge-high{% else %}badge-closed{% endif %}">● {{ calidad.badge }}</span>
-      </div>
+      <div class="card-label">Calidad del agua actual</div>
+      <span class="badge {% if calidad.estado == 'Buena' %}badge-perfect{% elif calidad.estado == 'Media' %}badge-high{% else %}badge-closed{% endif %}">● {{ calidad.badge }}</span>
     </div>
+    <div id="dashboard-quality-friendly" class="card-value friendly-view friendly-message" style="display: block;">{{ calidad.mensaje_amigable }}</div>
+    <div id="dashboard-quality-exact" class="card-value exact-view exact-value" style="display: none;">{{ calidad.tds }} ppm TDS</div>
     <div class="card-link"><i class="ti ti-arrow-right"></i> Click para ver más</div>
   </a>
 
   <!-- Tanque -->
   <a href="{% url 'tanque' %}" class="dash-card tank-card">
-    <div class="card-top">
+    <div class="metric-head">
       <div class="icon-wrap amber">
         <i class="ti ti-building-warehouse"></i>
       </div>
-      <div class="card-content">
-        <div class="card-label">Nivel de tanque actual</div>
-        <!-- Vista amigable -->
-        <div class="card-value friendly-view" style="display: block;">
-          {{ tanque.mensaje_amigable }}
-        </div>
-        <!-- Vista exacta (oculta por defecto) -->
-        <div id="dashboard-tank-exact" class="card-value exact-view" style="display: none;">
-          {{ tanque.porcentaje }}%
-        </div>
-        <span class="badge badge-high">
-          <span class="friendly-view">{{ tanque.litros }}L disponibles</span>
-          <span class="exact-view" style="display: none;">{{ tanque.porcentaje }}%</span>
-        </span>
-      </div>
+      <div class="card-label">Nivel de tanque actual</div>
+      <span class="badge {{ tanque.badge_class }}">
+        <span class="friendly-view">{{ tanque.litros }}L disponibles</span>
+        <span class="exact-view" style="display: none;">{{ tanque.porcentaje }}%</span>
+      </span>
     </div>
+    <div class="card-value friendly-view friendly-message" style="display: block;">{{ tanque.mensaje_amigable }}</div>
+    <div id="dashboard-tank-exact" class="card-value exact-view exact-value" style="display: none;">{{ tanque.porcentaje }}%</div>
     <div class="tank-bar-wrap">
       <div class="tank-bar" style="width: {{ tanque.porcentaje }}%;"></div>
     </div>
@@ -94,21 +95,22 @@
 
   <!-- Consumo -->
   <a href="{% url 'consumo' %}" class="dash-card">
-    <div class="card-top">
+    <div class="metric-head">
       <div class="icon-wrap teal">
         <i class="ti ti-droplet-half-2"></i>
       </div>
-      <div>
-        <div class="card-label">Consumo de agua actual</div>
-        <div class="card-value">{{ consumo.hoy }}L</div>
-        <span class="card-sub">Hoy</span>
-      </div>
+      <div class="card-label">Consumo de agua actual</div>
     </div>
+    <div class="card-value consumption-value">{{ consumo.hoy }}L</div>
+    <span class="card-sub">Hoy</span>
     <div class="card-link"><i class="ti ti-arrow-right"></i> Click para ver más</div>
   </a>
 
+</div>
+
+<div class="dashboard-lower">
   <!-- Estado de la válvula: solo lectura para usuarios normales -->
-  <section class="dash-card valve-status-card" aria-live="polite">
+  <section class="dash-card valve-status-card dashboard-system-card" aria-live="polite">
     <div class="card-top">
       <div class="icon-wrap {% if valvula.clase == 'open' %}teal{% else %}red{% endif %}" id="valve-status-icon">
         <i class="ti ti-toggle-left"></i>
@@ -123,8 +125,6 @@
     </div>
     <div class="valve-last-update">Última actualización: <span id="dashboard-valve-updated">{{ valvula.ultima_actualizacion }}</span></div>
   </section>
-
-</div>
 
 <!-- Stats -->
 <div class="stats-row">
@@ -148,63 +148,13 @@
   </div>
 </div>
 
+</div>
+
 <div id="dashboard-realtime-sensors" hidden>
   {% for reading in realtime_readings %}
     <span data-sensor-id="{{ reading.id_sensor }}" data-sensor-type="{{ reading.tipo_sensor }}"></span>
   {% endfor %}
 </div>
-
-<style>
-  /* ════════════════════════════════════════
-     TOGGLE PARA VER NÚMEROS EXACTOS
-  ════════════════════════════════════════ */
-  .toggle-exact-data-container {
-    margin-bottom: 2rem;
-    display: flex;
-    justify-content: center;
-  }
-
-  .toggle-exact-label {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    background: #fff;
-    border: 1px solid #e0d4f5;
-    border-radius: 16px;
-    padding: 12px 18px;
-    cursor: pointer;
-    transition: all 0.15s ease;
-    font-weight: 600;
-    color: #555;
-    user-select: none;
-  }
-
-  .toggle-exact-label:hover {
-    box-shadow: 0 4px 12px rgba(107, 33, 168, 0.08);
-    border-color: #d0bae8;
-  }
-
-  .toggle-checkbox {
-    width: 18px;
-    height: 18px;
-    cursor: pointer;
-    accent-color: #6B21A8;
-  }
-
-  .toggle-text {
-    font-size: 14px;
-    color: #555;
-  }
-
-  .card-content {
-    flex: 1;
-  }
-
-  /* Animación suave para cambio de vista */
-  .friendly-view, .exact-view {
-    transition: opacity 0.3s ease, display 0.3s ease;
-  }
-</style>
 
 {% endblock %}
 {% block extra_js %}
@@ -228,7 +178,7 @@
     if (toggleExact.checked) {
       // Mostrar vista exacta
       friendlyViews.forEach(el => el.style.display = 'none');
-      exactViews.forEach(el => el.style.display = 'block');
+      exactViews.forEach(el => el.style.display = el.classList.contains('exact-value') ? 'flex' : 'block');
     } else {
       // Mostrar vista amigable
       friendlyViews.forEach(el => el.style.display = 'block');

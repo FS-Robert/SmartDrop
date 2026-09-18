@@ -6,13 +6,16 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>SmartDrop — Registro</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css"/>
+   <link rel="preconnect" href="https://fonts.googleapis.com">
+   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{% static 'App/css/dashboard.css' %}"/>
 </head>
 <body>
   <main class="auth-panel">
     <div class="auth-card">
-      <h1>Registro</h1>
-      <p>Crea una cuenta para comenzar a monitorizar tu uso de agua</p>
+      <h1>Crear una cuenta</h1>
+      <p>Regístrate para comenzar a utilizar SmartDrop.</p>
       <form method="post" novalidate>
         {% csrf_token %}
         {% if form.non_field_errors %}

@@ -1,14 +1,16 @@
-@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700;800&display=swap');
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  font-family: 'Nunito', sans-serif;
+  font-family: 'Inter', sans-serif;
   background: #f0f4f8;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
 }
+
+h1, h2, h3, h4, h5, h6 { font-family: 'Montserrat', sans-serif; }
 
 /* ════════════════════════════
    TOPBAR
@@ -105,18 +107,6 @@ body {
 .badge-open     { background: #e1f5ee; color: #0F6E56; }
 .badge-closed   { background: #fcebeb; color: #A32D2D; }
 .badge-off      { background: #f1efe8; color: #5F5E5A; }
-
-/* ════════════════════════════
-   FOOTER
-════════════════════════════ */
-footer {
-  text-align: center; font-size: 11px;
-  color: #bbb; padding: 0.75rem;
-  font-weight: 600; letter-spacing: 0.3px;
-}
-
-
-
 
 /* ════════════════════════════════════════
    DASHBOARD
@@ -552,32 +542,3 @@ footer {
 .toggle.off { background: #ddd; }
 .toggle.off::after { right: 23px; }
 
-/* ════════════════════════════
-   PANTALLA DE AUTENTICACIÓN (LOGIN)
-════════════════════════════ */
-.auth-panel {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2rem;
-  
-  /* Configuración de la imagen de fondo */
-  background-image: url('/Static/App/img/fondoSmartDrop.jpg'); /* Ajusta la ruta si es necesario */
-  background-size: cover;       /* Cubre toda la pantalla sin deformarse */
-  background-position: center;  /* Centra la imagen */
-  background-repeat: no-repeat; /* Evita que la imagen se duplique */
-  background-attachment: fixed; /* Mantiene el fondo fijo al hacer scroll */
-}
-
-/* Estilo para la tarjeta del formulario (para que resalte sobre el fondo) */
-.auth-card {
-  background: rgba(255, 255, 255, 0.92); /* Fondo blanco con una leve transparencia */
-  backdrop-filter: blur(8px);            /* Efecto de desenfoque moderno detrás de la tarjeta */
-  border-radius: 20px;
-  padding: 2.5rem;
-  width: 100%;
-  max-width: 420px;                      /* Ancho ideal para tarjetas de Login */
-  border: 1px solid rgba(224, 212, 245, 0.6);
-  box-shadow: 0 10px 32px rgba(107, 33, 168, 0.15); /* Sombra suave morada */
-}

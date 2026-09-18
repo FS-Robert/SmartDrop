@@ -42,9 +42,9 @@
     <div class="comparison-card">
       <div class="comparison-label">Comparación</div>
       <div class="comparison-val up">
-        ↑ {{ consumo.variacion }}% vs <span id="comparison-period">semana pasada</span>
+        {{ consumo.variacion_label }}
       </div>
-      <div style="font-size:12px; color:#888; font-weight:600; margin-top:4px;">(Ligeramente elevado)</div>
+      <div style="font-size:12px; color:#888; font-weight:600; margin-top:4px;">Comparación basada en datos registrados</div>
     </div>
 
     <div class="historial-card">
@@ -139,8 +139,8 @@
       },
       plugins: { legend: { display: false } },
       scales: {
-        x: { grid: { color: '#f0eafa' }, ticks: { color: '#888', font: { family: 'Nunito', weight: '600' } } },
-        y: { grid: { color: '#f0eafa' }, ticks: { color: '#888', font: { family: 'Nunito', weight: '600' } } }
+        x: { grid: { color: '#f0eafa' }, ticks: { color: '#888', font: { family: 'Inter', weight: '600' } } },
+        y: { grid: { color: '#f0eafa' }, ticks: { color: '#888', font: { family: 'Inter', weight: '600' } } }
       }
     },
   });
@@ -182,11 +182,6 @@
       chart.update();
       document.getElementById('chart-value').textContent = c.val;
     }
-    document.getElementById('comparison-period').textContent = {
-      dia: 'día anterior',
-      semana: 'semana pasada',
-      mes: 'mes pasado',
-    }[tipo];
     document.getElementById('week-navigation').style.display = tipo === 'dia' ? 'flex' : 'none';
     document.getElementById('month-navigation').style.display = tipo === 'mes' || tipo === 'dia' ? 'none' : 'flex';
     if (tipo !== 'dia') renderHistorial(tipo === 'mes' ? historialMes : historialSemana);

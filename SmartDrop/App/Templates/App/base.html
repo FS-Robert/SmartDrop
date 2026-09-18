@@ -6,7 +6,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>SmartDrop – {% block title %}Dashboard{% endblock %}</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css"/>
-  <link rel="stylesheet" href="{% static 'App/css/dashboard.css' %}"/>
+   <link rel="preconnect" href="https://fonts.googleapis.com"/>
+   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="{% static 'App/css/dashboard.css' %}?v=20260917-footer"/>
   {% block extra_css %}{% endblock %}
   <script>
     (function () {
@@ -59,6 +62,9 @@
 
     <!-- ── Sidebar ── -->
     <nav class="sidebar">
+      <a href="{% url 'dashboard' %}" class="sidebar-brand">
+        <img src="{% static 'App/img/LogoSmartDrop.png' %}" alt="SmartDrop">
+      </a>
       {% if user.is_authenticated and user.rol_id == 2 %}
         <!-- Admin: mostrar solo acceso al panel administrativo -->
         <a href="{% url 'admin_panel' %}" class="nav-item {% block nav_admin %}{% endblock %}">
@@ -69,9 +75,11 @@
         </a>
       {% else %}
         <!-- Usuario normal: menú completo -->
+        <span class="nav-section-label">Estado del agua</span>
         <a href="{% url 'dashboard' %}"          class="nav-item {% block nav_dashboard %}{% endblock %}">
           <i class="ti ti-home"></i> Inicio
         </a>
+        <span class="nav-section-label">Monitoreo</span>
         <a href="{% url 'estado_sistema' %}"      class="nav-item {% block nav_estado_sistema %}{% endblock %}">
           <i class="ti ti-activity-heartbeat"></i> Estado del sistema
         </a>
@@ -107,7 +115,10 @@
 
   </div>
 
-  <footer>SmartDrop · Sistema de Monitoreo de Agua · Actualizado {{ ultima_actualizacion|default:"hace 2 min" }}</footer>
+  <footer class="site-footer">
+    <img src="{% static 'App/img/LogoSmartDrop.png' %}" alt="" class="site-footer-mark">
+    <span>&copy; 2026 SmartDrop. Todos los derechos reservados.</span>
+  </footer>
 
   <script>
     (function () {

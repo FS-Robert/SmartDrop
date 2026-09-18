@@ -3,13 +3,14 @@
 {% block nav_tanque %}active{% endblock %}
 
 {% block content %}
-<h1 class="page-title">Nivel de Tanque</h1>
-<p class="page-subtitle">Nivel calculado según la lectura del sensor</p>
+<div class="tanque-page">
+<h1 class="page-title">NIVEL DEL TANQUE</h1>
+<p class="page-subtitle">Monitorea el nivel actual del agua en el tanque de almacenamiento.</p>
 
 <div class="tanque-layout">
 
   <!-- Visual del tanque -->
-  <div class="tanque-visual">
+  <div class="tanque-visual card">
     <div class="capacity-header">
       <i class="ti ti-droplet capacity-icon"></i>
       <div class="capacity-text">Capacidad del tanque: <strong>{{ tanque.capacidad }}L</strong></div>
@@ -28,7 +29,7 @@
       </div>
     </div>
 
-    <span class="badge badge-high tank-available">
+    <span class="badge {{ tanque.badge_class }} tank-available">
       {{ tanque.litros }} litros disponibles ({{ tanque.porcentaje }}%)
     </span>
   </div>
@@ -81,6 +82,8 @@
     </div>
 
   </div>
+</div>
+<section class="tank-note"><strong>NIVEL DEL TANQUE</strong><p>{{ tanque.nota }}</p></section>
 </div>
 <script>
   document.querySelectorAll('[data-tank-height]').forEach((element) => {

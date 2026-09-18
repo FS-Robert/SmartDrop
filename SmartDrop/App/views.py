@@ -434,11 +434,11 @@ def _friendly_quality_message(tds_value):
         return 'Sin datos de calidad disponibles', 0
     tds = _safe_float(tds_value)
     if tds <= 300:
-        return '✓ El agua es segura para beber. Excelente calidad.', 5
+        return 'El agua es segura para beber. Excelente calidad.', 5
     elif tds <= 600:
-        return '⚠ El agua es consumible pero con sales disueltas. Aceptable.', 3
+        return 'El agua es consumible pero con sales disueltas. Aceptable.', 3
     else:
-        return '✗ El agua no es recomendable para beber. Requiere tratamiento.', 1
+        return 'El agua no es recomendable para beber. Requiere tratamiento.', 1
 
 
 def _friendly_pressure_message(pressure_value):
@@ -447,15 +447,15 @@ def _friendly_pressure_message(pressure_value):
         return 'Sin datos de presión', 'desconocido'
     pressure = _safe_float(pressure_value)
     if pressure < 1:
-        return '✗ Presión muy baja. Poco flujo de agua.', 'baja'
+        return 'Presión muy baja. Poco flujo de agua.', 'baja'
     elif pressure < 2:
-        return '⚠ Presión baja. El flujo puede ser lento.', 'baja'
+        return 'Presión baja. El flujo puede ser lento.', 'baja'
     elif pressure <= 3.5:
-        return '✓ Presión normal. Sistema funcionando correctamente.', 'normal'
+        return 'Presión normal. Sistema funcionando correctamente.', 'normal'
     elif pressure <= 5:
-        return '⚠ Presión alta. Dentro de rango aceptable.', 'alta'
+        return 'Presión alta. Dentro de rango aceptable.', 'alta'
     else:
-        return '✗ Presión muy alta. Riesgo para el sistema.', 'muy_alta'
+        return 'Presión muy alta. Riesgo para el sistema.', 'muy_alta'
 
 
 def _friendly_tank_message(percentage, liters):
@@ -464,15 +464,23 @@ def _friendly_tank_message(percentage, liters):
         return 'Sin datos del nivel', 'desconocido'
     pct = _safe_float(percentage)
     if pct < 5:
-        return f'✗ Tanque casi vacío. {liters}L disponibles.', 'critico'
+        return f'Tanque casi vacío. {liters}L disponibles.', 'critico'
     elif pct < 25:
-        return f'⚠ Tanque bajo. {liters}L disponibles.', 'bajo'
+        return f'Tanque bajo. {liters}L disponibles.', 'bajo'
     elif pct < 75:
-        return f'✓ Tanque en nivel normal. {liters}L disponibles.', 'normal'
+        return f'Tanque en nivel normal. {liters}L disponibles.', 'normal'
     elif pct < 95:
-        return f'✓ Tanque lleno. {liters}L disponibles.', 'lleno'
+        return f'Tanque lleno. {liters}L disponibles.', 'lleno'
     else:
-        return f'✓ Tanque a máxima capacidad. {liters}L disponibles.', 'maximo'
+        return f'Tanque a máxima capacidad. {liters}L disponibles.', 'maximo'
+
+
+def _status_badge_class(status):
+    if status == 'normal':
+        return 'badge-normal'
+    if status in {'baja', 'alta', 'bajo', 'lleno', 'maximo'}:
+        return 'badge-high'
+    return 'badge-closed'
 
 
 def _tank_level_data(level, sensors):
@@ -569,11 +577,19 @@ def dashboard(request):
     
     tank_liters = round(level_capacity * level_percentage / 100, 2)
     tank_msg, tank_status = _friendly_tank_message(level_percentage, tank_liters)
+    pressure_badges = {
+        'normal': 'Estable',
+        'baja': 'Baja',
+        'alta': 'Alta',
+        'muy_alta': 'Muy alta',
+        'desconocido': 'Sin lectura',
+    }
     
     context = {
         'presion': {
-            'estado': 'Normal' if pressure else 'Sin datos',
-            'badge': 'Estable' if pressure else 'Sin lectura',
+            'estado': pressure_badges.get(pressure_status, 'Sin datos'),
+            'badge': pressure_badges.get(pressure_status, 'Sin lectura'),
+            'badge_class': _status_badge_class(pressure_status),
             'valor_exacto': f"{pressure_value} bar",
             'mensaje_amigable': pressure_msg,
             'estado_amigable': pressure_status,
@@ -589,6 +605,7 @@ def dashboard(request):
             'litros': tank_liters,
             'mensaje_amigable': tank_msg,
             'estado_amigable': tank_status,
+            'badge_class': _status_badge_class(tank_status),
         },
         'consumo':  {'hoy': consumption},
         'valvula': valve_status,
@@ -691,12 +708,22 @@ def tanque(request):
     tank = next((item for item in tanques if str(item.get('id_sensor_nivel')) == str(level.get('id_sensor'))), {}) if level else {}
     nivel, porcentaje, capacidad = _tank_level_data(level, [dict(sensor, **tank) for sensor in sensores])
     litros = round(capacidad * porcentaje / 100, 2)
+    _, tank_status = _friendly_tank_message(porcentaje, litros)
+    tank_note = (
+        'No hay una lectura de nivel disponible para este tanque.'
+        if not level else
+        'El nivel del tanque es bajo; revisa el suministro y considera reducir el consumo.'
+        if porcentaje < 20 else
+        'El nivel del tanque es adecuado para el suministro actual.'
+    )
     context = {
         'tanque': {
             'capacidad':     capacidad,
             'porcentaje':    porcentaje,
             'litros':        litros,
             'ultima_lectura': level.get('fecha_registro', 'Sin datos') if level else 'Sin datos',
+            'badge_class': _status_badge_class(tank_status),
+            'nota': tank_note,
         },
         'autonomia': autonomia,
         'estado_bomba': estado_bomba,
@@ -748,24 +775,46 @@ def calidad(request):
 @login_required(login_url='login')
 def presion(request):
     try:
-        viviendas, _, lecturas, _ = _owned_sensor_data(request)
+        viviendas, sensores, lecturas, _ = _owned_sensor_data(request)
     except Exception:
-        viviendas, lecturas = [], []
+        viviendas, sensores, lecturas = [], [], []
     pressure_rows = [row for row in lecturas if 'presion' in row.get('tipo_sensor', '') or 'pressure' in row.get('tipo_sensor', '')]
-    valor = _safe_float(pressure_rows[0].get('valor')) if pressure_rows else 0
-    max_bar   = 5.0
+    latest_pressure = max(
+        pressure_rows,
+        key=lambda row: str(row.get('fecha_registro') or ''),
+        default=None,
+    )
+    valor = _safe_float(latest_pressure.get('valor')) if latest_pressure else 0
+    pressure_sensor = next(
+        (sensor for sensor in sensores if 'presion' in str(sensor.get('tipo_sensor', '')).lower()
+         or 'pressure' in str(sensor.get('tipo_sensor', '')).lower()),
+        {},
+    )
+    configured_max = _safe_float(pressure_sensor.get('rango_max'))
+    max_bar = configured_max if configured_max > 0 else 5.0
     pct       = min(max((valor / max_bar) * 100, 0), 100)
     # Arco SVG: longitud total del arco ≈ 251px
     gauge_dash = int((pct / 100) * 251)
+    pressure_value = valor if pressure_rows else None
+    pressure_message, pressure_status = _friendly_pressure_message(pressure_value)
+    pressure_labels = {
+        'normal': 'Estable',
+        'baja': 'Baja',
+        'alta': 'Alta',
+        'muy_alta': 'Muy alta',
+        'desconocido': 'Sin datos',
+    }
 
     context = {
         'presion': {
-            'estado':     'Normal' if pressure_rows else 'Sin datos',
+            'estado':     pressure_labels.get(pressure_status, 'Sin datos'),
+            'badge_class': _status_badge_class(pressure_status),
             'valvula':    'Sin datos',
             'valor':       valor,
             'gauge_dash':  gauge_dash,
             'needle_pos':  int(pct),
             'nota':       'Valor recibido desde el sensor de presión de tu vivienda.' if pressure_rows else 'No hay lecturas de presión para tu vivienda.',
+            'mensaje':    pressure_message,
             'actualizado':'Actualizado ahora' if pressure_rows else 'Sin lectura',
             'min_dia':    min((_safe_float(row.get('valor')) for row in pressure_rows), default=0),
             'max_dia':    max((_safe_float(row.get('valor')) for row in pressure_rows), default=0),
@@ -910,6 +959,13 @@ def consumo(request):
     highest_day = round(max(non_zero_values), 2) if non_zero_values else 0
     lowest_day = round(min(non_zero_values), 2) if non_zero_values else 0
     estado_label = 'SIN DATOS DE CONSUMO' if not parsed_rows else 'CONSUMO REGISTRADO'
+    previous_week_start = today - timedelta(days=13)
+    previous_week_end = today - timedelta(days=7)
+    previous_week_total = round(sum(
+        value for row_date, value in parsed_rows
+        if previous_week_start <= row_date <= previous_week_end
+    ), 2)
+    variation = round(((valor_semana - previous_week_total) / previous_week_total) * 100, 2) if previous_week_total else None
 
     context = {
         'consumo': {
@@ -917,7 +973,8 @@ def consumo(request):
             'valor_dia': valor_dia,
             'valor_mes': valor_mes,
             'estado_label': estado_label,
-            'variacion': 0,
+            'variacion': variation,
+            'variacion_label': 'Sin datos comparables' if variation is None else f'{variation:+.2f}% vs semana anterior',
             'mes': selected_month.strftime('%B'),
             'mes_key': selected_month.strftime('%Y-%m'),
             'prom_dia': average_day,

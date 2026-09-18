@@ -3,82 +3,36 @@
 {% block nav_calidad %}active{% endblock %}
 
 {% block content %}
-<h1 class="page-title">Calidad del Agua</h1>
+<h1 class="page-title">CALIDAD DEL AGUA</h1>
+<p class="page-subtitle calidad-page-subtitle">Consulta los parámetros actuales de calidad y su estado.</p>
 
-<div class="calidad-layout">
-
-  <!-- Visual principal -->
-  <div class="calidad-main card">
-    <div class="water-drop-icon">💧</div>
+<div class="quality-summary-grid">
+  <section class="quality-summary-card card">
+    <div class="quality-summary-heading">
+      <span class="quality-icon"><i class="ti ti-droplet"></i></span>
+      <span class="card-header">Calidad</span>
+    </div>
     <div class="safe-label">{{ calidad.titulo }}</div>
     <div class="stars">
       {% for i in calidad.estrellas_range %}★{% endfor %}
       {% for i in calidad.estrellas_vacias %}☆{% endfor %}
     </div>
     <p class="calidad-desc">{{ calidad.descripcion }}</p>
+    <div class="alert-box full-width"><i class="ti ti-shield-check"></i><p class="alert-text">{{ calidad.anomalias }}</p></div>
+    <div class="quality-analysis"><span>Último análisis</span><strong>{{ calidad.ultimo_analisis }}</strong></div>
+  </section>
 
-    <div class="alert-box full-width">
-      <i class="ti ti-shield-check"></i>
-      <p class="alert-text">{{ calidad.anomalias }}</p>
-    </div>
+  <section class="quality-state-card card"><div class="card-header">Estado general</div><div class="state-row"><span>Calidad</span><span class="badge {% if calidad.estado == 'Buena' %}badge-perfect{% elif calidad.estado == 'Media' %}badge-high{% else %}badge-closed{% endif %}">{{ calidad.estado }}</span></div><div class="state-row"><span>Potabilidad</span><span class="badge {% if calidad.estado == 'Buena' %}badge-normal{% elif calidad.estado == 'Media' %}badge-high{% else %}badge-closed{% endif %}">{% if calidad.estado == 'Mala' %}No apta{% elif calidad.estado == 'Sin datos' %}Sin datos{% else %}Apta{% endif %}</span></div><div class="state-row"><span>Anomalías 30 días</span><span class="badge badge-closed">Sin datos</span></div></section>
+  <section class="quality-sensor-card card"><div class="card-header">Estado del sensor</div><strong>Última actualización</strong><span>{{ calidad.ultimo_analisis }}</span></section>
+</div>
 
-    <div class="card card-bottom-sep">
-      <div class="detail-row no-border">
-        <span>Último análisis</span>
-        <span class="detail-val">{{ calidad.ultimo_analisis }}</span>
-      </div>
-    </div>
-  </div>
-
-  <!-- Detalle lateral -->
-  <div class="calidad-side">
-
-    <div class="card">
-      <div class="card-header">Parámetros del agua</div>
-        <div class="detail-row">
-          <span>TDS</span>
-          <span class="detail-val">{{ calidad.tds }} ppm</span>
-        </div>
-      <div class="detail-row">
-        <span>pH</span>
-        <span class="detail-val">{{ calidad.ph }}</span>
-      </div>
-      <div class="detail-row">
-        <span>Cloro residual</span>
-        <span class="detail-val">{{ calidad.cloro }}</span>
-      </div>
-      <div class="detail-row">
-        <span>Turbidez</span>
-        <span class="detail-val">{{ calidad.turbidez }}</span>
-      </div>
-      <div class="detail-row">
-        <span>Conductividad</span>
-        <span class="detail-val">{{ calidad.conductividad }}</span>
-      </div>
-      <div class="detail-row">
-        <span>Temperatura</span>
-        <span class="detail-val">{{ calidad.temperatura }}</span>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-header">Estado general</div>
-      <div class="card-body-col">
-        <div class="state-row">
-          <span class="state-label">Calidad</span>
-          <span class="badge {% if calidad.estado == 'Buena' %}badge-perfect{% elif calidad.estado == 'Media' %}badge-high{% else %}badge-closed{% endif %}">{{ calidad.estado }}</span>
-        </div>
-        <div class="state-row">
-          <span class="state-label">Potabilidad</span>
-          <span class="badge {% if calidad.estado == 'Mala' %}badge-closed{% else %}badge-normal{% endif %}">{% if calidad.estado == 'Mala' %}No apta{% else %}Apta{% endif %}</span>
-        </div>
-        <div class="state-row">
-          <span class="state-label">Anomalías 30 días</span>
-          <span class="badge badge-normal">0</span>
-        </div>
-      </div>
-    </div>
-
-  </div>
+<h2 class="quality-parameters-title">Parámetros de calidad</h2>
+<div class="quality-parameters-grid">
+  <div class="quality-parameter card"><span class="parameter-icon"><i class="ti ti-droplet"></i></span><span>TDS</span><strong>{{ calidad.tds }} <small>ppm</small></strong><div class="parameter-bar"><i style="width:35%;"></i></div><small>0 ppm <b>1000 ppm</b></small></div>
+  <div class="quality-parameter card"><span class="parameter-icon"><i class="ti ti-chart-dots"></i></span><span>pH</span><strong>{{ calidad.ph }}</strong><div class="parameter-bar"><i style="width:50%;"></i></div><small>0 <b>14</b></small></div>
+  <div class="quality-parameter card"><span class="parameter-icon"><i class="ti ti-flask"></i></span><span>Cloro residual</span><strong>{{ calidad.cloro }} <small>mg/L</small></strong><div class="parameter-bar"><i style="width:35%;"></i></div><small>0 mg/L <b>3 mg/L</b></small></div>
+  <div class="quality-parameter card"><span class="parameter-icon"><i class="ti ti-bubble"></i></span><span>Turbidez</span><strong>{{ calidad.turbidez }} <small>NTU</small></strong><div class="parameter-bar"><i style="width:20%;"></i></div><small>0 NTU <b>10 NTU</b></small></div>
+  <div class="quality-parameter card"><span class="parameter-icon"><i class="ti ti-bolt"></i></span><span>Conductividad</span><strong>{{ calidad.conductividad }} <small>µS/cm</small></strong><div class="parameter-bar"><i style="width:30%;"></i></div><small>0 µS/cm <b>500 µS/cm</b></small></div>
+  <div class="quality-parameter card"><span class="parameter-icon"><i class="ti ti-temperature"></i></span><span>Temperatura</span><strong>{{ calidad.temperatura }} <small>°C</small></strong><div class="parameter-bar"><i style="width:40%;"></i></div><small>0 °C <b>40 °C</b></small></div>
 </div>
 {% endblock %}
