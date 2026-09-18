@@ -1,6 +1,17 @@
 import requests
+import threading
 from django.conf import settings
 from passlib.hash import bcrypt
+
+_thread_state = threading.local()
+
+
+def _http_session() -> requests.Session:
+    session = getattr(_thread_state, 'session', None)
+    if session is None:
+        session = requests.Session()
+        _thread_state.session = session
+    return session
 
 
 def _supabase_url() -> str:
@@ -72,7 +83,7 @@ def insert(table: str, data: dict, return_representation: bool = True) -> dict |
     if return_representation:
         headers['Prefer'] = 'return=representation'
 
-    resp = requests.post(_base_url(table), headers=headers, json=data, timeout=10)
+    resp = _http_session().post(_base_url(table), headers=headers, json=data, timeout=10)
     result = _handle_response(resp)
     if isinstance(result, list) and result:
         return result[0]
@@ -91,7 +102,7 @@ def fetch_latest(table: str, select: str = '*') -> dict | None:
         'order': 'fecha_registro.desc',
         'limit': 1,
     }
-    resp = requests.get(url, headers=_headers(), params=params, timeout=10)
+    resp = _http_session().get(url, headers=_headers(), params=params, timeout=10)
     data = _handle_response(resp)
     return data[0] if isinstance(data, list) and data else None
 
@@ -103,7 +114,7 @@ def select(table: str, select: str = '*', params: dict | None = None) -> list:
     query = {'select': select}
     if params:
         query.update(params)
-    resp = requests.get(url, headers=_headers(), params=query, timeout=10)
+    resp = _http_session().get(url, headers=_headers(), params=query, timeout=10)
     data = _handle_response(resp)
     return data if isinstance(data, list) else []
 
@@ -120,7 +131,7 @@ def update(
     if return_representation:
         headers['Prefer'] = 'return=representation'
 
-    resp = requests.patch(
+    resp = _http_session().patch(
         _base_url(table),
         headers=headers,
         params=params,

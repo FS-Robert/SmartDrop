@@ -203,6 +203,9 @@
     }());
   </script>
 
+  {% if user.is_authenticated %}
+    <script src="{% static 'App/js/sensor_realtime.js' %}"></script>
+  {% endif %}
   {% block extra_js %}{% endblock %}
 </body>
 </html>

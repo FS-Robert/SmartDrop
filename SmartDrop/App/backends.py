@@ -1,9 +1,12 @@
 from django.contrib.auth.backends import BaseBackend
 from django.contrib.auth.hashers import check_password as django_check_password
 from passlib.hash import bcrypt
+import logging
 
 from . import supabase_client
 from .models import Rol, Usuario
+
+logger = logging.getLogger(__name__)
 
 
 def sync_user_from_supabase(row: dict) -> Usuario:
@@ -41,27 +44,34 @@ class SupabaseAuthBackend(BaseBackend):
     """Autentica usuarios consultando la tabla `usuario` en Supabase vía REST API."""
 
     def authenticate(self, request, username=None, password=None, **kwargs):
-        email = kwargs.get('email') or username
+        email = (kwargs.get('email') or username or '').strip().lower()
         if not email or not password:
             return None
 
         row = supabase_client.get_user_by_email(email)
         if not row:
+            logger.warning('Inicio de sesión rechazado: correo no encontrado (%s).', email)
             return None
 
         stored_hash = row.get('contrasena', '')
         if not stored_hash:
+            logger.warning('Inicio de sesión rechazado: usuario sin contraseña (%s).', email)
             return None
 
-        if stored_hash.startswith(('$2b$', '$2a$')):
-            password_valid = bcrypt.verify(password, stored_hash)
-        else:
-            password_valid = django_check_password(password, stored_hash)
+        try:
+            if stored_hash.startswith(('$2b$', '$2a$', '$2y$')):
+                password_valid = bcrypt.verify(password, stored_hash)
+            else:
+                password_valid = django_check_password(password, stored_hash)
+        except (TypeError, ValueError):
+            password_valid = False
 
         if not password_valid:
+            logger.warning('Inicio de sesión rechazado: contraseña incorrecta (%s).', email)
             return None
 
         if not row.get('estado_usuario', True):
+            logger.warning('Inicio de sesión rechazado: usuario inactivo (%s).', email)
             return None
 
         return sync_user_from_supabase(row)

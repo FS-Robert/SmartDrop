@@ -6,6 +6,8 @@ import math
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse, JsonResponse
@@ -25,6 +27,35 @@ logger = logging.getLogger(__name__)
 
 _VALVE_TIMER_REGISTRY = {}
 _VALVE_TIMER_LOCK = threading.Lock()
+
+
+def _broadcast_sensor_reading(reading):
+    try:
+        channel_layer = get_channel_layer()
+        if channel_layer is None:
+            return
+
+        sensor_id = reading.get('id_sensor')
+        if sensor_id is None:
+            return
+
+        payload = {
+            'event': 'sensor_reading',
+            'id_lectura': reading.get('id_lectura'),
+            'id_sensor': sensor_id,
+            'fecha_registro': reading.get('fecha_registro'),
+            'valor': reading.get('valor'),
+        }
+        async_to_sync(channel_layer.group_send)(
+            f'sensor-reading-{sensor_id}',
+            {'type': 'sensor.reading', 'payload': payload},
+        )
+        async_to_sync(channel_layer.group_send)(
+            'sensor-readings-admin',
+            {'type': 'sensor.reading', 'payload': payload},
+        )
+    except Exception:
+        logger.exception('No se pudo emitir la lectura en tiempo real.')
 
 
 def _parse_duracion_seg(request):
@@ -163,24 +194,35 @@ def _owned_sensor_data(request):
     if not vivienda_ids:
         return viviendas, [], [], []
 
-    lecturas = supabase_client.select(
-        'lectura',
-        '*',
-        {
-            'id_vivienda': f"in.({','.join(vivienda_ids)})",
-            'order': 'fecha_registro.desc',
-            'limit': '2000',
-        },
-    )
-    sensores = supabase_client.select('sensor', '*', {'limit': '1000'})
-    try:
-        tanques = supabase_client.select(
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        lecturas_future = executor.submit(
+            supabase_client.select,
+            'lectura',
+            '*',
+            {
+                'id_vivienda': f"in.({','.join(vivienda_ids)})",
+                'order': 'fecha_registro.desc',
+                'limit': '2000',
+            },
+        )
+        sensores_future = executor.submit(
+            supabase_client.select,
+            'sensor',
+            '*',
+            {'limit': '1000'},
+        )
+        tanques_future = executor.submit(
+            supabase_client.select,
             'tanque',
             'id_sensor_nivel,capacidad_maxima_litros,altura_total',
             {'limit': '1000'},
         )
-    except Exception:
-        tanques = []
+        lecturas = lecturas_future.result()
+        sensores = sensores_future.result()
+        try:
+            tanques = tanques_future.result()
+        except Exception:
+            tanques = []
     sensor_lookup = {str(sensor.get('id_sensor')): sensor for sensor in sensores}
     for lectura in lecturas:
         sensor = sensor_lookup.get(str(lectura.get('id_sensor')), {})
@@ -189,13 +231,14 @@ def _owned_sensor_data(request):
     return viviendas, sensores, lecturas, tanques
 
 
-def _owned_consumption(request):
+def _owned_consumption(request, viviendas=None):
     propietario_id = getattr(request.user, 'supabase_id', None) or request.user.id_usuario
-    viviendas = supabase_client.select(
-        'vivienda',
-        'id_vivienda,nic,direccion',
-        {'id_usuario_propietario': f'eq.{propietario_id}', 'limit': '1000'},
-    )
+    if viviendas is None:
+        viviendas = supabase_client.select(
+            'vivienda',
+            'id_vivienda,nic,direccion',
+            {'id_usuario_propietario': f'eq.{propietario_id}', 'limit': '1000'},
+        )
     vivienda_ids = [str(row['id_vivienda']) for row in viviendas if row.get('id_vivienda')]
     if not vivienda_ids:
         return viviendas, []
@@ -494,7 +537,7 @@ def dashboard(request):
 
     try:
         viviendas, sensores, lecturas, tanques = _owned_sensor_data(request)
-        _, consumption_rows = _owned_consumption(request)
+        _, consumption_rows = _owned_consumption(request, viviendas)
     except Exception:
         viviendas, sensores, lecturas, tanques, consumption_rows = [], [], [], [], []
     latest = _latest_readings_by_type(lecturas)
@@ -556,6 +599,7 @@ def dashboard(request):
             'temperatura':   f"{_safe_float(_find_reading(latest, 'temper').get('valor')) if _find_reading(latest, 'temper') else 0}°C",
         },
         'viviendas': viviendas,
+        'realtime_readings': list(latest.values()),
         'ultima_actualizacion': 'hace unos segundos',
     }
     return render(request, 'App/dashboard.html', context)
@@ -1569,6 +1613,7 @@ def api_lectura(request):
     }
     try:
         row = supabase_client.insert('lectura', payload)
+        _broadcast_sensor_reading(row or payload)
     except Exception:
         logger.exception('Error al guardar lectura IoT en Supabase')
         return JsonResponse(

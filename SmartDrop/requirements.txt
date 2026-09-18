@@ -1,4 +1,9 @@
 Django==5.2.7
+channels==4.2.2
+channels-redis==4.2.1
+daphne==4.2.1
+djangorestframework==3.16.1
+djangorestframework-simplejwt==5.5.1
 python-dotenv==1.2.3
 requests==2.34.2
 paho-mqtt==2.1.0

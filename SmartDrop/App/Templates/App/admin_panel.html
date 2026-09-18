@@ -81,7 +81,7 @@
         </thead>
         <tbody>
         {% for row in lecturas|slice:":100" %}
-          <tr>
+          <tr data-realtime-sensor="{{ row.id_sensor }}">
             <td>{{ forloop.counter }}</td>
             <td>
               <span style="display:inline-flex;align-items:center;gap:8px;">
@@ -93,13 +93,13 @@
               </span>
             </td>
             <td>{{ row.id_vivienda }}</td>
-            <td style="font-weight:800">
+            <td class="realtime-reading-value" style="font-weight:800">
               {{ row.valor }}
               {% if row.sensor_unidad %}
                 <small style="color:#6f6f7a;margin-left:8px;font-weight:600">{{ row.sensor_unidad }}</small>
               {% endif %}
             </td>
-            <td>{{ row.fecha_registro }}</td>
+            <td class="realtime-reading-time">{{ row.fecha_registro }}</td>
           </tr>
         {% endfor %}
         </tbody>
@@ -141,4 +141,21 @@
   </aside>
 </div>
 
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  window.addEventListener('smartdrop:sensor-reading', function (event) {
+    const reading = event.detail;
+    const rows = document.querySelectorAll(
+      `[data-realtime-sensor="${CSS.escape(String(reading.id_sensor))}"]`,
+    );
+    rows.forEach(function (row) {
+      const value = row.querySelector('.realtime-reading-value');
+      const time = row.querySelector('.realtime-reading-time');
+      if (value) value.childNodes[0].textContent = `${reading.valor} `;
+      if (time) time.textContent = reading.fecha_registro || 'Ahora';
+    });
+  });
+</script>
 {% endblock %}

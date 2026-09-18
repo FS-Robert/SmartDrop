@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 import os
 from pathlib import Path
+from datetime import timedelta
 
 from django.core.exceptions import ImproperlyConfigured
 
@@ -54,6 +55,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'channels',
+    'rest_framework',
     'App',
 ]
 
@@ -85,6 +88,17 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'SmartDrop.wsgi.application'
+ASGI_APPLICATION = 'SmartDrop.asgi.application'
+
+REDIS_URL = os.environ.get('REDIS_URL', '').strip()
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {'hosts': [REDIS_URL]},
+    } if REDIS_URL and not DEBUG else {
+        'BACKEND': 'channels.layers.InMemoryChannelLayer',
+    },
+}
 
 
 # Database: usar SQLite para el backend de Django.
@@ -143,6 +157,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = '/static/'
+STATICFILES_DIRS = [BASE_DIR / 'App' / 'Static']
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
@@ -158,3 +173,14 @@ MQTT_BROKER_PORT = os.environ.get('MQTT_BROKER_PORT', '8883')
 MQTT_USERNAME = os.environ.get('MQTT_USERNAME', '')
 MQTT_PASSWORD = os.environ.get('MQTT_PASSWORD', '')
 MQTT_CA_CERT = os.environ.get('MQTT_CA_CERT', '')
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'App.api.authentication.SupabaseJWTAuthentication',
+    ),
+}
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+}

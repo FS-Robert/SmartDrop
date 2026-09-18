@@ -78,6 +78,7 @@
 
       const pointsInfo = document.getElementById('pointsInfo');
       const compareSelect = document.getElementById('compare-sensor');
+      let currentRange = '1d';
 
       function formatShort(labels){
         return labels.map(l=>{
@@ -89,6 +90,7 @@
 
       async function loadRange(range){
         try{
+          currentRange = range;
           // highlight active
           document.querySelectorAll('.range-btn').forEach(b=>b.classList.remove('active'));
           const btn = document.querySelector('.range-btn[data-range="'+range+'"]');
@@ -127,6 +129,27 @@
         b.addEventListener('click', ()=>{ loadRange(b.dataset.range); });
       });
       compareSelect.addEventListener('change', () => loadRange('1d'));
+
+      window.addEventListener('smartdrop:sensor-reading', function (event) {
+        const reading = event.detail;
+        if (String(reading.id_sensor) !== String(sensorId)) return;
+
+        const timestamp = reading.fecha_registro || new Date().toISOString();
+        const date = new Date(timestamp);
+        const now = Date.now();
+        const age = now - date.getTime();
+        const limits = { '1h': 3600000, '1d': 86400000, '1w': 604800000, '1m': 2592000000 };
+        if (Number.isFinite(age) && age > (limits[currentRange] || limits['1d'])) return;
+
+        chart.data.labels.push(formatShort([timestamp])[0]);
+        chart.data.datasets[0].data.push(reading.valor);
+        if (chart.data.labels.length > 200) {
+          chart.data.labels.shift();
+          chart.data.datasets[0].data.shift();
+        }
+        chart.update('none');
+        if (pointsInfo) pointsInfo.textContent = `Mostrando ${chart.data.datasets[0].data.length} puntos`;
+      });
 
       // load default range
       loadRange('1d');
