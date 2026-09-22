@@ -73,6 +73,9 @@
         <a href="{% url 'valvulas' %}" class="nav-item {% block nav_valvulas %}{% endblock %}">
           <i class="ti ti-toggle-left"></i> Electroválvulas
         </a>
+        <a href="{% url 'ml_engine:dashboard' %}" class="nav-item {% block nav_ml %}{% endblock %}">
+          <i class="ti ti-brain"></i> Predicción Suministro
+        </a>
       {% else %}
         <!-- Usuario normal: menú completo -->
         <span class="nav-section-label">Estado del agua</span>

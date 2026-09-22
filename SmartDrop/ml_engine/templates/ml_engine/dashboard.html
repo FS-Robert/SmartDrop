@@ -1,0 +1,55 @@
+{% extends 'App/base.html' %}
+{% block title %}Predicción ML{% endblock %}
+{% block nav_ml %}active{% endblock %}
+
+{% block extra_css %}
+  <style>
+    .metric-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(200px,1fr)); gap:12px; margin-bottom:16px; }
+    .metric { background:#fff; border-radius:12px; padding:12px; border:1px solid #efe5fb; }
+    .metric .label { font-size:12px; color:#6f6f7a; font-weight:800; text-transform:uppercase }
+    .metric .val { font-size:22px; font-weight:900; color:#2d1a4a }
+    .zone-card { background:#fff; border-radius:12px; padding:16px; border:1px solid #efe5fb; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center; gap:16px; text-decoration:none; color:inherit }
+    .zone-card:hover { box-shadow: 0 6px 18px rgba(43,20,60,0.08); }
+    .riesgo-badge { padding:4px 10px; border-radius:999px; font-size:12px; font-weight:800; text-transform:uppercase }
+    .riesgo-bajo { background:#e6f7ee; color:#1a7a4c }
+    .riesgo-medio { background:#fff4e0; color:#a86a00 }
+    .riesgo-alto { background:#fdeaea; color:#b3261e }
+    .riesgo-sin_datos { background:#f0ecf7; color:#6f6f7a }
+  </style>
+{% endblock %}
+
+{% block content %}
+<h1 class="page-title">PREDICCIÓN Y SIMULACIÓN</h1>
+
+<div id="zonas-container">
+  {% for zona in zonas %}
+    <a class="zone-card" href="{% url 'ml_engine:zone_detail' zona.id %}">
+      <div>
+        <div style="font-weight:800; font-size:16px;">{{ zona.name }}</div>
+        <div style="color:#6f6f7a; font-size:13px;">{{ zona.homes.count }} hogares · Capacidad {{ zona.capacidad_maxima_litros|floatformat:0 }}L</div>
+      </div>
+      <div style="text-align:right;">
+        <div class="riesgo-badge riesgo-sin_datos" data-zone-id="{{ zona.id }}" id="badge-{{ zona.id }}">Cargando…</div>
+        <div style="font-size:12px; color:#6f6f7a; margin-top:6px;" id="nivel-{{ zona.id }}"></div>
+      </div>
+    </a>
+  {% empty %}
+    <p>No hay zonas todavía. Corre <code>python manage.py ml_generate_synthetic_data</code> para crear datos sintéticos.</p>
+  {% endfor %}
+</div>
+
+<script>
+document.querySelectorAll('[data-zone-id]').forEach(async (badge) => {
+  const zoneId = badge.dataset.zoneId;
+  try {
+    const resp = await fetch(`/v1/ml/zones/${zoneId}/current-status/`, {credentials: 'same-origin'});
+    if (!resp.ok) return;
+    const data = await resp.json();
+    badge.textContent = (data.alert_state || 'sin_datos').toUpperCase();
+    badge.className = `riesgo-badge riesgo-${data.alert_state}`;
+    document.getElementById(`nivel-${zoneId}`).textContent =
+      `${data.porcentaje_llenado}% (${Math.round(data.nivel_actual_litros)}L)`;
+  } catch (e) { /* silencioso: dashboard sigue usable sin JS */ }
+});
+</script>
+{% endblock %}

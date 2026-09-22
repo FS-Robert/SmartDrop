@@ -10,5 +10,12 @@ paho-mqtt==2.1.0
 passlib==1.7.4
 bcrypt==4.0.1
 
+# ml_engine: Fase 1 - simulación, forecasting y detección de anomalías
+numpy==2.1.3
+pandas==2.2.3
+scikit-learn==1.5.2
+lightgbm==4.5.0
+joblib==1.4.2
+shap==0.46.0
 
 

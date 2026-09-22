@@ -32,6 +32,7 @@ def sync_user_from_supabase(row: dict) -> Usuario:
             'apellido': row.get('apellido', ''),
             'rol': rol,
             'is_active': row.get('estado_usuario', True),
+            'is_staff': rol_id == 2,
         },
     )
     # La contraseña ya viene hasheada desde Supabase; no usar set_password.

@@ -16,14 +16,13 @@ Including another URLconf
 """
 from django.conf import settings
 from django.conf.urls.static import static
-from django.contrib import admin
 from django.urls import include, path
 from pathlib import Path
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
     path('', include('App.urls')),
     path('', include('App.api.urls')),
+    path('', include('ml_engine.urls')),
 ]
 
 if settings.DEBUG:

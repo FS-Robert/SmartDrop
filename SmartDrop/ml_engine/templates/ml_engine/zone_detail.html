@@ -1,0 +1,123 @@
+{% extends 'App/base.html' %}
+{% block title %}{{ zone.name }} — Predicción{% endblock %}
+{% block nav_ml %}active{% endblock %}
+
+{% block extra_css %}
+  <style>
+    .chart-wrap { background:#fff; padding:12px; border-radius:12px; border:1px solid #efe5fb; margin-bottom:16px; }
+    .table-styled { width:100%; border-collapse:collapse; margin-top:12px; }
+    .table-styled th, .table-styled td { padding:8px 10px; border-bottom:1px solid #f0ecf7; font-size:13px; }
+    .table-styled th { text-align:left; color:#6B21A8; font-weight:800; }
+    .shortage-banner { padding:12px 16px; border-radius:10px; margin-bottom:16px; font-weight:700; }
+    .shortage-alto { background:#fdeaea; color:#b3261e }
+    .shortage-medio { background:#fff4e0; color:#a86a00 }
+    .shortage-bajo { background:#e6f7ee; color:#1a7a4c }
+  </style>
+{% endblock %}
+
+{% block content %}
+<h1 class="page-title">{{ zone.name }}</h1>
+<a href="{% url 'ml_engine:dashboard' %}">&larr; Volver a zonas</a>
+
+<div id="shortage-banner"></div>
+
+<div class="chart-wrap">
+  <h3>Trayectoria simulada de tanque (Monte Carlo p10/p50/p90)</h3>
+  <canvas id="tankChart" height="90"></canvas>
+</div>
+
+<div class="chart-wrap">
+  <h3>Anomalías recientes (fugas / rupturas)</h3>
+  <table class="table-styled" id="anomaly-table">
+    <thead><tr><th>Fecha</th><th>Hogar</th><th>Métrica</th><th>Severidad</th><th>Score</th></tr></thead>
+    <tbody><tr><td colspan="5">Cargando…</td></tr></tbody>
+  </table>
+</div>
+
+<div class="chart-wrap">
+  <h3>Hogares en esta zona</h3>
+  <table class="table-styled">
+    <thead><tr><th>Etiqueta</th><th>Arquetipo</th><th>Ocupantes</th><th>Pronóstico p50 (próxima hora)</th></tr></thead>
+    <tbody>
+      {% for home in homes %}
+        <tr>
+          <td>{{ home.etiqueta }}</td>
+          <td>{{ home.get_archetype_display }}</td>
+          <td>{{ home.ocupantes }}</td>
+          <td id="forecast-{{ home.id }}" data-home-id="{{ home.id }}">…</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+const zoneId = {{ zone.id }};
+
+(async function loadTrajectory() {
+  const resp = await fetch(`/v1/ml/zones/${zoneId}/tank-trajectory/`, {credentials: 'same-origin'});
+  if (!resp.ok) return;
+  const data = await resp.json();
+  const labels = data.trajectory.map(p => new Date(p.target_ts).toLocaleString());
+  const ctx = document.getElementById('tankChart').getContext('2d');
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {label: 'p90', data: data.trajectory.map(p => p.p90_litros), borderColor: '#9b7bd8', borderDash: [4,4], pointRadius: 0},
+        {label: 'p50 (mediana)', data: data.trajectory.map(p => p.p50_litros), borderColor: '#6B21A8', pointRadius: 0},
+        {label: 'p10', data: data.trajectory.map(p => p.p10_litros), borderColor: '#9b7bd8', borderDash: [4,4], pointRadius: 0},
+      ],
+    },
+    options: {responsive: true, plugins: {legend: {position: 'bottom'}}},
+  });
+})();
+
+(async function loadShortage() {
+  const resp = await fetch(`/v1/ml/zones/${zoneId}/shortage-prediction/`, {credentials: 'same-origin'});
+  if (!resp.ok) return;
+  const data = await resp.json();
+  const banner = document.getElementById('shortage-banner');
+  const pred = data.shortage_prediction;
+  if (!pred) {
+    banner.className = 'shortage-banner shortage-bajo';
+    banner.textContent = 'Sin predicción de desabasto dentro del horizonte configurado.';
+    return;
+  }
+  banner.className = `shortage-banner shortage-${pred.nivel_riesgo}`;
+  banner.textContent = `Riesgo ${pred.nivel_riesgo.toUpperCase()}: mediana de ${Math.round(pred.median_hours_to_shortage)}h hasta nivel crítico ` +
+    `(p10-p90: ${Math.round(pred.p10_hours_to_shortage)}-${Math.round(pred.p90_hours_to_shortage)}h), ` +
+    `probabilidad dentro del horizonte de ${pred.horizonte_horas}h: ${(pred.probabilidad_desabasto_horizonte * 100).toFixed(0)}%.`;
+})();
+
+(async function loadAnomalies() {
+  const resp = await fetch(`/v1/ml/zones/${zoneId}/anomalies/`, {credentials: 'same-origin'});
+  if (!resp.ok) return;
+  const data = await resp.json();
+  const tbody = document.querySelector('#anomaly-table tbody');
+  tbody.innerHTML = '';
+  if (!data.anomalies.length) {
+    tbody.innerHTML = '<tr><td colspan="5">Sin anomalías recientes.</td></tr>';
+    return;
+  }
+  data.anomalies.forEach(a => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${new Date(a.ts).toLocaleString()}</td><td>${a.home_id ?? '—'}</td><td>${a.metric}</td><td>${a.severity}</td><td>${a.score.toFixed(3)}</td>`;
+    tbody.appendChild(tr);
+  });
+})();
+
+document.querySelectorAll('[data-home-id]').forEach(async (cell) => {
+  const homeId = cell.dataset.homeId;
+  try {
+    const resp = await fetch(`/v1/ml/homes/${homeId}/consumption-forecast/`, {credentials: 'same-origin'});
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const latest = data.forecasts[0];
+    cell.textContent = latest ? `${latest.p50.toFixed(1)}L (${latest.p10.toFixed(1)}–${latest.p90.toFixed(1)})` : 'Sin datos';
+  } catch (e) { cell.textContent = 'Error'; }
+});
+</script>
+{% endblock %}

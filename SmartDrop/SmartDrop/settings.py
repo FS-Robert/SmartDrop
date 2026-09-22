@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     'channels',
     'rest_framework',
     'App',
+    'ml_engine',
 ]
 
 MIDDLEWARE = [
@@ -111,6 +112,29 @@ DATABASES = {
         'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
+
+# Alias de DB dedicado para ml_engine (series temporales sintéticas/reales).
+# Por defecto usa el mismo SQLite (permite generar datos y entrenar 100%
+# local, sin infraestructura extra). Para pasar a Postgres/Supabase con
+# pg_partman, define ML_TIMESERIES_DB_HOST (y el resto de ML_TIMESERIES_DB_*)
+# en el .env — no hace falta tocar código, ver ml_engine/routers.py.
+_ml_db_host = os.environ.get('ML_TIMESERIES_DB_HOST', '').strip()
+if _ml_db_host:
+    DATABASES['timeseries'] = {
+        'ENGINE': 'django.db.backends.postgresql',
+        'HOST': _ml_db_host,
+        'PORT': os.environ.get('ML_TIMESERIES_DB_PORT', '5432'),
+        'NAME': os.environ.get('ML_TIMESERIES_DB_NAME', 'postgres'),
+        'USER': os.environ.get('ML_TIMESERIES_DB_USER', 'postgres'),
+        'PASSWORD': os.environ.get('ML_TIMESERIES_DB_PASSWORD', ''),
+    }
+else:
+    DATABASES['timeseries'] = {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'ml_timeseries.sqlite3',
+    }
+
+DATABASE_ROUTERS = ['ml_engine.routers.MlEngineRouter']
 
 AUTH_USER_MODEL = 'App.Usuario'
 AUTHENTICATION_BACKENDS = [
