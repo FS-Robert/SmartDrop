@@ -31,10 +31,6 @@
 
   <!-- ── Topbar ── -->
   <header class="topbar">
-    <div class="topbar-left">
-      <i class="ti ti-menu-2" style="font-size:22px;"></i>
-      <span class="topbar-title">SmartDrop</span>
-    </div>
     <div class="topbar-right">
       {% if user.is_authenticated %}
         <form class="global-search" method="get" action="{% url 'busqueda_global' %}">
@@ -78,7 +74,7 @@
         </a>
       {% else %}
         <!-- Usuario normal: menú completo -->
-        <span class="nav-section-label">Estado del agua</span>
+        <span class="nav-section-label">Principal</span>
         <a href="{% url 'dashboard' %}"          class="nav-item {% block nav_dashboard %}{% endblock %}">
           <i class="ti ti-home"></i> Inicio
         </a>
@@ -95,15 +91,18 @@
         <a href="{% url 'tanque' %}"             class="nav-item {% block nav_tanque %}{% endblock %}">
           <i class="ti ti-building-warehouse"></i> Tanque
         </a>
+        <span class="nav-section-label">Análisis</span>
         <a href="{% url 'consumo' %}"            class="nav-item {% block nav_consumo %}{% endblock %}">
           <i class="ti ti-chart-bar"></i> Consumo
         </a>
         <a href="{% url 'retroalimentacion' %}"  class="nav-item {% block nav_retro %}{% endblock %}">
           <i class="ti ti-refresh"></i> Retroalimentación
         </a>
+        <span class="nav-section-label">Consejos</span>
         <a href="{% url 'recomendaciones' %}"    class="nav-item {% block nav_reco %}{% endblock %}">
           <i class="ti ti-bulb"></i> Recomendaciones
         </a>
+        <span class="nav-section-label">Cuenta</span>
         <div class="nav-spacer"></div>
         <a href="{% url 'usuario' %}"            class="nav-item {% block nav_usuario %}{% endblock %}">
           <i class="ti ti-user"></i> Mi perfil

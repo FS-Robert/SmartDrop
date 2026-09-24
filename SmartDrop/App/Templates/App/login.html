@@ -6,13 +6,15 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>SmartDrop — Iniciar sesión</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css"/>
-   <link rel="preconnect" href="https://fonts.googleapis.com">
-   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{% static 'App/css/dashboard.css' %}"/>
 </head>
+
 <body>
   <main class="auth-panel">
+    <div class="auth-bg" id="auth-bg" data-bg="{% static 'App/img/fondo1.jpg' %}"></div>
     <div class="auth-card">
       <h1>Bienvenido a SmartDrop</h1>
       <p>Inicia sesión para continuar</p>
@@ -32,8 +34,15 @@
 
         <button type="submit" class="btn-primary">Iniciar sesión</button>
       </form>
-      <p class="auth-footer">¿No tienes cuenta? <a href="{% url 'register' %}">Regístrate</a></p>
+      <p class="auth-footer">¿No tienes una cuenta? <a href="{% url 'register' %}">Regístrate</a></p>
     </div>
   </main>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      var bg = document.getElementById('auth-bg');
+      bg.style.backgroundImage = "url('" + bg.dataset.bg + "')";
+    });
+  </script>
 </body>
 </html>
