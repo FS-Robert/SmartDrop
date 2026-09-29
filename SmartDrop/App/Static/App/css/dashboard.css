@@ -228,8 +228,8 @@ h1, h2, h3, h4, h5, h6,
 .card-sub { font-size: 11px; color: #777; font-weight: 600; }
 
 .badge {
-  display: inline-block; font-size: 11px; font-weight: 700;
-  padding: 4px 10px; border-radius: 20px;
+  display: inline-block; font-size: 11px; font-weight: 800;
+ padding-top:1rem; padding-right:0.6rem; border-radius: 20px; color:#6B21A8;
 }
 .badge-normal  { background: #e1f5ee; color: #0F6E56; }
 .badge-perfect { background: #e6f1fb; color: #185FA5; }
@@ -424,8 +424,8 @@ body.dark-mode .detail-row { color: #e0e0e0 !important; }
 #historial-list > div span:first-child { color:#6f6f7a; }
 #historial-list > div span:last-child { color:#2d1a4a; font-weight:800; }
 
-.detail-row { display:flex; justify-content:space-between; padding:6px 0; border-top:1px solid #f6f0fb; }
-.detail-val { font-weight:800; color:#2d1a4a; }
+.detail-row { display:flex; justify-content:space-between; padding:6px 0; border-top:1px solid #f6f0fb; gap: 8px; align-items: center;}
+.detail-val { font-weight:700; color:#2d1a4a; }
 
 /* Small screens: stack */
 @media (max-width: 900px) {
@@ -708,23 +708,31 @@ body.dark-mode .detail-row { color: #e0e0e0 !important; }
 }
 
 /* ===== Presion page styles ===== */
-.presion-heading { margin-bottom:1.25rem; }
-.presion-heading .page-title { text-align:left; margin-bottom:0.3rem; font-size:1.65rem; }
-.presion-heading .page-subtitle { text-align:left; margin:0; font-size:0.82rem; }
-.presion-layout { display:grid; grid-template-columns:minmax(0,1.8fr) minmax(280px,1fr); gap:1rem; align-items:start; }
-.presion-main { min-height:360px; padding:1.2rem; }
+.presion-heading { max-width:1200px; margin:0 auto; }
+.presion-heading .page-title { text-align:left; font-size:50px; font-weight:800; margin-top: 1rem; margin-bottom: 3rem; padding-top: 1rem; }
+.presion-heading .page-subtitle { text-align:left; font-size: 1.05rem; margin: 0 0 2rem 0; }
+.presion-layout { display:grid; grid-template-columns:minmax(0,1.8fr) minmax(280px,1fr); gap:1rem; align-items:start; grid-template-rows: auto auto; }
+.presion-main { min-height:360px; padding:1.2rem; grid-column: 1; grid-row: 1 / span 2; height: 100%; }
+.presion-main i { color:#6b21a8; font-size:23px; background: #f5f0ff; border-radius: 12px; display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; }
 .presion-main .valve-row { margin-bottom:0.4rem; }
-.presion-side { display:flex; flex-direction:column; gap:0.75rem; }
+.presion-main .card {position: relative;}
+.presion-main .card-label { font-size: 15px; font-weight: 700; color: #666; text-transform: uppercase; letter-spacing: 0.6px; display: flex;
+  align-items: center; gap: 8px; }
+.presion-side { display:grid; flex-direction:column; gap:1.25rem;  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
 .presion-side .card { padding:1rem; border-radius:12px; }
-.presion-card-title { color:#2d1a4a; font-family:var(--font-heading); font-size:1rem; font-weight:800; margin-bottom:0.8rem; text-transform:uppercase; }
-.presion-range-block { margin-top:1rem; }
-.presion-note-text { color:#555; font-size:0.88rem; font-weight:500; line-height:1.45; margin:0; }
-.presion-main .gauge-wrap { min-height:250px; }
+.presion-card-title { font-size: 15px; font-weight: 700; color: #666; margin-bottom:6px; text-transform:uppercase; letter-spacing:0.6px; display: flex; align-items: center; gap: 8px; }
+.presion-range-block { min-height:min-content; padding:1.2rem; grid-column: 2; grid-row: 1; }
+.pressure-note { min-height:min-content; padding:1.2rem; }
+.pressure-info { min-height:min-content; padding:1.2rem; }
+.presion-note-text { margin: 0; color: #222; line-height: 1.7; font-size: 1rem; text-align: justify; }
+.pressure-summary { min-height:min-content; padding:1.2rem; grid-column: 2; grid-row: 2; }
+.presion-main .gauge-wrap { display: flex; flex-direction: column; align-items: center; justify-content: center; }
 .presion-main .gauge-svg { width:260px; }
 .presion-main .gauge-value-text { margin-top:0.2rem; }
 .presion-main .gauge-num { font-size:2.5rem; }
 .presion-main .gauge-unit { font-size:1rem; }
-.presion-main .current-pressure { margin-top:0.8rem; }
+.presion-main .current-pressure { margin-top:0.5rem; }
+.pressure-details { display:flex; flex-direction:column; gap:0.5rem; margin-top:0.8rem; }
 
 /* ===== Electroválvulas page styles ===== */
 .valves-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:1rem; }
@@ -745,25 +753,25 @@ body.dark-mode .detail-row { color: #e0e0e0 !important; }
 .empty-state { text-align:center; color:#666; }
 .empty-state i { color:#6b21a8; font-size:32px; }
 .empty-state h2 { color:#2d1a4a; font-size:18px; margin:8px 0; }
-.valve-row { display:flex; align-items:center; gap:12px; font-weight:800; color:#2d1a4a; margin-bottom:8px; }
-.valve-label { font-weight:800; }
-.valve-badge { font-size:13px; padding:6px 12px; }
+.valve-row { display:flex; align-items:center; gap:12px; font-weight:800; color:#222; margin-bottom:4px; margin-top:4px; }
+.valve-label { font-weight:bold; font-size: 21px; padding-top: 0.9rem; }
+.valve-badge { font-size:15px; padding-top:0.9rem; padding-right:0.6rem; }
 
-.gauge-wrap { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:10px 0; }
-.gauge-svg { width:220px; height:auto; }
+.gauge-wrap { display:flex; flex-direction:column; align-items:center; justify-content:center; padding-top:6px; margin-top: -40px; margin-bottom: 10px; }
+.gauge-svg { width:220px; height: 220px; overflow: visible; }
 .gauge-value-text { display:flex; gap:8px; align-items:baseline; margin-top:6px; }
 .gauge-num { font-size:34px; font-weight:900; color:#6B21A8; }
 .gauge-unit { color:#6f6f7a; font-weight:700; }
 
-.current-pressure { display:flex; gap:12px; align-items:center; margin-top:10px; }
-.pressure-badge { font-size:13px; padding:8px 14px; }
-.update-chip { background:#f7f3fb; border:1px solid #efe6fb; padding:6px 10px; border-radius:8px; color:#6B21A8; font-weight:700; }
-
-.presion-range-label { font-size:12px; font-weight:700; color:#888; margin-bottom:6px; text-transform:uppercase; letter-spacing:0.5px; }
+.current-pressure { display:flex; gap:12px; align-items:center; margin-top:4px; }
+.pressure-badge { display: inline-block; font-size:11px; padding-top:1rem; padding-right:0.6rem; font-weight: 800; color:#6B21A8 }
+.update-chip { background:#f5f0ff; border:1px solid #efe6fb; padding:6px 10px; border-radius:8px; color:#6b21a8; font-weight:700; max-width:max-content; font-size:12px; gap: 3px; display: flex; align-items: center; }
+.update-chip i { font-size:22px; }
+.presion-range-label { font-size: 15px; font-weight: 700; color: #666; margin-bottom:6px; text-transform:uppercase; letter-spacing:0.6px; display: flex; align-items: center; gap: 8px; }
 .presion-bar-wrap { position:relative; background:#f7f3fb; height:12px; border-radius:12px; overflow:hidden; }
 .presion-bar { position:absolute; left:0; top:0; bottom:0; right:0; background:linear-gradient(90deg,#7c3aed,#a78df0); opacity:0.95; }
 .presion-bar-needle { position:absolute; top:-6px; width:3px; height:24px; background:#2d1a4a; border-radius:2px; transform:translateX(-50%); box-shadow:0 2px 8px rgba(45,26,74,0.12); }
-.presion-bar-labels { display:flex; justify-content:space-between; font-size:12px; color:#666; margin-top:8px; }
+.presion-bar-labels { display:flex; justify-content:space-between; font-size:12px; color:#222; margin-top:5px; margin-bottom: 4px; }
 
 .presion-main .gauge-value-text .gauge-num { font-size:32px; }
 
@@ -784,7 +792,7 @@ body.dark-mode .detail-row { color: #e0e0e0 !important; }
 .usuario-layout { display:grid; grid-template-columns: 1fr 360px; gap:1rem; align-items:start; }
 .usuario-profile { position:relative; padding:1.5rem; border-radius:18px; background:linear-gradient(180deg,#fff,#f7f3ff); box-shadow:0 20px 50px rgba(70,20,140,0.06); }
 .profile-avatar { width:60px; height:60px; border-radius:16px; background:#eef1ff; display:flex; align-items:center; justify-content:center; margin-bottom:18px; }
-.profile-avatar i { font-size:24px; color:#7c3aed; }
+.profile-avatar i { font-size:24px; color:#efefef; }
 .profile-name { font-size:20px; font-weight:800; color:#2d1a4a; margin-bottom:6px; }
 .profile-address { color:#5b5b6f; font-size:14px; line-height:1.6; margin-bottom:12px; }
 .location-chip { display:inline-flex; align-items:center; gap:8px; padding:8px 12px; background:#f7f3fb; border-radius:999px; border:1px solid #e8e0f7; color:#4f3d8e; font-weight:700; font-size:13px; }
@@ -851,9 +859,8 @@ body.dark-mode .detail-row { color: #e0e0e0 !important; }
 .content .page-title { text-align:left; font-size:1.8rem; margin-bottom:0.35rem; }
 .content .page-subtitle { text-align:left; font-size:0.9rem; margin-top:0; margin-bottom:1.9rem; }
 .dashboard-heading .page-title { text-align:left; font-size:2.75rem; }
-.system-dashboard .page-title { text-align:left; font-size:1.8rem; }
-.system-dashboard .page-subtitle { text-align:left; }
-.presion-heading .page-title { font-size:1.8rem; }
+.system-dashboard .page-title { text-align:left; font-size:50px; font-weight:800; margin-top: 1rem; margin-bottom: 3rem; padding-top: 1rem; }
+.system-dashboard .page-subtitle { text-align:left; font-size: 1.05rem; margin: 0 0 2rem 0;}
 .calidad-page-subtitle { text-align:left; }
 
 @media (max-width:1000px) {
@@ -913,12 +920,12 @@ body.dark-mode .detail-row { color: #e0e0e0 !important; }
 .exact-overview .toggle-text { font-size:0.95rem; color:#171717; }
 .exact-overview .toggle-checkbox { width:18px; height:18px; }
 .update-overview { flex-direction:column; gap:0.35rem; }
-.system-dashboard { max-width:1120px; margin:0 auto; }
+.system-dashboard { max-width:1200px; margin:0 auto; }
 .system-dashboard .page-title { margin-bottom:0.35rem; font-size:1.65rem; }
 .system-dashboard .page-subtitle { margin-bottom:1.9rem; font-size:0.85rem; }
-.system-dashboard-top { display:grid; grid-template-columns:1.15fr 0.85fr; gap:1.25rem; align-items:stretch; }
+.system-dashboard-top { display:grid; grid-template-columns:1.15fr 0.85fr; gap:1.25rem; min-height: 250px; align-items:stretch; margin-bottom:3rem; margin-top:2rem; }
 .system-status-panel, .system-info-card, .system-notification-card { background:var(--panel); border:1px solid var(--border); border-radius:12px; }
-.system-status-panel { display:flex; align-items:center; gap:1.25rem; min-height:190px; padding:1.35rem 1.45rem; }
+.system-status-panel { display:flex; flex-direction: column; align-items:center; text-align: center; gap:1.25rem; min-height:190px; padding:1.35rem 1.45rem; }
 .system-status-icon { display:flex; align-items:center; justify-content:center; flex:0 0 62px; width:62px; height:62px; border-radius:10px; }
 .system-status-icon i { font-size:30px; }
 .system-status-icon.is-open { background:#e1f5ee; color:#0f6e56; }
@@ -926,16 +933,24 @@ body.dark-mode .detail-row { color: #e0e0e0 !important; }
 .system-status-copy { display:flex; flex-direction:column; gap:0.35rem; }
 .system-status-value { color:var(--text); font-family:var(--font-heading); font-size:1.5rem; font-weight:800; }
 .system-status-updated { color:var(--muted); font-size:0.78rem; font-weight:600; margin:0.7rem 0 0; }
-.system-info-card { display:flex; align-items:flex-start; gap:0.85rem; padding:1.35rem; color:var(--muted); }
-.system-info-card > i { color:#6b21a8; font-size:23px; }
-.system-info-card strong { display:block; color:var(--text); font-size:0.82rem; margin-bottom:0.5rem; text-transform:uppercase; }
+.system-info-card { display:flex; align-items:flex-start; flex-direction: column; gap:0.85rem; padding:1.35rem; color:var(--muted); }
+.system-info-card i { color:#6b21a8; font-size:23px; background: #f5f0ff; border-radius: 12px; display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; }
+.system-info-card strong { display:block; align-items: center; color:#666; font: size 15px; font-weight: 700; margin-bottom:0.5rem; text-transform:uppercase; }
 .system-info-card p { font-size:0.82rem; line-height:1.35; margin:0; }
-.system-notification-card { display:flex; align-items:center; gap:0.85rem; max-width:680px; min-height:68px; margin:1.5rem auto 0; padding:0.95rem 1.25rem; color:var(--muted); }
+.system-info-top { display:grid; grid-template-columns:34px minmax(0,1fr) auto; text-align: center; align-items: center; gap:0.55rem; min-height:38px; }
+.system-info-top .card-label { font-size: 15px; font-weight: 700; color: #666; text-transform: uppercase; letter-spacing: 0.6px; display: flex;
+  align-items: center; gap: 8px; }
+.system-info-description { margin: 0; color: #222; line-height: 1.7; font-size: 1rem; padding-top: 0.9rem; text-align: justify; }
+.system-notification-card { display:flex; align-items:center; gap:0.85rem; max-width:680px; min-height:68px; margin-bottom:3rem; margin-top:2rem; margin: auto; padding:0.95rem 1.25rem; color:var(--muted); }
 .system-notification-card > i { color:#6b21a8; font-size:22px; }
-.system-notification-card strong { display:block; color:var(--text); font-size:0.82rem; margin-bottom:0.25rem; text-transform:uppercase; }
-.system-notification-card p { font-size:0.76rem; font-weight:600; margin:0; }
+.system-notification-card strong { display:block; color:#666; font-size:0.82rem; font-weight:700; margin-bottom:0.5rem; text-transform:uppercase; }
+.system-notification-card p { font-size:0.76rem; font-weight:600; margin:0; color: #222; }
 .notification-button { margin-left:auto; border:0; border-radius:6px; padding:0.45rem 0.75rem; background:#eadcf8; color:#6b21a8; cursor:pointer; font:inherit; font-size:0.76rem; font-weight:700; }
 .notification-button:disabled { cursor:default; opacity:.55; }
+.pressure-panel { display:flex; gap:1.35rem; flex-direction: column; margin-bottom:3rem; margin-top:2rem; align-items:stretch; }
+.presion-info-description { margin: 0; color: #222; line-height: 1.7; font-size: 1rem; text-align: justify; }
+
+
 
 @media (max-width:1024px) {
   .dashboard-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); }

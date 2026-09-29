@@ -9,22 +9,43 @@
 
 <div class="system-dashboard-top">
 <section class="system-status-panel" aria-live="polite">
+  <div class="card-label">Disponibilidad de suministro</div>
   <div class="system-status-icon {% if valvula.clase == 'open' %}is-open{% else %}is-closed{% endif %}" id="system-valve-icon">
     <i class="ti ti-toggle-left"></i>
   </div>
+
+  <div class="system-status-value" id="system-valve-state">
+    Válvula: {{ valvula.estado }}</div>
+
+    <span class="badge {% if valvula.clase == 'open' %}badge-normal{% else %}badge-closed{% endif %}" id="system-valve-badge">
+      ● {{ valvula.estado|title }}
+    </span>
+  
   <div class="system-status-copy">
-    <div class="card-label">Disponibilidad de suministro</div>
-    <div class="system-status-value" id="system-valve-state">Válvula: {{ valvula.estado }}</div>
-    <span class="badge {% if valvula.clase == 'open' %}badge-normal{% else %}badge-closed{% endif %}" id="system-valve-badge">● {{ valvula.estado|title }}</span>
-    <p class="system-status-updated">Última actualización: <span id="system-valve-updated">{{ valvula.ultima_actualizacion }}</span></p>
+    <p class="system-status-updated">
+      Última actualización: <span id="system-valve-updated">{{ valvula.ultima_actualizacion }}</span></p>
   </div>
 </section>
 
 <section class="system-info-card" aria-label="Permisos de la válvula">
-  <i class="ti ti-info-circle"></i>
-  <div>
-    <strong>Información</strong>
-    <p>Solo administradores pueden controlar la válvula</p>
+  <div class="system-info-top">
+    <div class="card-label">
+      <span>
+        <i class="ti ti-info-circle"></i>
+      </span>
+      <div>
+        <span>
+          <div>Información</div>
+        </span>
+      </div>
+    </div>
+  </div>
+  <p>Solo administradores pueden controlar la válvula</p>
+  
+  <div class="system-info-description">
+    Este panel muestra el estado en tiempo real del suministro de agua y la válvula de control. 
+    Los datos se actualizan automáticamente cuando los sensores envían nuevas lecturas. Si no ves información, 
+    verifica la conexión de los dispositivos.
   </div>
 </section>
 </div>
