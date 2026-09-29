@@ -30,6 +30,9 @@ db.sqlite3-journal
 media/
 staticfiles/
 
+# Modelos generados por el pipeline ML
+ml_models/
+
 # IDE y sistema
 .vscode/
 .idea/
