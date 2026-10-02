@@ -51,7 +51,7 @@
       <div class="icon-wrap">
         <i class="ti ti-gauge"></i>
       </div>
-      <div class="card-label">Presión de agua actual</div>
+      <div class="card-label">Presión de agua</div>
       <span class="badge {{ presion.badge_class }}">● {{ presion.badge }}</span>
     </div>
     <div id="dashboard-pressure-friendly" class="card-value friendly-view friendly-message" style="display: block;">{{ presion.mensaje_amigable }}</div>
@@ -65,7 +65,7 @@
       <div class="icon-wrap blue">
         <i class="ti ti-droplet"></i>
       </div>
-      <div class="card-label">Calidad del agua actual</div>
+      <div class="card-label">Calidad del agua</div>
       <span class="badge {% if calidad.estado == 'Buena' %}badge-perfect{% elif calidad.estado == 'Media' %}badge-high{% else %}badge-closed{% endif %}">● {{ calidad.badge }}</span>
     </div>
     <div id="dashboard-quality-friendly" class="card-value friendly-view friendly-message" style="display: block;">{{ calidad.mensaje_amigable }}</div>
@@ -79,7 +79,7 @@
       <div class="icon-wrap amber">
         <i class="ti ti-building-warehouse"></i>
       </div>
-      <div class="card-label">Nivel de tanque actual</div>
+      <div class="card-label">Nivel de tanque</div>
       <span class="badge {{ tanque.badge_class }}">
         <span class="friendly-view">{{ tanque.litros }}L disponibles</span>
         <span class="exact-view" style="display: none;">{{ tanque.porcentaje }}%</span>
@@ -99,7 +99,7 @@
       <div class="icon-wrap teal">
         <i class="ti ti-droplet-half-2"></i>
       </div>
-      <div class="card-label">Consumo de agua actual</div>
+      <div class="card-label">Consumo de agua</div>
     </div>
     <div class="card-value consumption-value">{{ consumo.hoy }}L</div>
     <span class="card-sub">Hoy</span>
@@ -111,20 +111,23 @@
 <div class="dashboard-lower">
   <!-- Estado de la válvula: solo lectura para usuarios normales -->
   <section class="dash-card valve-status-card dashboard-system-card" aria-live="polite">
-    <div class="card-top">
-      <div class="icon-wrap {% if valvula.clase == 'open' %}teal{% else %}red{% endif %}" id="valve-status-icon">
-        <i class="ti ti-toggle-left"></i>
+    <div class="card-label">Estado del sistema</div>
+    <div class="icon-wrap {% if valvula.clase == 'open' %}teal{% else %}red{% endif %}" id="valve-status-icon">
+      <i class="ti ti-toggle-left"></i>
       </div>
-      <div>
-        <div class="card-label">Estado del sistema</div>
-        <div class="card-value" id="dashboard-valve-state">Válvula: {{ valvula.estado }}</div>
-        <span class="badge {% if valvula.clase == 'open' %}badge-normal{% else %}badge-closed{% endif %}" id="dashboard-valve-badge">
-          ● {{ valvula.estado|title }}
-        </span>
+      
+      <div class="card-value" id="dashboard-valve-state">
+        Válvula:<br>{{ valvula.estado|upper }}
       </div>
-    </div>
-    <div class="valve-last-update">Última actualización: <span id="dashboard-valve-updated">{{ valvula.ultima_actualizacion }}</span></div>
-  </section>
+      
+      <div class="valve-last-update">
+        Última actualización: <span id="dashboard-valve-updated">{{ valvula.ultima_actualizacion }}</span>
+      </div>
+
+  <span class="badge {% if valvula.clase == 'open' %}badge-normal{% else %}badge-closed{% endif %}" id="dashboard-valve-badge">
+    ● {{ valvula.estado|title }}
+  </span>
+</section>
 
 <!-- Stats -->
 <div class="stats-row">

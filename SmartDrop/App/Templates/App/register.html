@@ -13,6 +13,7 @@
 </head>
 <body>
   <main class="auth-panel">
+    <div class="auth-bg" id="auth-bg" data-bg="{% static 'App/img/fondo1.jpg' %}"></div>
     <div class="auth-card">
       <h1>Crear una cuenta</h1>
       <p>Regístrate para comenzar a utilizar SmartDrop.</p>
@@ -44,8 +45,17 @@
 
         <button type="submit" class="btn-primary">Crear cuenta</button>
       </form>
-      <p class="auth-footer">¿Ya tienes cuenta? <a href="{% url 'login' %}">Inicia sesión</a></p>
+      <p class="auth-footer">¿Ya tienes una cuenta? <a href="{% url 'login' %}">Inicia sesión</a></p>
     </div>
   </main>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      var bg = document.getElementById('auth-bg');
+      if (bg) {
+        bg.style.backgroundImage = "url('" + bg.dataset.bg + "')";
+      }
+    });
+  </script>
 </body>
 </html>
