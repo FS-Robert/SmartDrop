@@ -434,24 +434,99 @@ body.dark-mode .detail-row { color: #e0e0e0 !important; }
 }
 
 /* ===== Retroalimentación page styles ===== */
-.retro-layout { display: grid; grid-template-columns: 1fr 320px; gap: 1rem; align-items: start; }
-.retro-main { padding: 12px; border-radius: 10px; }
-.speech-bubble { background: #f7f3fb; padding: 10px 14px; border-radius: 10px; display: inline-block; font-weight:700; }
-.retro-state { font-size: 16px; font-weight: 800; color: #0F6E56; margin-top: 0.4rem; }
+.retro-heading { max-width:1200px; margin:0 auto; }
+.retro-heading .page-title { text-align:left; font-size:50px; font-weight:800; margin-top: 1rem; margin-bottom: 3rem; padding-top: 1rem; }
+.retro-heading .page-subtitle { text-align:left; font-size: 1.05rem; margin: 0 0 2rem 0; }
+.retro-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(260px, 0.9fr);
+  grid-template-rows: minmax(150px, auto) minmax(150px, auto) auto;
+  gap: clamp(1rem, 3vw, 2rem);
+  align-items: stretch;
+}
+.retro-layout > .retro-main {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  min-width: 0;
+  min-height: 330px;
+  padding: 1rem;
+  border-radius: 16px;
+  box-shadow: 0 2px 4px rgba(61,35,93,0.12);
+}
+
+.retro-summary-heading { display:flex; align-items:center; gap:0.55rem; }
+.retro-icon { font-size:23px; background: #e6f1fb; border-radius: 12px; display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; color:#1596d1; }
+.retro-icon i { font-size:23px; }
+.retro-summary-heading .card-header { margin:0; }
+
+
+.speech-bubble { background: #f7f3fb; padding: 10px 14px; border-radius: 10px; display: inline-block; font-weight:700; color: #6B21A8; }
+.retro-state { font-size: 16px; font-weight: 800; color: #000000; margin-top: 0.4rem; }
 .retro-consumo-actual { font-size: 20px; font-weight: 800; color: #6B21A8; margin-top: 8px; }
 .drop-indicator { display:flex; justify-content:center; margin:12px 0; }
-.drop-indicator svg { width: 180px; height: auto; max-width: 100%; display: block; }
+.drop-indicator svg { width: 300px; height: auto; max-width: 100%; display: block; }
 
-.retro-side { display:flex; flex-direction:column; gap:0.9rem; }
-.retro-stat .retro-stat-label { font-weight:800; color:#6B21A8; }
-.retro-stat-num { font-size:18px; font-weight:800; }
-.retro-trend .trend-icon { font-size:36px; }
+.retro-side { display: contents; }
+.retro-side > .retro-stat,
+.retro-side > .card:nth-child(2),
+.retro-side > .alert-box.full-width,
+.retro-side > .card:last-child {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 2px 4px rgba(61,35,93,0.12);
+}
+.retro-side > .retro-stat .card-header {
+  align-self: stretch;
+  text-align: left;
+}
+.retro-side > .retro-stat { grid-column: 2; grid-row: 1; }
+.retro-side > .card:nth-child(2) { grid-column: 2; grid-row: 2; }
+.retro-side > .alert-box.full-width {
+  grid-column: 1;
+  grid-row: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 150px;
+  text-align: center;
+}
+.retro-side > .alert-box.full-width > div { max-width: 100%; }
+.retro-stat-num { font-size:18px; font-weight:800; align-items: center; }
+.retro-trend .trend-icon { font-size:36px; align-items: center; }
+
+.retro-side > .retro-stat {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  text-align: center;
+}
+
+.retro-card { display: flex; flex: 2; flex-direction: column; justify-content: center; text-align: center; align-items: center; gap: 6px; }
+.retro-side .card-header { font-size: 15px; font-weight: 700; color: #666; text-transform: uppercase; letter-spacing: 0.6px; }
+.retro-side > .retro-stat {
+  align-self: stretch;
+  text-align: left;
+  text-transform: uppercase;
+  color: #888;
+  font-size: 0.82rem;
+}
 .trend-icon.up { color:#A32D2D; }
 .trend-icon.down { color:#0F6E56; }
-.alert-icon { font-size:20px; color:#0F6E56; margin-right:8px; }
+.alert-icon { font-size:40px; color:#0F6E56; margin-right:8px; }
 
 @media (max-width: 900px) {
-  .retro-layout { grid-template-columns: 1fr; }
+  .retro-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; }
+  .retro-layout > .retro-main,
+  .retro-side > .retro-stat,
+  .retro-side > .card:nth-child(2),
+  .retro-side > .alert-box.full-width,
+  .retro-side > .card:last-child {
+    grid-column: 1;
+    grid-row: auto;
+  }
   .drop-indicator svg { width: 140px; }
 }
 
@@ -1071,4 +1146,4 @@ body.dark-mode .detail-row { color: #e0e0e0 !important; }
 
 /* Keep the dashboard's Estado del Agua heading in its original centered format. */
 .dashboard-heading .page-title { text-align:center; font-size:1.65rem; }
-
+    

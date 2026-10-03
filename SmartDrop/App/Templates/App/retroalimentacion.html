@@ -3,14 +3,24 @@
 {% block nav_retro %}active{% endblock %}
 
 {% block content %}
-<h1 class="page-title">Retroalimentación</h1>
+<div class="retro-heading">
+  <h1 class="page-title">RETROALIMENTACIÓN</h1>
+  <p class="page-subtitle">Conoce cómo ha sido tu consumo y descubre oportunidades para mejorar.</p>
+</div>
+
 
 <div class="retro-layout">
-
   <!-- Visual principal -->
   <div class="retro-main card">
+
+    <!-- Indicador de gota -->
+    <div class="retro-summary-heading">
+      <span class="retro-icon"><i class="ti ti-droplet"></i></span>
+      <span class="card-header">Indicador de consumo</span>
+    </div>
+
     <div class="speech-bubble">
-      💧 {{ retro.mensaje }}
+      {{ retro.mensaje }}
     </div>
 
     <div class="retro-state {% if retro.tendencia == 'alta' %}trend-icon up{% elif retro.tendencia == 'baja' %}trend-icon down{% endif %}">
@@ -22,13 +32,9 @@
       {{ retro.comparacion }}
     </div>
 
-    <!-- Indicador de gota -->
-    <div style="font-size:13px; font-weight:700; color:#888; text-transform:uppercase; letter-spacing:0.5px;">
-      Indicador de consumo
-    </div>
 
     <div class="drop-indicator">
-      <svg viewBox="0 0 120 160" xmlns="http://www.w3.org/2000/svg">
+      <svg viewBox="0 0 240 160" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <clipPath id="dropClip">
             <path d="M 60 10 Q 100 60 100 100 A 40 40 0 0 1 20 100 Q 20 60 60 10 Z"/>
@@ -41,12 +47,15 @@
         <rect x="20" y="{{ retro.fill_y }}" width="80" height="{{ retro.fill_h }}"
               fill="#7c3aed" opacity="0.7" clip-path="url(#dropClip)"/>
         <!-- Etiquetas -->
-        <text x="60" y="52" text-anchor="middle" font-size="9" fill="#888" font-weight="700" font-family="Inter">Consumo</text>
-        <text x="60" y="62" text-anchor="middle" font-size="9" fill="#888" font-weight="700" font-family="Inter">elevado</text>
-        <text x="60" y="88" text-anchor="middle" font-size="9" fill="#888" font-weight="700" font-family="Inter">Consumo</text>
-        <text x="60" y="98" text-anchor="middle" font-size="9" fill="#888" font-weight="700" font-family="Inter">normal</text>
-        <text x="60" y="120" text-anchor="middle" font-size="9" fill="#fff" font-weight="700" font-family="Inter">Consumo</text>
-        <text x="60" y="130" text-anchor="middle" font-size="9" fill="#fff" font-weight="700" font-family="Inter">bajo</text>
+
+        <g clip-path="url(#dropClip)">
+          <line x1="0" y1="53" x2="125" y2="53" stroke="#8b7ab8" stroke-width="1" stroke-dasharray="3 2"/>
+          <line x1="0" y1="97" x2="125" y2="97" stroke="#8b7ab8" stroke-width="1" stroke-dasharray="3 2"/>
+        </g>
+
+        <text x="125" y="35" text-anchor="start" font-size="11" fill="#888" font-weight="700" font-family="Inter">Consumo elevado</text>
+        <text x="125" y="80" text-anchor="start" font-size="11" fill="#888" font-weight="700" font-family="Inter">Consumo normal</text>
+        <text x="125" y="130" text-anchor="start" font-size="11" fill="#888" font-weight="700" font-family="Inter">Consumo bajo</text>
       </svg>
     </div>
 
@@ -57,8 +66,9 @@
   <div class="retro-side">
 
     <div class="retro-stat card">
-      <div class="retro-stat-label">Este mes vs mes anterior</div>
-      <div class="retro-stat-num">{{ retro.variacion_mes }}</div>
+      <div class="card-header">COMPARACIÓN MENSUAL</div>
+      <div class="retro-card">
+        <div class="retro-stat-num">{{ retro.variacion_mes }}</div>
       <div class="retro-trend" style="margin-top:0.5rem;">
         {% if retro.tendencia == 'baja' %}
           <i class="ti ti-arrow-down trend-icon down"></i>
@@ -66,11 +76,12 @@
           <i class="ti ti-arrow-up trend-icon up"></i>
         {% endif %}
       </div>
-      <div style="font-size:13px; color:#888; font-weight:600;">vs {{ retro.periodo_comparacion|default:'mes anterior' }}</div>
+      <div style="font-size:13px; color:#888; font-weight:600;">VS. {{ retro.periodo_comparacion|default:'MES ANTERIOR' }}</div>
+      </div>
     </div>
 
     <div class="card">
-      <div style="font-size:15px; font-weight:800; color:#2d1a4a; margin-bottom:1rem;">Resumen mensual</div>
+      <div class="card-header">Resumen mensual</div>
       <div class="detail-row"><span>Total consumido</span><span class="detail-val">{{ retro.total_mes }}L</span></div>
       <div class="detail-row"><span>Promedio diario</span><span class="detail-val">{{ retro.prom_dia }}L</span></div>
       <div class="detail-row"><span>Ahorro estimado</span><span class="detail-val" style="color:#0F6E56;">{{ retro.ahorro }}L</span></div>
