@@ -49,7 +49,12 @@ class LoginForm(forms.Form):
         email = cleaned_data.get('email')
         password = cleaned_data.get('password')
         if email and password:
-            user = authenticate(username=email, password=password)
+            try:
+                user = authenticate(username=email, password=password)
+            except supabase_client.SupabaseError as exc:
+                raise forms.ValidationError(
+                    f'No se pudo validar el inicio de sesión: {exc}'
+                ) from exc
             if user is None:
                 raise forms.ValidationError('Correo o contraseña incorrectos')
             cleaned_data['user'] = user

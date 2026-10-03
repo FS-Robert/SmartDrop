@@ -5,11 +5,24 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+from . import supabase_client
 from .backends import sync_user_from_supabase
+from .forms import LoginForm
 from .models import Rol, Usuario
 from .views import _supabase_user_id, _valve_statistics
 
 # Create your tests here.
+
+
+class LoginFormTests(TestCase):
+	@patch('App.forms.authenticate')
+	def test_login_muestra_error_cuando_supabase_no_esta_disponible(self, authenticate):
+		authenticate.side_effect = supabase_client.SupabaseError('No se pudo conectar con Supabase (NameResolutionError).')
+
+		form = LoginForm(data={'email': 'ana.martinez@example.com', 'password': 'secreto123'})
+
+		self.assertFalse(form.is_valid())
+		self.assertIn('No se pudo validar el inicio de sesión', form.non_field_errors()[0])
 
 
 class ConsumoViewTests(TestCase):
