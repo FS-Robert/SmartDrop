@@ -3,8 +3,10 @@
 {% block nav_calidad %}active{% endblock %}
 
 {% block content %}
-<h1 class="page-title">CALIDAD DEL AGUA</h1>
-<p class="page-subtitle calidad-page-subtitle">Consulta los parámetros actuales de calidad y su estado.</p>
+<div class="calidad-heading">
+  <h1 class="page-title">CALIDAD DEL AGUA</h1>
+  <p class="page-subtitle calidad-page-subtitle">Consulta los parámetros actuales de calidad y su estado.</p>
+</div>
 
 <div class="quality-summary-grid">
   <section class="quality-summary-card card">
@@ -22,17 +24,45 @@
     <div class="quality-analysis"><span>Último análisis</span><strong>{{ calidad.ultimo_analisis }}</strong></div>
   </section>
 
-  <section class="quality-state-card card"><div class="card-header">Estado general</div><div class="state-row"><span>Calidad</span><span class="badge {% if calidad.estado == 'Buena' %}badge-perfect{% elif calidad.estado == 'Media' %}badge-high{% else %}badge-closed{% endif %}">{{ calidad.estado }}</span></div><div class="state-row"><span>Potabilidad</span><span class="badge {% if calidad.estado == 'Buena' %}badge-normal{% elif calidad.estado == 'Media' %}badge-high{% else %}badge-closed{% endif %}">{% if calidad.estado == 'Mala' %}No apta{% elif calidad.estado == 'Sin datos' %}Sin datos{% else %}Apta{% endif %}</span></div><div class="state-row"><span>Anomalías 30 días</span><span class="badge badge-closed">Sin datos</span></div></section>
-  <section class="quality-sensor-card card"><div class="card-header">Estado del sensor</div><strong>Última actualización</strong><span>{{ calidad.ultimo_analisis }}</span></section>
+  <section class="quality-state-card card">
+    <div class="card-header">Estado general</div>
+    <div class="detail-row">
+      <div>
+        <p class="calidad-details">Calidad</p>
+      </div>
+      <span class="badge {% if calidad.estado == 'Buena' %}badge-perfect{% elif calidad.estado == 'Media' %}badge-high{% else %}badge-closed{% endif %}">{{ calidad.estado }}</span>
+    </div>
+    
+    <div class="detail-row">
+      <div>
+        <p class="calidad-details">Potabilidad</p>
+      </div>
+      <span class="badge {% if calidad.estado == 'Buena' %}badge-normal{% elif calidad.estado == 'Media' %}badge-high{% else %}badge-closed{% endif %}">{% if calidad.estado == 'Mala' %}No apta{% elif calidad.estado == 'Sin datos' %}Sin datos{% else %}Apta{% endif %}</span></div>
+    
+      <div class="detail-row">
+        <div>
+          <p class="calidad-details">Anomalías 30 días</p>
+        </div>
+        <span class="badge badge-closed">Sin datos</span>
+      </div>
+  </section>
+
+  <section class="quality-sensor-card card">
+    <div class="card-header">Estado del sensor</div>
+    <div class="sensor-body">
+       <strong>Última actualización</strong>
+    <span>{{ calidad.ultimo_analisis }}</span>
+    </div>
+  </section>
 </div>
 
 <h2 class="quality-parameters-title">Parámetros de calidad</h2>
 <div class="quality-parameters-grid">
-  <div class="quality-parameter card"><span class="parameter-icon"><i class="ti ti-droplet"></i></span><span>TDS</span><strong>{{ calidad.tds }} <small>ppm</small></strong><div class="parameter-bar"><i style="width:35%;"></i></div><small>0 ppm <b>1000 ppm</b></small></div>
-  <div class="quality-parameter card"><span class="parameter-icon"><i class="ti ti-chart-dots"></i></span><span>pH</span><strong>{{ calidad.ph }}</strong><div class="parameter-bar"><i style="width:50%;"></i></div><small>0 <b>14</b></small></div>
-  <div class="quality-parameter card"><span class="parameter-icon"><i class="ti ti-flask"></i></span><span>Cloro residual</span><strong>{{ calidad.cloro }} <small>mg/L</small></strong><div class="parameter-bar"><i style="width:35%;"></i></div><small>0 mg/L <b>3 mg/L</b></small></div>
-  <div class="quality-parameter card"><span class="parameter-icon"><i class="ti ti-bubble"></i></span><span>Turbidez</span><strong>{{ calidad.turbidez }} <small>NTU</small></strong><div class="parameter-bar"><i style="width:20%;"></i></div><small>0 NTU <b>10 NTU</b></small></div>
-  <div class="quality-parameter card"><span class="parameter-icon"><i class="ti ti-bolt"></i></span><span>Conductividad</span><strong>{{ calidad.conductividad }} <small>µS/cm</small></strong><div class="parameter-bar"><i style="width:30%;"></i></div><small>0 µS/cm <b>500 µS/cm</b></small></div>
-  <div class="quality-parameter card"><span class="parameter-icon"><i class="ti ti-temperature"></i></span><span>Temperatura</span><strong>{{ calidad.temperatura }} <small>°C</small></strong><div class="parameter-bar"><i style="width:40%;"></i></div><small>0 °C <b>40 °C</b></small></div>
+  <div class="quality-parameter card"><span class="parameter-icon"><i class="ti ti-droplet"></i></span><span class="card-header">TDS</span><strong>{{ calidad.tds }} <small>ppm</small></strong><div class="parameter-bar"><i style="width:35%;"></i></div><small>0 ppm <b>1000 ppm</b></small></div>
+  <div class="quality-parameter card"><span class="parameter-icon"><i class="ti ti-chart-dots"></i></span><span class="card-header">pH</span><strong>{{ calidad.ph }}</strong><div class="parameter-bar"><i style="width:50%;"></i></div><small>0 <b>14</b></small></div>
+  <div class="quality-parameter card"><span class="parameter-icon"><i class="ti ti-flask"></i></span><span class="card-header">Cloro residual</span><strong>{{ calidad.cloro }} <small>mg/L</small></strong><div class="parameter-bar"><i style="width:35%;"></i></div><small>0 mg/L <b>3 mg/L</b></small></div>
+  <div class="quality-parameter card"><span class="parameter-icon"><i class="ti ti-bubble"></i></span><span class="card-header">Turbidez</span><strong>{{ calidad.turbidez }} <small>NTU</small></strong><div class="parameter-bar"><i style="width:20%;"></i></div><small>0 NTU <b>10 NTU</b></small></div>
+  <div class="quality-parameter card"><span class="parameter-icon"><i class="ti ti-bolt"></i></span><span class="card-header">Conductividad</span><strong>{{ calidad.conductividad }} <small>µS/cm</small></strong><div class="parameter-bar"><i style="width:30%;"></i></div><small>0 µS/cm <b>500 µS/cm</b></small></div>
+  <div class="quality-parameter card"><span class="parameter-icon"><i class="ti ti-temperature"></i></span><span class="card-header">Temperatura</span><strong>{{ calidad.temperatura }} <small>°C</small></strong><div class="parameter-bar"><i style="width:40%;"></i></div><small>0 °C <b>40 °C</b></small></div>
 </div>
 {% endblock %}

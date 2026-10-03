@@ -11,11 +11,16 @@
 
   <!-- Visual del tanque -->
   <div class="tanque-visual card">
-    <div class="capacity-header">
-      <i class="ti ti-droplet capacity-icon"></i>
-      <div class="capacity-text">Capacidad del tanque: <strong>{{ tanque.capacidad }}L</strong></div>
+    <div class="card-label">
+      <span class="card-label-content">
+        <i class="ti ti-droplet capacity-icon"></i>
+        <span class="card-header">Nivel del tanque</span>
+      </span>
     </div>
+    <p>Representación visual del nivel de agua</p>
 
+    <div class="capacity-text">Capacidad del tanque: <strong>{{ tanque.capacidad }}L</strong></div>
+    
     <div class="cylinder-wrap">
       <div class="cylinder">
         <div class="cylinder-fill" data-tank-height="{{ tanque.porcentaje }}"></div>
@@ -43,23 +48,23 @@
         <div class="info-card-label">Bomba</div>
         <div class="info-card-value">
           <span class="badge {% if estado_bomba == 'Enciende automáticamente' %}badge-normal{% else %}badge-off{% endif %} status-badge">
-            ● {{ estado_bomba }}
+            {{ estado_bomba }}
           </span>
         </div>
       </div>
     </div>
 
     <div class="info-card">
-      <i class="ti ti-clock"></i>
+      <i class="ti ti-clock info-icon"></i>
       <div class="info-card-body">
         <div class="info-card-label">Autonomía estimada</div>
         <div class="info-card-value">{{ autonomia }}</div>
-        <div class="info-card-sub">bajo consumo actual</div>
+        <div class="info-card-sub">Bajo consumo actual</div>
       </div>
     </div>
 
     <div class="info-card">
-      <i class="ti ti-history"></i>
+      <i class="ti ti-history info-icon"></i>
       <div class="info-card-body">
         <div class="info-card-label">Última lectura</div>
         <div class="info-card-value">{{ tanque.ultima_lectura }}</div>
@@ -83,7 +88,11 @@
 
   </div>
 </div>
-<section class="tank-note"><strong>NIVEL DEL TANQUE</strong><p>{{ tanque.nota }}</p></section>
+
+<section class="tank-note">
+  <strong>NIVEL DEL TANQUE</strong>
+  <p>{{ tanque.nota }}</p>
+</section>
 </div>
 <script>
   document.querySelectorAll('[data-tank-height]').forEach((element) => {

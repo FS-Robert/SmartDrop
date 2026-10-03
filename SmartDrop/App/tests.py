@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 from django.urls import reverse
 from django.utils import timezone
+from rest_framework.test import APIClient
 
 from . import supabase_client
 from .backends import sync_user_from_supabase
@@ -402,3 +403,82 @@ class AdminValveViewTests(TestCase):
 		self.assertIn('21 cambios', response.context['alerta_actividad'])
 		self.assertEqual(insert.call_count, 2)
 		self.assertEqual(insert.call_args_list[1].args[0], 'notificacion')
+
+
+class MobileSearchAndValveLogsTests(TestCase):
+	def setUp(self):
+		admin_role = Rol.objects.create(id_rol=2, nombre_rol='admin')
+		user_role = Rol.objects.create(id_rol=3, nombre_rol='user')
+		self.admin = Usuario.objects.create_user(
+			email='mobile-admin@example.com', nombre='Admin', apellido='App',
+			password='password-segura', rol=admin_role,
+		)
+		self.user = Usuario.objects.create_user(
+			email='mobile-user@example.com', nombre='Usuario', apellido='App',
+			password='password-segura', rol=user_role,
+		)
+		self.client = APIClient()
+
+	def test_busqueda_movil_devuelve_secciones_para_usuario(self):
+		self.client.force_authenticate(user=self.user)
+
+		response = self.client.get(reverse('mobile_buscar'), {'q': 'calidad'})
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.json()['ok'], True)
+		titles = [section['titulo'] for section in response.json()['secciones']]
+		self.assertIn('Calidad del Agua - TDS', titles)
+
+	def test_busqueda_movil_incluye_secciones_admin_solo_para_admin(self):
+		self.client.force_authenticate(user=self.user)
+		user_response = self.client.get(reverse('mobile_buscar'), {'q': 'panel administrativo'})
+		self.assertEqual(user_response.json()['secciones'], [])
+
+		self.client.force_authenticate(user=self.admin)
+		admin_response = self.client.get(reverse('mobile_buscar'), {'q': 'panel administrativo'})
+
+		self.assertEqual(admin_response.status_code, 200)
+		self.assertEqual(admin_response.json()['secciones'][0]['titulo'], 'Panel Administrativo')
+
+	@patch('App.api.views_valves.supabase_client.select')
+	def test_logs_movil_mapea_campos_y_duracion(self, select):
+		select.side_effect = [
+			[{'id_valvula': 9}],
+			[{
+				'id_valvula': 9,
+				'accion': 'abrir',
+				'estado_anterior': 'cerrada',
+				'estado_nuevo': 'abierta',
+				'tipo_activacion': 'temporizado',
+				'id_usuario': 14,
+				'fecha_hora': '2026-10-02T12:00:00Z',
+				'origen_accion': 'App (Temporizado)',
+				'duracion_programada': 30,
+			}],
+			[{'id_usuario': 14, 'nombre': 'Ana', 'apellido': 'López', 'correo': 'ana@example.com'}],
+		]
+		self.client.force_authenticate(user=self.admin)
+
+		response = self.client.get(reverse('mobile_valvula_logs', kwargs={'id_valvula': 9}))
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.json(), {
+			'advertencia': None,
+			'logs': [{
+				'accion': 'ABRIR',
+				'detalle': '30',
+				'fecha_hora': '2026-10-02T12:00:00Z',
+				'usuario': 'Ana López',
+				'origen': 'App (Temporizado)',
+			}],
+		})
+		self.assertEqual(select.call_args_list[1].args[2]['id_valvula'], 'eq.9')
+
+	@patch('App.api.views_valves.supabase_client.select')
+	def test_logs_movil_son_exclusivos_de_admin(self, select):
+		self.client.force_authenticate(user=self.user)
+
+		response = self.client.get(reverse('mobile_valvula_logs', kwargs={'id_valvula': 9}))
+
+		self.assertEqual(response.status_code, 403)
+		select.assert_not_called()
