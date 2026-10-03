@@ -72,6 +72,53 @@ CREATE TABLE IF NOT EXISTS public.retroalimentacion_consumo (
 CREATE INDEX IF NOT EXISTS idx_usuario_correo ON public.usuario (correo);
 CREATE INDEX IF NOT EXISTS idx_retro_fecha ON public.retroalimentacion_consumo (fecha_registro DESC);
 
+-- ============================================================
+-- Sistema de reportes de usuarios
+-- ============================================================
+-- Reportes de problemas enviados por usuarios (sin agua, mala
+-- calidad, fugas, etc.) con adjuntos y chat usuario↔admin.
+CREATE TABLE IF NOT EXISTS public.reporte (
+    id_reporte          BIGSERIAL PRIMARY KEY,
+    id_usuario          BIGINT NOT NULL REFERENCES public.usuario(id_usuario) ON DELETE CASCADE,
+    tipo_problema       VARCHAR(30) NOT NULL,
+    descripcion         TEXT NOT NULL,
+    ubicacion           TEXT,
+    foto                VARCHAR(500),          -- legado: adjunto único
+    fecha_reporte       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    estado              VARCHAR(20) NOT NULL DEFAULT 'pendiente',  -- pendiente | en_proceso | resuelto
+    prioridad           VARCHAR(10) DEFAULT 'media',               -- baja | media | alta
+    id_usuario_atiende  BIGINT REFERENCES public.usuario(id_usuario) ON DELETE SET NULL,
+    fecha_atencion      TIMESTAMPTZ,
+    respuesta_admin     TEXT
+);
+
+-- Adjuntos (imágenes/videos) de un reporte. La URL apunta al
+-- archivo servido por Django (MEDIA_URL) o a un bucket si migra.
+CREATE TABLE IF NOT EXISTS public.reporte_adjunto (
+    id_adjunto    BIGSERIAL PRIMARY KEY,
+    id_reporte    BIGINT NOT NULL REFERENCES public.reporte(id_reporte) ON DELETE CASCADE,
+    url           TEXT NOT NULL,
+    tipo          VARCHAR(10) NOT NULL DEFAULT 'imagen',  -- imagen | video
+    nombre        VARCHAR(255),
+    fecha_subida  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Chat del reporte: mensajes del usuario y de los administradores.
+CREATE TABLE IF NOT EXISTS public.reporte_mensaje (
+    id_mensaje    BIGSERIAL PRIMARY KEY,
+    id_reporte    BIGINT NOT NULL REFERENCES public.reporte(id_reporte) ON DELETE CASCADE,
+    id_usuario    BIGINT NOT NULL REFERENCES public.usuario(id_usuario) ON DELETE CASCADE,
+    mensaje       TEXT NOT NULL,
+    fecha_envio   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    leido         BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+CREATE INDEX IF NOT EXISTS idx_reporte_usuario ON public.reporte (id_usuario);
+CREATE INDEX IF NOT EXISTS idx_reporte_estado ON public.reporte (estado);
+CREATE INDEX IF NOT EXISTS idx_reporte_fecha ON public.reporte (fecha_reporte DESC);
+CREATE INDEX IF NOT EXISTS idx_adjunto_reporte ON public.reporte_adjunto (id_reporte);
+CREATE INDEX IF NOT EXISTS idx_mensaje_reporte ON public.reporte_mensaje (id_reporte, id_mensaje);
+
 -- Habilitar REST API (PostgREST expone tablas en schema public por defecto)
 -- Con service_role key, Django puede leer/escribir sin RLS adicional.
 

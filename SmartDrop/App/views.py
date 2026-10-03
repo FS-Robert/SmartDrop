@@ -20,6 +20,7 @@ from django.views.decorators.http import require_http_methods
 
 from .forms import LoginForm, UsuarioRegisterForm
 from . import supabase_client
+from . import views_reportes
 from .mqtt_service import MqttError, publish_command
 from .queries import (
     NO_DATA,
@@ -492,6 +493,7 @@ def dashboard(request):
         },
         'viviendas': viviendas,
         'realtime_readings': list(latest.values()),
+        'comunidad': views_reportes.interrupciones_y_predicciones(request.user),
         'ultima_actualizacion': 'hace unos segundos',
     }
     return render(request, 'App/dashboard.html', context)

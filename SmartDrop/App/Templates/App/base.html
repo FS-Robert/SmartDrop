@@ -9,7 +9,7 @@
    <link rel="preconnect" href="https://fonts.googleapis.com"/>
    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet"/>
-  <link rel="stylesheet" href="{% static 'App/css/dashboard.css' %}?v=20260917-footer"/>
+  <link rel="stylesheet" href="{% static 'App/css/dashboard.css' %}?v=20261003-reportes"/>
   {% block extra_css %}{% endblock %}
   <script>
     (function () {
@@ -72,6 +72,12 @@
         <a href="{% url 'ml_engine:dashboard' %}" class="nav-item {% block nav_ml %}{% endblock %}">
           <i class="ti ti-brain"></i> Predicción Suministro
         </a>
+        <a href="{% url 'admin_reportes' %}" class="nav-item {% block nav_admin_reportes %}{% endblock %}">
+          <i class="ti ti-alert-triangle"></i> Problemas reportados
+        </a>
+        <a href="{% url 'alertas_historial' %}" class="nav-item {% block nav_admin_alertas %}{% endblock %}">
+          <i class="ti ti-bell"></i> Historial de alertas
+        </a>
       {% else %}
         <!-- Usuario normal: menú completo -->
         <span class="nav-section-label">Principal</span>
@@ -101,6 +107,16 @@
         <span class="nav-section-label">Consejos</span>
         <a href="{% url 'recomendaciones' %}"    class="nav-item {% block nav_reco %}{% endblock %}">
           <i class="ti ti-bulb"></i> Recomendaciones
+        </a>
+        <span class="nav-section-label">Comunidad</span>
+        <a href="{% url 'reportes_panel' %}"       class="nav-item {% block nav_reportar %}{% endblock %}">
+          <i class="ti ti-alert-triangle"></i> Reportar problemas
+        </a>
+        <a href="{% url 'reportes_comunidad' %}"   class="nav-item {% block nav_comunidad %}{% endblock %}">
+          <i class="ti ti-users"></i> Comunidad
+        </a>
+        <a href="{% url 'alertas_historial' %}"    class="nav-item {% block nav_alertas %}{% endblock %}">
+          <i class="ti ti-bell"></i> Alertas
         </a>
         <span class="nav-section-label">Cuenta</span>
         <div class="nav-spacer"></div>

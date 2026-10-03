@@ -1,0 +1,57 @@
+{% extends 'App/base.html' %}
+{% block title %}Historial de alertas{% endblock %}
+{% block nav_alertas %}active{% endblock %}
+{% block nav_admin_alertas %}active{% endblock %}
+
+{% block content %}
+<div class="reportes-heading">
+  <h1 class="page-title">HISTORIAL DE ALERTAS</h1>
+  <p class="page-subtitle">Alertas generadas por el sistema: fugas detectadas, calidad del agua, nivel de tanque y predicciones de desabasto.</p>
+</div>
+
+{% if messages %}
+  {% for message in messages %}
+    <div class="alert-box full-width card msg-{{ message.tags }}">
+      <i class="ti ti-info-circle alert-icon"></i>
+      <div class="alert-text">{{ message }}</div>
+    </div>
+  {% endfor %}
+{% endif %}
+
+<div class="card">
+  <form method="get" class="filtros-row">
+    <select name="estado" class="field-input">
+      <option value="">Todos los estados</option>
+      <option value="pendiente" {% if filtro_estado == 'pendiente' %}selected{% endif %}>Pendiente</option>
+      <option value="confirmada" {% if filtro_estado == 'confirmada' %}selected{% endif %}>Confirmada</option>
+      <option value="descartada" {% if filtro_estado == 'descartada' %}selected{% endif %}>Descartada</option>
+      <option value="resuelta" {% if filtro_estado == 'resuelta' %}selected{% endif %}>Resuelta</option>
+    </select>
+    <button type="submit" class="btn-primary btn-filtrar"><i class="ti ti-filter"></i> Filtrar</button>
+    <a class="reportes-link" href="{% url 'alertas_export' %}?estado={{ filtro_estado }}">
+      <i class="ti ti-download"></i> Exportar CSV
+    </a>
+  </form>
+
+  {% if alertas %}
+  <ul class="alertas-list">
+    {% for alerta in alertas %}
+    <li class="alerta-row prioridad-{{ alerta.prioridad|default:'media' }}">
+      <span class="alerta-icon"><i class="ti {{ alerta.icon }}"></i></span>
+      <div class="alerta-body">
+        <div class="alerta-titulo">
+          <strong>{{ alerta.tipo_alerta|title }}</strong>
+          <span class="badge badge-prio-{{ alerta.prioridad|default:'media' }}">{{ alerta.prioridad|default:'media'|title }}</span>
+          <span class="badge badge-estado-{{ alerta.estado_confirmacion }}">{{ alerta.estado_confirmacion|title }}</span>
+        </div>
+        <p class="alerta-msg">{{ alerta.mensaje }}</p>
+        <span class="alerta-fecha"><i class="ti ti-clock"></i> {{ alerta.fecha_creacion|slice:':16' }}</span>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+    <p class="reportes-empty">No hay alertas registradas con estos filtros.</p>
+  {% endif %}
+</div>
+{% endblock %}

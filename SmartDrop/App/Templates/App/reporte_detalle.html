@@ -1,0 +1,176 @@
+{% extends 'App/base.html' %}
+{% block title %}Reporte #{{ reporte.id_reporte }}{% endblock %}
+{% block nav_reportar %}{% if not es_admin %}active{% endif %}{% endblock %}
+{% block nav_admin_reportes %}{% if es_admin %}active{% endif %}{% endblock %}
+
+{% block content %}
+<div class="reportes-heading reporte-detalle-heading">
+  <a href="{% if es_admin %}{% url 'admin_reportes' %}{% else %}{% url 'reportes_panel' %}{% endif %}" class="reportes-link">
+    <i class="ti ti-arrow-left"></i> Volver
+  </a>
+  <h1 class="page-title">{{ reporte.tipo_label|upper }}</h1>
+  <p class="page-subtitle">
+    Reporte #{{ reporte.id_reporte }} · {{ reporte.autor_nombre }} · {{ reporte.fecha_reporte|slice:':16' }}
+    · <span class="badge badge-estado-{{ reporte.estado }}">{{ reporte.estado_label }}</span>
+  </p>
+</div>
+
+{% if messages %}
+  {% for message in messages %}
+    <div class="alert-box full-width card msg-{{ message.tags }}">
+      <i class="ti ti-{% if message.tags == 'success' %}check{% else %}info-circle{% endif %} alert-icon"></i>
+      <div class="alert-text">{{ message }}</div>
+    </div>
+  {% endfor %}
+{% endif %}
+
+<div class="reporte-detalle-layout">
+  <div class="reportes-main">
+    <div class="card">
+      <div class="card-header">Descripción</div>
+      <p class="reporte-descripcion">{{ reporte.descripcion|linebreaksbr }}</p>
+      {% if reporte.ubicacion %}
+        <p class="reportes-hint"><i class="ti ti-map-pin"></i> {{ reporte.ubicacion }}</p>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <div class="card-header">Evidencia adjunta ({{ adjuntos|length }})</div>
+      {% if adjuntos %}
+        <div class="evidencia-grid">
+          {% for adj in adjuntos %}
+            {% if adj.tipo == 'video' %}
+              <video class="evidencia-item" controls preload="metadata" src="{{ adj.url }}"></video>
+            {% else %}
+              <a href="{{ adj.url }}" target="_blank" rel="noopener">
+                <img class="evidencia-item" src="{{ adj.url }}" alt="{{ adj.nombre|default:'Evidencia' }}" loading="lazy"/>
+              </a>
+            {% endif %}
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="reportes-empty">Sin evidencia adjunta.</p>
+      {% endif %}
+
+      {% if not es_admin %}
+      <form method="post" action="{% url 'reporte_adjuntar' reporte.id_reporte %}" enctype="multipart/form-data" class="adjuntar-mas">
+        {% csrf_token %}
+        <label class="adjuntos-btn">
+          <i class="ti ti-plus"></i> Agregar evidencia
+          <input type="file" name="adjuntos" multiple accept="image/*,video/*" hidden onchange="this.form.submit()"/>
+        </label>
+      </form>
+      {% endif %}
+    </div>
+
+    {% if es_admin %}
+    <div class="card">
+      <div class="card-header">Gestión del reporte</div>
+      <form method="post" action="{% url 'admin_reporte_update' reporte.id_reporte %}" class="admin-gestion">
+        {% csrf_token %}
+        <div class="admin-gestion-row">
+          <label>Estado
+            <select name="estado" class="field-input">
+              <option value="pendiente" {% if reporte.estado == 'pendiente' %}selected{% endif %}>Pendiente</option>
+              <option value="en_proceso" {% if reporte.estado == 'en_proceso' %}selected{% endif %}>En proceso</option>
+              <option value="resuelto" {% if reporte.estado == 'resuelto' %}selected{% endif %}>Resuelto</option>
+            </select>
+          </label>
+          <label>Prioridad
+            <select name="prioridad" class="field-input">
+              <option value="baja" {% if reporte.prioridad == 'baja' %}selected{% endif %}>Baja</option>
+              <option value="media" {% if reporte.prioridad == 'media' %}selected{% endif %}>Media</option>
+              <option value="alta" {% if reporte.prioridad == 'alta' %}selected{% endif %}>Alta</option>
+            </select>
+          </label>
+        </div>
+        <label class="field-label" for="respuesta_admin">Respuesta oficial (visible para el usuario)</label>
+        <textarea name="respuesta_admin" rows="3" class="field-input"
+          placeholder="Ej: Cuadrilla enviada a la zona, se estima solución en 24h...">{{ reporte.respuesta_admin|default:'' }}</textarea>
+        <button type="submit" class="btn-primary"><i class="ti ti-check"></i> Guardar y notificar</button>
+      </form>
+    </div>
+    {% elif reporte.respuesta_admin %}
+    <div class="card respuesta-oficial">
+      <div class="card-header"><i class="ti ti-shield-check"></i> Respuesta del equipo</div>
+      <p class="reporte-descripcion">{{ reporte.respuesta_admin|linebreaksbr }}</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Chat -->
+  <div class="reportes-side">
+    <div class="card chat-card">
+      <div class="card-header"><i class="ti ti-messages"></i> Conversación</div>
+      <div class="chat-messages" id="chat-messages" data-reporte="{{ reporte.id_reporte }}">
+        {% for mensaje in mensajes_chat %}
+        <div class="chat-msg {% if mensaje.propio %}propio{% endif %}" data-id="{{ mensaje.id_mensaje }}">
+          <div class="chat-msg-autor">
+            {% if mensaje.es_admin_emisor %}<i class="ti ti-shield-check"></i>{% endif %}
+            {{ mensaje.autor_nombre }}
+          </div>
+          <div class="chat-msg-texto">{{ mensaje.mensaje }}</div>
+          <div class="chat-msg-fecha">{{ mensaje.fecha_envio|slice:'5:16' }}</div>
+        </div>
+        {% empty %}
+        <p class="reportes-empty" id="chat-vacio">Aún no hay mensajes. {% if not es_admin %}Escribe aquí si necesitas dar más detalles.{% endif %}</p>
+        {% endfor %}
+      </div>
+      <form method="post" class="chat-form">
+        {% csrf_token %}
+        <input type="text" name="mensaje" id="chat-input" class="field-input"
+          placeholder="Escribe un mensaje..." maxlength="1000" autocomplete="off" required/>
+        <button type="submit" class="chat-send" title="Enviar" aria-label="Enviar"><i class="ti ti-send"></i></button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  const box = document.getElementById('chat-messages');
+  const reporteId = box.dataset.reporte;
+  box.scrollTop = box.scrollHeight;
+  let lastId = 0;
+  box.querySelectorAll('.chat-msg').forEach((m) => {
+    lastId = Math.max(lastId, parseInt(m.dataset.id || '0', 10));
+  });
+
+  function appendMessage(m) {
+    const vacio = document.getElementById('chat-vacio');
+    if (vacio) vacio.remove();
+    const div = document.createElement('div');
+    div.className = 'chat-msg' + (m.propio ? ' propio' : '');
+    div.dataset.id = m.id_mensaje;
+    const autor = document.createElement('div');
+    autor.className = 'chat-msg-autor';
+    autor.textContent = m.autor_nombre;
+    const texto = document.createElement('div');
+    texto.className = 'chat-msg-texto';
+    texto.textContent = m.mensaje;
+    const fecha = document.createElement('div');
+    fecha.className = 'chat-msg-fecha';
+    fecha.textContent = (m.fecha_envio || '').slice(5, 16);
+    div.append(autor, texto, fecha);
+    box.appendChild(div);
+  }
+
+  async function poll() {
+    try {
+      const resp = await fetch(`{% url 'reporte_mensajes_json' 0 %}`.replace('/0/', `/${reporteId}/`) + `?after=${lastId}`);
+      const data = await resp.json();
+      if (data.ok && data.mensajes.length) {
+        data.mensajes.forEach((m) => {
+          appendMessage(m);
+          lastId = Math.max(lastId, m.id_mensaje);
+        });
+        box.scrollTop = box.scrollHeight;
+      }
+    } catch (e) { /* reintenta en el siguiente ciclo */ }
+  }
+  setInterval(poll, 8000);
+})();
+</script>
+{% endblock %}

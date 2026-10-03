@@ -153,6 +153,41 @@
 
 </div>
 
+<!-- ── Interrupciones y predicciones ── -->
+<div class="dashboard-interrupciones">
+  <section class="dash-card">
+    <div class="card-label"><i class="ti ti-alert-triangle"></i> Interrupciones reportadas</div>
+    {% if comunidad.reportes_abiertos %}
+      <ul class="mini-list">
+        {% for reporte in comunidad.reportes_abiertos %}
+        <li>
+          <a href="{% url 'reporte_detalle' reporte.id_reporte %}">
+            <span class="badge badge-estado-{{ reporte.estado }}">{{ reporte.estado_label }}</span>
+            {{ reporte.tipo_label }} — {{ reporte.descripcion|truncatewords:8 }}
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="mini-empty">No hay interrupciones abiertas. <a href="{% url 'reportes_panel' %}">Reportar un problema</a></p>
+    {% endif %}
+  </section>
+
+  <section class="dash-card">
+    <div class="card-label"><i class="ti ti-bell"></i> Alertas recientes</div>
+    {% if comunidad.alertas %}
+      <ul class="mini-list">
+        {% for alerta in comunidad.alertas %}
+        <li><i class="ti {{ alerta.icon }}"></i> {{ alerta.mensaje|truncatewords:10 }}</li>
+        {% endfor %}
+      </ul>
+      <a href="{% url 'alertas_historial' %}" class="mini-link">Ver historial completo →</a>
+    {% else %}
+      <p class="mini-empty">Sin alertas recientes.</p>
+    {% endif %}
+  </section>
+</div>
+
 <div id="dashboard-realtime-sensors" hidden>
   {% for reading in realtime_readings %}
     <span data-sensor-id="{{ reading.id_sensor }}" data-sensor-type="{{ reading.tipo_sensor }}"></span>

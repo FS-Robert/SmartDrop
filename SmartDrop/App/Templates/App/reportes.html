@@ -1,0 +1,149 @@
+{% extends 'App/base.html' %}
+{% block title %}Reportar problemas{% endblock %}
+{% block nav_reportar %}active{% endblock %}
+
+{% block content %}
+<div class="reportes-heading">
+  <h1 class="page-title">REPORTAR PROBLEMAS</h1>
+  <p class="page-subtitle">Cuéntanos qué está pasando con tu servicio de agua. Adjunta fotos o videos como evidencia y un administrador te responderá.</p>
+</div>
+
+{% if messages %}
+  {% for message in messages %}
+    <div class="alert-box full-width card msg-{{ message.tags }}">
+      <i class="ti ti-{% if message.tags == 'success' %}check{% elif message.tags == 'error' %}x{% else %}info-circle{% endif %} alert-icon"></i>
+      <div class="alert-text">{{ message }}</div>
+    </div>
+  {% endfor %}
+{% endif %}
+
+<div class="reportes-layout">
+  <!-- Columna izquierda: problemas comunes + formulario -->
+  <div class="reportes-main">
+    <div class="card">
+      <div class="card-header">Problemas más comunes</div>
+      <p class="reportes-hint">Selecciona el tipo de problema para llenar el formulario más rápido.</p>
+      <div class="tipos-grid">
+        {% for key, meta in tipos_problema.items %}
+        <button type="button" class="tipo-card" data-tipo="{{ key }}" data-label="{{ meta.label }}">
+          <i class="ti {{ meta.icon }}"></i>
+          <span class="tipo-label">{{ meta.label }}</span>
+          <span class="tipo-desc">{{ meta.desc }}</span>
+        </button>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header" id="form-title">Nuevo reporte</div>
+      <form method="post" enctype="multipart/form-data" id="reporte-form">
+        {% csrf_token %}
+        <input type="hidden" name="tipo_problema" id="tipo_problema" value=""/>
+
+        <label class="field-label" for="descripcion">Descripción del problema</label>
+        <textarea name="descripcion" id="descripcion" rows="4" required
+          class="field-input" placeholder="Describe con detalle: desde cuándo ocurre, qué tan seguido, en qué parte de la vivienda..."></textarea>
+
+        <label class="field-label" for="ubicacion">Ubicación (opcional)</label>
+        <input type="text" name="ubicacion" id="ubicacion" class="field-input"
+          placeholder="Ej: Casa #14, Colonia La Merced, San Miguel"/>
+
+        <label class="field-label">Evidencia fotográfica / video (opcional, máx. {{ max_adjuntos }})</label>
+        <div class="adjuntos-drop" id="adjuntos-drop">
+          <i class="ti ti-photo"></i>
+          <span>Arrastra imágenes o videos aquí, o</span>
+          <label class="adjuntos-btn">
+            Examinar archivos
+            <input type="file" name="adjuntos" id="adjuntos" multiple
+              accept="image/*,video/*" hidden/>
+          </label>
+        </div>
+        <ul class="adjuntos-preview" id="adjuntos-preview"></ul>
+
+        <button type="submit" class="btn-primary reportes-submit" id="reporte-submit" disabled>
+          <i class="ti ti-send"></i> Enviar reporte
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Columna derecha: historial del usuario -->
+  <div class="reportes-side">
+    <div class="card">
+      <div class="card-header">Mis reportes</div>
+      {% if mis_reportes %}
+        <ul class="reportes-list">
+          {% for reporte in mis_reportes %}
+          <li>
+            <a href="{% url 'reporte_detalle' reporte.id_reporte %}" class="reporte-row">
+              <span class="badge badge-estado-{{ reporte.estado }}">{{ reporte.estado_label }}</span>
+              <span class="reporte-row-title">{{ reporte.tipo_label }}</span>
+              <span class="reporte-row-desc">{{ reporte.descripcion|truncatewords:12 }}</span>
+              <span class="reporte-row-meta">
+                <i class="ti ti-clock"></i> {{ reporte.fecha_reporte|slice:':16' }}
+                {% if reporte.n_adjuntos %}· <i class="ti ti-paperclip"></i> {{ reporte.n_adjuntos }}{% endif %}
+              </span>
+            </a>
+          </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="reportes-empty">Aún no has enviado reportes. Si tienes un problema con tu servicio, repórtalo aquí.</p>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <div class="card-header">¿Necesitas ayuda inmediata?</div>
+      <p class="reportes-hint">Si es una emergencia (fuga mayor, sin agua en toda la zona), también puedes llamar a la línea de atención.</p>
+      <a href="{% url 'reportes_comunidad' %}" class="reportes-link"><i class="ti ti-users"></i> Ver reportes de la comunidad</a>
+      <a href="{% url 'alertas_historial' %}" class="reportes-link"><i class="ti ti-bell"></i> Ver historial de alertas</a>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  const tipoInput = document.getElementById('tipo_problema');
+  const submitBtn = document.getElementById('reporte-submit');
+  const formTitle = document.getElementById('form-title');
+  const cards = document.querySelectorAll('.tipo-card');
+  const fileInput = document.getElementById('adjuntos');
+  const preview = document.getElementById('adjuntos-preview');
+  const drop = document.getElementById('adjuntos-drop');
+  const maxAdjuntos = {{ max_adjuntos }};
+
+  cards.forEach((card) => {
+    card.addEventListener('click', () => {
+      cards.forEach((c) => c.classList.remove('selected'));
+      card.classList.add('selected');
+      tipoInput.value = card.dataset.tipo;
+      formTitle.textContent = 'Nuevo reporte: ' + card.dataset.label;
+      submitBtn.disabled = false;
+      document.getElementById('descripcion').focus();
+    });
+  });
+
+  function renderPreview() {
+    preview.innerHTML = '';
+    Array.from(fileInput.files).slice(0, maxAdjuntos).forEach((file) => {
+      const li = document.createElement('li');
+      const isVideo = file.type.startsWith('video/');
+      li.innerHTML = `<i class="ti ti-${isVideo ? 'video' : 'photo'}"></i> ${file.name} <span>(${(file.size / 1024 / 1024).toFixed(1)} MB)</span>`;
+      preview.appendChild(li);
+    });
+  }
+
+  fileInput.addEventListener('change', renderPreview);
+  drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('dragover'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('dragover'));
+  drop.addEventListener('drop', (e) => {
+    e.preventDefault();
+    drop.classList.remove('dragover');
+    fileInput.files = e.dataTransfer.files;
+    renderPreview();
+  });
+})();
+</script>
+{% endblock %}

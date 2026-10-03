@@ -15,6 +15,13 @@ from .views_mobile_consumption import (
     MobileRetroalimentacionView,
 )
 from .views_mobile_search import MobileBusquedaGlobalView
+from .views_mobile_reports import (
+    MobileReporteAdjuntarView,
+    MobileReporteDetalleView,
+    MobileReportesCatalogoView,
+    MobileReportesComunidadView,
+    MobileReportesView,
+)
 
 urlpatterns = [
     path('auth/registro/', MobileRegisterView.as_view(), name='mobile_register'),
@@ -32,4 +39,9 @@ urlpatterns = [
     path('api/valvula/<int:id_valvula>/logs/', MobileValvulaLogsView.as_view(), name='mobile_valvula_logs'),
     path('api/valvula/<int:id_valvula>/<str:action>/', MobileValvulaCommandView.as_view(), name='mobile_valvula_command'),
     path('api/buscar/', MobileBusquedaGlobalView.as_view(), name='mobile_buscar'),
+    path('api/reportes/', MobileReportesView.as_view(), name='mobile_reportes'),
+    path('api/reportes/catalogo/', MobileReportesCatalogoView.as_view(), name='mobile_reportes_catalogo'),
+    path('api/reportes/comunidad/', MobileReportesComunidadView.as_view(), name='mobile_reportes_comunidad'),
+    path('api/reportes/<int:reporte_id>/', MobileReporteDetalleView.as_view(), name='mobile_reporte_detalle'),
+    path('api/reportes/<int:reporte_id>/adjuntar/', MobileReporteAdjuntarView.as_view(), name='mobile_reporte_adjuntar'),
 ]

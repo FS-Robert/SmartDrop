@@ -1,0 +1,83 @@
+{% extends 'App/base.html' %}
+{% block title %}Problemas reportados{% endblock %}
+{% block nav_admin_reportes %}active{% endblock %}
+
+{% block content %}
+<div class="reportes-heading">
+  <h1 class="page-title">PROBLEMAS REPORTADOS</h1>
+  <p class="page-subtitle">Gestiona los reportes de los usuarios: responde, asigna prioridad y cambia su estado.</p>
+</div>
+
+{% if messages %}
+  {% for message in messages %}
+    <div class="alert-box full-width card msg-{{ message.tags }}">
+      <i class="ti ti-{% if message.tags == 'success' %}check{% else %}info-circle{% endif %} alert-icon"></i>
+      <div class="alert-text">{{ message }}</div>
+    </div>
+  {% endfor %}
+{% endif %}
+
+<div class="conteos-row">
+  <div class="stat"><div class="stat-num">{{ conteos.pendiente }}</div><div class="stat-label">Pendientes</div></div>
+  <div class="stat"><div class="stat-num">{{ conteos.en_proceso }}</div><div class="stat-label">En proceso</div></div>
+  <div class="stat"><div class="stat-num">{{ conteos.resuelto }}</div><div class="stat-label">Resueltos</div></div>
+</div>
+
+<div class="card">
+  <form method="get" class="filtros-row">
+    <select name="estado" class="field-input">
+      <option value="">Todos los estados</option>
+      <option value="pendiente" {% if filtro_estado == 'pendiente' %}selected{% endif %}>Pendiente</option>
+      <option value="en_proceso" {% if filtro_estado == 'en_proceso' %}selected{% endif %}>En proceso</option>
+      <option value="resuelto" {% if filtro_estado == 'resuelto' %}selected{% endif %}>Resuelto</option>
+    </select>
+    <select name="tipo" class="field-input">
+      <option value="">Todos los tipos</option>
+      {% for key, meta in tipos_problema.items %}
+      <option value="{{ key }}" {% if filtro_tipo == key %}selected{% endif %}>{{ meta.label }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn-primary btn-filtrar"><i class="ti ti-filter"></i> Filtrar</button>
+    <a class="reportes-link" href="{% url 'admin_reportes_export' %}?estado={{ filtro_estado }}&tipo={{ filtro_tipo }}">
+      <i class="ti ti-download"></i> Exportar CSV
+    </a>
+  </form>
+
+  {% if reportes %}
+  <div class="tabla-reportes-wrap">
+    <table class="tabla-reportes">
+      <thead>
+        <tr>
+          <th>#</th><th>Usuario</th><th>Tipo</th><th>Descripción</th>
+          <th>Fecha</th><th>Estado</th><th>Prioridad</th><th>Evid.</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for reporte in reportes %}
+        <tr>
+          <td>{{ reporte.id_reporte }}</td>
+          <td>
+            <div class="autor-nombre">{{ reporte.autor_nombre }}</div>
+            <div class="autor-correo">{{ reporte.autor_correo }}</div>
+          </td>
+          <td>{{ reporte.tipo_label }}</td>
+          <td class="desc-cell">{{ reporte.descripcion|truncatewords:10 }}</td>
+          <td>{{ reporte.fecha_reporte|slice:'5:16' }}</td>
+          <td><span class="badge badge-estado-{{ reporte.estado }}">{{ reporte.estado_label }}</span></td>
+          <td><span class="badge badge-prio-{{ reporte.prioridad|default:'media' }}">{{ reporte.prioridad|default:'media'|title }}</span></td>
+          <td>{% if reporte.n_adjuntos %}<i class="ti ti-paperclip"></i> {{ reporte.n_adjuntos }}{% else %}—{% endif %}</td>
+          <td>
+            <a href="{% url 'reporte_detalle' reporte.id_reporte %}" class="btn-ver">
+              Ver{% if reporte.sin_leer %} <span class="badge-sin-leer">{{ reporte.sin_leer }}</span>{% endif %}
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    <p class="reportes-empty">No hay reportes con estos filtros.</p>
+  {% endif %}
+</div>
+{% endblock %}

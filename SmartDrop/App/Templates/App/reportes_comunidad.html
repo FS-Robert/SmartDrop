@@ -1,0 +1,99 @@
+{% extends 'App/base.html' %}
+{% block title %}Reportes de la comunidad{% endblock %}
+{% block nav_comunidad %}active{% endblock %}
+
+{% block content %}
+<div class="reportes-heading">
+  <h1 class="page-title">COMUNIDAD</h1>
+  <p class="page-subtitle">Problemas reportados por vecinos con evidencia fotográfica o video. Si ves el mismo problema en tu zona, repórtalo también: más reportes = mayor prioridad.</p>
+</div>
+
+{% if messages %}
+  {% for message in messages %}
+    <div class="alert-box full-width card msg-{{ message.tags }}">
+      <i class="ti ti-{% if message.tags == 'success' %}check{% elif message.tags == 'error' %}x{% else %}info-circle{% endif %} alert-icon"></i>
+      <div class="alert-text">{{ message }}</div>
+    </div>
+  {% endfor %}
+{% endif %}
+
+<div class="card">
+  <div class="card-header"><i class="ti ti-photo"></i> Reportar con evidencia fotográfica</div>
+  <form method="post" enctype="multipart/form-data" class="comunidad-form">
+    {% csrf_token %}
+    <div class="comunidad-form-grid">
+      <label>Tipo de problema
+        <select name="tipo_problema" class="field-input" required>
+          {% for key, meta in tipos_problema.items %}
+          <option value="{{ key }}">{{ meta.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Zona / colonia
+        <input type="text" name="zona" class="field-input" placeholder="Ej: Colonia La Merced" required/>
+      </label>
+      <label class="span-2">Ubicación exacta (opcional)
+        <input type="text" name="ubicacion" class="field-input" placeholder="Ej: Calle principal, frente al parque"/>
+      </label>
+      <label class="span-2">Descripción
+        <textarea name="descripcion" rows="3" class="field-input" required
+          placeholder="Describe lo que observas..."></textarea>
+      </label>
+      <label class="span-2 adjuntos-label">Fotos / videos de evidencia (máx. {{ max_adjuntos }})
+        <input type="file" name="adjuntos" class="field-input" multiple accept="image/*,video/*"/>
+      </label>
+    </div>
+    <button type="submit" class="btn-primary"><i class="ti ti-send"></i> Publicar reporte comunitario</button>
+  </form>
+</div>
+
+<div class="comunidad-feed">
+  {% for reporte in feed %}
+  <article class="card comunidad-card">
+    <header class="comunidad-card-head">
+      <div>
+        <span class="comunidad-autor">{{ reporte.autor_nombre }}</span>
+        <span class="comunidad-meta"> · {{ reporte.fecha_reporte|slice:'5:16' }}</span>
+        {% if reporte.propio %}<span class="badge badge-propio">Tuyo</span>{% endif %}
+      </div>
+      <span class="badge badge-estado-{{ reporte.estado }}">{{ reporte.estado_label }}</span>
+    </header>
+    <h3 class="comunidad-titulo">{{ reporte.tipo_label }}</h3>
+    <p class="comunidad-desc">{{ reporte.descripcion|linebreaksbr }}</p>
+    {% if reporte.ubicacion %}
+      <p class="reportes-hint"><i class="ti ti-map-pin"></i> {{ reporte.ubicacion }}</p>
+    {% endif %}
+
+    {% if reporte.adjuntos %}
+    <div class="evidencia-grid">
+      {% for adj in reporte.adjuntos %}
+        {% if adj.tipo == 'video' %}
+          <video class="evidencia-item" controls preload="metadata" src="{{ adj.url }}"></video>
+        {% else %}
+          <a href="{{ adj.url }}" target="_blank" rel="noopener">
+            <img class="evidencia-item" src="{{ adj.url }}" alt="Evidencia de {{ reporte.tipo_label }}" loading="lazy"/>
+          </a>
+        {% endif %}
+      {% endfor %}
+    </div>
+    {% elif not reporte.tiene_evidencia %}
+    <p class="reportes-hint"><i class="ti ti-photo"></i> Sin evidencia adjunta</p>
+    {% endif %}
+
+    {% if reporte.respuesta_admin %}
+    <div class="respuesta-oficial-mini">
+      <i class="ti ti-shield-check"></i> <strong>Equipo SmartDrop:</strong> {{ reporte.respuesta_admin|truncatewords:30 }}
+    </div>
+    {% endif %}
+
+    <footer class="comunidad-card-foot">
+      <a href="{% url 'reporte_detalle' reporte.id_reporte %}" class="reportes-link">
+        {% if reporte.propio or es_admin %}<i class="ti ti-messages"></i> Ver conversación{% else %}<i class="ti ti-eye"></i> Ver detalle{% endif %}
+      </a>
+    </footer>
+  </article>
+  {% empty %}
+  <div class="card"><p class="reportes-empty">Todavía no hay reportes de la comunidad. ¡Sé el primero en reportar!</p></div>
+  {% endfor %}
+</div>
+{% endblock %}

@@ -52,5 +52,17 @@
 .ti-test-pipe::before { content: "\eb3a" }
 .ti-toggle-left::before { content: "\eb3e" }
 .ti-user::before { content: "\eb4d" }
+.ti-users::before { content: "\eb4f" }
+.ti-file-invoice::before { content: "\eaa2" }
+.ti-dots::before { content: "\ea94" }
+.ti-paperclip::before { content: "\eb02" }
+.ti-send::before { content: "\eb1e" }
+.ti-photo::before { content: "\eb0a" }
+.ti-video::before { content: "\ed22" }
+.ti-check::before { content: "\ea5e" }
+.ti-plus::before { content: "\eb0b" }
+.ti-arrow-left::before { content: "\ea19" }
+.ti-eye::before { content: "\ea9a" }
+.ti-messages::before { content: "\eaef" }
 .ti-wave-sine::before { content: "\ecd4" }
 .ti-x::before { content: "\eb55" }

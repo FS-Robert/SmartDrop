@@ -28,3 +28,4 @@ urlpatterns = [
 if settings.DEBUG:
     static_dir = Path(settings.BASE_DIR) / 'App' / 'Static'
     urlpatterns += static(settings.STATIC_URL, document_root=str(static_dir))
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
