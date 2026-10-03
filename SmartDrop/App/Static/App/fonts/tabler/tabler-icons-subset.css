@@ -1,0 +1,56 @@
+@font-face {
+  font-family: "tabler-icons";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./tabler-icons.woff2") format("woff2");
+}
+.ti{font-family:"tabler-icons"!important;speak:none;font-style:normal;font-weight:normal;font-variant:normal;text-transform:none;line-height:1;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.ti-activity-heartbeat::before { content: "\f0db" }
+.ti-alert-triangle::before { content: "\ea06" }
+.ti-arrow-down::before { content: "\ea16" }
+.ti-arrow-right::before { content: "\ea1f" }
+.ti-arrow-up-right::before { content: "\ea24" }
+.ti-arrow-up::before { content: "\ea25" }
+.ti-award::before { content: "\ea2c" }
+.ti-bell::before { content: "\ea35" }
+.ti-bolt::before { content: "\ea38" }
+.ti-brain::before { content: "\f59f" }
+.ti-building-warehouse::before { content: "\ebe3" }
+.ti-bulb::before { content: "\ea51" }
+.ti-chart-bar::before { content: "\ea59" }
+.ti-chart-dots::before { content: "\ee2f" }
+.ti-chart-line::before { content: "\ea5c" }
+.ti-clock::before { content: "\ea70" }
+.ti-database::before { content: "\ea88" }
+.ti-devices::before { content: "\eb87" }
+.ti-download::before { content: "\ea96" }
+.ti-droplet-half-2::before { content: "\ee81" }
+.ti-droplet::before { content: "\ea97" }
+.ti-droplets::before { content: "\fc12" }
+.ti-engine::before { content: "\ef7e" }
+.ti-filter::before { content: "\eaa5" }
+.ti-flask::before { content: "\ebd2" }
+.ti-gauge::before { content: "\eab1" }
+.ti-history::before { content: "\ebea" }
+.ti-home::before { content: "\eac1" }
+.ti-info-circle::before { content: "\eac5" }
+.ti-language::before { content: "\ebbe" }
+.ti-layout-grid::before { content: "\edba" }
+.ti-leaf::before { content: "\ed4f" }
+.ti-link::before { content: "\eade" }
+.ti-list-details::before { content: "\ef40" }
+.ti-lock-open::before { content: "\eae1" }
+.ti-lock::before { content: "\eae2" }
+.ti-map-pin::before { content: "\eae8" }
+.ti-moon::before { content: "\eaf8" }
+.ti-refresh::before { content: "\eb13" }
+.ti-search-off::before { content: "\f19c" }
+.ti-search::before { content: "\eb1c" }
+.ti-shield-check::before { content: "\eb22" }
+.ti-temperature::before { content: "\eb38" }
+.ti-test-pipe::before { content: "\eb3a" }
+.ti-toggle-left::before { content: "\eb3e" }
+.ti-user::before { content: "\eb4d" }
+.ti-wave-sine::before { content: "\ecd4" }
+.ti-x::before { content: "\eb55" }

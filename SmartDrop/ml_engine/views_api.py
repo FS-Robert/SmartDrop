@@ -30,7 +30,6 @@ from ml_engine.serializers import (
     ConsumptionForecastSerializer,
     ShortagePredictionSerializer,
     TankTrajectorySerializer,
-    ZoneCurrentStatusSerializer,
     ZoneSummarySerializer,
 )
 

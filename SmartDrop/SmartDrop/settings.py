@@ -63,6 +63,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'django.middleware.gzip.GZipMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -90,6 +91,14 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'SmartDrop.wsgi.application'
 ASGI_APPLICATION = 'SmartDrop.asgi.application'
+
+# Caché por proceso para datos casi estáticos de Supabase (ver App/queries.py).
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'smartdrop',
+    },
+}
 
 REDIS_URL = os.environ.get('REDIS_URL', '').strip()
 CHANNEL_LAYERS = {

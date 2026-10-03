@@ -1,6 +1,8 @@
-from django.test import TestCase
+from datetime import timedelta
 from unittest.mock import patch
 
+from django.core.cache import cache
+from django.test import TestCase as DjangoTestCase
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -10,6 +12,29 @@ from .backends import sync_user_from_supabase
 from .forms import LoginForm
 from .models import Rol, Usuario
 from .views import _supabase_user_id, _valve_statistics
+
+
+class TestCase(DjangoTestCase):
+	"""Vacía la caché antes de cada prueba: queries.py cachea viviendas, sensores y alertas."""
+
+	def _pre_setup(self):
+		super()._pre_setup()
+		cache.clear()
+
+
+def select_by_table(**tables):
+	"""Mock de supabase_client.select que responde según la tabla (las consultas corren en paralelo)."""
+	def fake_select(table, columns='*', params=None):
+		return tables.get(table, [])
+	return fake_select
+
+
+def _month_day(months_back, day=15):
+	"""Fecha ISO del día `day` de hace `months_back` meses, para no depender de la fecha actual."""
+	first = timezone.localdate().replace(day=1)
+	for _ in range(months_back):
+		first = (first - timedelta(days=1)).replace(day=1)
+	return f'{first.replace(day=day).isoformat()}T10:00:00Z'
 
 # Create your tests here.
 
@@ -138,8 +163,8 @@ class ConsumoViewTests(TestCase):
 		select.side_effect = [
 			[{'id_vivienda': 17, 'nic': 'NIC-17', 'direccion': 'Casa propia'}],
 			[
-				{'fecha': '2026-09-05T10:00:00Z', 'consumo_total': 12},
-				{'fecha': '2026-08-05T10:00:00Z', 'consumo_total': 20},
+				{'fecha': _month_day(0), 'consumo_total': 12},
+				{'fecha': _month_day(1), 'consumo_total': 20},
 			],
 		]
 		self.client.force_login(user)
@@ -164,8 +189,8 @@ class ConsumoViewTests(TestCase):
 		select.side_effect = [
 			[{'id_vivienda': 17, 'nic': 'NIC-17', 'direccion': 'Casa propia'}],
 			[
-				{'fecha': '2026-09-05T10:00:00Z', 'consumo_total': 30},
-				{'fecha': '2026-08-05T10:00:00Z', 'consumo_total': 20},
+				{'fecha': _month_day(0), 'consumo_total': 30},
+				{'fecha': _month_day(1), 'consumo_total': 20},
 			],
 		]
 		insert.side_effect = [{'id_alerta': 31}, None]
@@ -185,12 +210,12 @@ class ConsumoViewTests(TestCase):
 			email='estado@example.com', nombre='Estado', apellido='Usuario',
 			password='password-segura', rol=rol,
 		)
-		select.side_effect = [[], [], [{
+		select.side_effect = select_by_table(valvula=[{
 			'id_valvula': 1,
 			'nombre': 'Principal',
 			'estado_actual': 'abierta',
 			'ultima_apertura': timezone.now().isoformat(),
-		}]]
+		}])
 		self.client.force_login(user)
 
 		response = self.client.get(reverse('dashboard'))
@@ -292,7 +317,7 @@ class AdminValveViewTests(TestCase):
 			},
 		]
 		usuarios = [{'id_usuario': 7, 'nombre': 'Ana', 'apellido': 'López', 'correo': 'ana@example.com'}]
-		select.side_effect = [valves, movimientos, usuarios, [valves[0]]]
+		select.side_effect = select_by_table(valvula=valves, log_valvula=movimientos, usuario=usuarios)
 		self.client.force_login(self.admin)
 
 		response = self.client.get(reverse('valvulas'))
@@ -364,15 +389,14 @@ class AdminValveViewTests(TestCase):
 
 	@patch('App.views.supabase_client.select')
 	def test_historial_se_puede_exportar_a_csv(self, select):
-		select.side_effect = [
-			[{'id_valvula': 1, 'nombre': 'Principal'}],
-			[{
+		select.side_effect = select_by_table(
+			valvula=[{'id_valvula': 1, 'nombre': 'Principal'}],
+			log_valvula=[{
 				'id_valvula': 1, 'accion': 'abrir', 'tipo_activacion': 'manual',
 				'id_usuario': None, 'fecha_hora': '2026-09-07T10:00:00+00:00',
 				'origen_accion': 'web',
 			}],
-			[],
-		]
+		)
 		self.client.force_login(self.admin)
 
 		response = self.client.get(reverse('valvulas'), {'formato': 'csv'})
@@ -391,9 +415,11 @@ class AdminValveViewTests(TestCase):
 				'origen_accion': 'web',
 			}
 		] * 21
-		select.side_effect = [[{'id_valvula': 1, 'nombre': 'Principal'}], movements, [
-			{'id_usuario': 4, 'nombre': 'Admin', 'apellido': 'Prueba'},
-		]]
+		select.side_effect = select_by_table(
+			valvula=[{'id_valvula': 1, 'nombre': 'Principal'}],
+			log_valvula=movements,
+			usuario=[{'id_usuario': 4, 'nombre': 'Admin', 'apellido': 'Prueba'}],
+		)
 		insert.side_effect = [{'id_alerta': 9}, None]
 		self.client.force_login(self.admin)
 
@@ -482,3 +508,69 @@ class MobileSearchAndValveLogsTests(TestCase):
 
 		self.assertEqual(response.status_code, 403)
 		select.assert_not_called()
+
+
+class QueryCacheAndFiltersTests(TestCase):
+	def setUp(self):
+		self.user_role = Rol.objects.create(id_rol=3, nombre_rol='user')
+		self.admin_role = Rol.objects.create(id_rol=2, nombre_rol='admin')
+		self.user = Usuario.objects.create_user(
+			email='cache@example.com', nombre='Cache', apellido='Usuario',
+			password='password-segura', rol=self.user_role,
+		)
+
+	@patch('App.queries.supabase_client.select')
+	def test_viviendas_se_consultan_una_sola_vez_y_se_invalidan(self, select):
+		from . import queries
+		select.return_value = [{'id_vivienda': 17}]
+
+		queries.user_viviendas(self.user)
+		queries.user_viviendas(self.user)
+		self.assertEqual(select.call_count, 1)
+
+		queries.invalidate_user_viviendas(self.user)
+		queries.user_viviendas(self.user)
+		self.assertEqual(select.call_count, 2)
+
+	@patch('App.views.supabase_client.insert')
+	@patch('App.views.supabase_client.select')
+	def test_alerta_de_consumo_elevado_se_registra_una_sola_vez(self, select, insert):
+		select.side_effect = select_by_table(
+			vivienda=[{'id_vivienda': 17}],
+			consumo=[
+				{'fecha': _month_day(0), 'consumo_total': 30},
+				{'fecha': _month_day(1), 'consumo_total': 20},
+			],
+		)
+		insert.side_effect = [{'id_alerta': 31}, None]
+		self.client.force_login(self.user)
+
+		self.client.get(reverse('retroalimentacion'))
+		self.client.get(reverse('retroalimentacion'))
+
+		self.assertEqual(insert.call_count, 2)
+
+	@patch('App.views.supabase_client.select')
+	def test_sensor_data_filtra_en_supabase_y_rechaza_ids_no_numericos(self, select):
+		admin = Usuario.objects.create_user(
+			email='sensor-admin@example.com', nombre='Admin', apellido='Sensor',
+			password='password-segura', rol=self.admin_role,
+		)
+		select.side_effect = select_by_table(
+			sensor=[{'id_sensor': 5, 'tipo_sensor': 'presion', 'unidad_medida': 'bar'}],
+			lectura=[{'id_sensor': 5, 'fecha_registro': timezone.now().isoformat(), 'valor': 2.5}],
+		)
+		self.client.force_login(admin)
+
+		response = self.client.get(reverse('sensor_data', kwargs={'sensor_id': '5'}), {'range': '1h'})
+
+		self.assertEqual(response.json()['data'], [2.5])
+		lectura_call = next(call for call in select.call_args_list if call.args[0] == 'lectura')
+		self.assertEqual(lectura_call.args[2]['id_sensor'], 'in.(5)')
+		self.assertTrue(lectura_call.args[2]['fecha_registro'].startswith('gte.'))
+
+		select.reset_mock()
+		response = self.client.get(reverse('sensor_data', kwargs={'sensor_id': '5,id_sensor.eq.9'}))
+
+		self.assertEqual(response.json()['data'], [])
+		self.assertNotIn('lectura', [call.args[0] for call in select.call_args_list])

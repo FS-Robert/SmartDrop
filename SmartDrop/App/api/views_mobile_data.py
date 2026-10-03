@@ -4,8 +4,8 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .. import supabase_client
-from ..views import _owned_sensor_data, _owned_consumption, _safe_float
+from .. import queries, supabase_client
+from ..queries import safe_float
 from .permissions import IsAuthenticatedUser
 
 
@@ -18,15 +18,26 @@ PARAMETER_NAMES = {
 
 def _visible_data(request):
     if getattr(request.user, 'rol_id', None) == 2:
-        viviendas = supabase_client.select('vivienda', 'id_vivienda,nic,direccion', {'limit': '1000'})
-        sensores = supabase_client.select('sensor', '*', {'limit': '1000'})
-        lecturas = supabase_client.select(
-            'lectura', '*', {'order': 'fecha_registro.desc', 'limit': '2000'}
+        viviendas, sensores, lecturas = queries.run_parallel(
+            lambda: supabase_client.select('vivienda', 'id_vivienda,nic,direccion', {'limit': '1000'}),
+            queries.sensors,
+            lambda: supabase_client.select(
+                'lectura', '*', {'order': 'fecha_registro.desc', 'limit': '2000'}
+            ),
         )
         return viviendas, sensores, lecturas
 
-    viviendas, sensores, lecturas, _ = _owned_sensor_data(request)
-    return viviendas, sensores, lecturas
+    data = queries.owned_data(request.user)
+    return data.viviendas, data.sensores, data.lecturas
+
+
+def _range_status(value, minimum, maximum):
+    """'Alta', 'Baja' o 'Normal' según los límites del sensor (None = sin límite)."""
+    if maximum is not None and value > safe_float(maximum):
+        return 'Alta'
+    if minimum is not None and value < safe_float(minimum):
+        return 'Baja'
+    return 'Normal'
 
 
 def _sensor_type(sensor):
@@ -55,14 +66,8 @@ def _reading_series(sensor, readings, since=None):
             continue
         if since and parsed.replace(tzinfo=None) < since:
             continue
-        value = _safe_float(row.get('valor'))
-        minimum = sensor.get('rango_min')
-        maximum = sensor.get('rango_max')
-        outside = (
-            minimum is not None and value < _safe_float(minimum)
-        ) or (
-            maximum is not None and value > _safe_float(maximum)
-        )
+        value = safe_float(row.get('valor'))
+        outside = _range_status(value, sensor.get('rango_min'), sensor.get('rango_max')) != 'Normal'
         result.append({'fecha': timestamp, 'valor': value, 'fuera_de_rango': outside})
     result.reverse()
     return result
@@ -102,6 +107,7 @@ class MobileVincularViviendaView(APIView):
             {'id_usuario_propietario': request.user.id_usuario},
             {'id_vivienda': f"eq.{vivienda['id_vivienda']}"},
         )
+        queries.invalidate_user_viviendas(request.user)
         return Response({'mensaje': 'Vivienda vinculada exitosamente.', 'vivienda': vivienda})
 
 
@@ -122,14 +128,17 @@ class MobileEstadoAguaView(APIView):
             if not pair:
                 return None
             sensor, reading = pair
-            value = _safe_float(reading.get('valor'))
-            minimum = sensor.get('umbral_critico_bajo', sensor.get('rango_min'))
-            maximum = sensor.get('umbral_critico_alto', sensor.get('rango_max'))
-            outside = (minimum is not None and value < _safe_float(minimum)) or (maximum is not None and value > _safe_float(maximum))
+            value = safe_float(reading.get('valor'))
+            estado = _range_status(
+                value,
+                sensor.get('umbral_critico_bajo', sensor.get('rango_min')),
+                sensor.get('umbral_critico_alto', sensor.get('rango_max')),
+            )
+            outside = estado != 'Normal'
             result = {
                 'valor': value,
                 'unidad': sensor.get('unidad_medida') or '',
-                'estado': 'Alta' if maximum is not None and value > _safe_float(maximum) else ('Baja' if minimum is not None and value < _safe_float(minimum) else 'Normal'),
+                'estado': estado,
                 'descripcion': 'Valor fuera de rango.' if outside else 'Valor dentro del rango normal.',
                 'color': 'rojo' if outside else 'verde',
                 'fecha': reading.get('fecha_registro'),
@@ -141,7 +150,7 @@ class MobileEstadoAguaView(APIView):
                     'texto_anomalias': 'Revisar calidad del agua.' if outside else 'Sin anomalías recientes.',
                 })
             if any(name in _sensor_type(sensor) for name in ('nivel', 'level')):
-                capacity = _safe_float(sensor.get('capacidad_maxima_litros'), 0)
+                capacity = safe_float(sensor.get('capacidad_maxima_litros'), 0)
                 result.update({
                     'porcentaje': value,
                     'litros_disponibles': round(capacity * value / 100, 1),

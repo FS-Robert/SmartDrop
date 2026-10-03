@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from ..views import _owned_consumption
+from ..queries import owned_consumption
 from .permissions import IsAuthenticatedUser
 
 
@@ -16,7 +16,7 @@ class MobileConsumoView(APIView):
         if periodo not in ('dia', 'semana', 'mes'):
             return Response({'error': 'periodo inválido, usa dia, semana o mes.'}, status=400)
 
-        _, rows = _owned_consumption(request)
+        _, rows = owned_consumption(request.user)
         grouped = defaultdict(float)
         for row in rows:
             raw_date = row.get('fecha') or row.get('fecha_registro')

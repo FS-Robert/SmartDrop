@@ -4,12 +4,13 @@ import json
 import logging
 import math
 import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timedelta
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone as dt_timezone
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
+from django.core.cache import cache
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -19,9 +20,18 @@ from django.views.decorators.http import require_http_methods
 
 from .forms import LoginForm, UsuarioRegisterForm
 from . import supabase_client
-from .backends import sync_user_from_supabase
 from .mqtt_service import MqttError, publish_command
-
+from .queries import (
+    NO_DATA,
+    owned_consumption,
+    owned_data,
+    owner_id,
+    run_parallel,
+    safe_float,
+    sensors,
+    user_viviendas,
+)
+from .search_sections import matching_sections
 
 logger = logging.getLogger(__name__)
 
@@ -140,7 +150,6 @@ def _execute_cierre_automatico(valvula_id, duracion_seg):
             {'id_valvula': f'eq.{valvula_id}'},
         )
 
-        origen_accion = 'web'
         log_payload = {
             'id_valvula': valvula['id_valvula'],
             'accion': 'cerrar',
@@ -150,7 +159,7 @@ def _execute_cierre_automatico(valvula_id, duracion_seg):
             'id_usuario': None,
             'fecha_hora': timezone.now().isoformat(),
             'ip_dispositivo': 'temporizador',
-            'origen_accion': origen_accion,
+            'origen_accion': 'web',
             'duracion_programada': duracion_seg,
             'duracion_real': duracion_seg,
             'razon': 'Cierre automático - Tiempo completado',
@@ -182,85 +191,6 @@ def _start_timer_for_valvula(valvula_id, duracion_seg):
     }
 
 
-def _owned_sensor_data(request):
-    """Return only sensor readings belonging to the authenticated user's homes."""
-    propietario_id = getattr(request.user, 'supabase_id', None) or request.user.id_usuario
-    viviendas = supabase_client.select(
-        'vivienda',
-        'id_vivienda,nic,direccion',
-        {'id_usuario_propietario': f'eq.{propietario_id}', 'limit': '1000'},
-    )
-    vivienda_ids = [str(row['id_vivienda']) for row in viviendas if row.get('id_vivienda')]
-    if not vivienda_ids:
-        return viviendas, [], [], []
-
-    with ThreadPoolExecutor(max_workers=3) as executor:
-        lecturas_future = executor.submit(
-            supabase_client.select,
-            'lectura',
-            '*',
-            {
-                'id_vivienda': f"in.({','.join(vivienda_ids)})",
-                'order': 'fecha_registro.desc',
-                'limit': '2000',
-            },
-        )
-        sensores_future = executor.submit(
-            supabase_client.select,
-            'sensor',
-            '*',
-            {'limit': '1000'},
-        )
-        tanques_future = executor.submit(
-            supabase_client.select,
-            'tanque',
-            'id_sensor_nivel,capacidad_maxima_litros,altura_total',
-            {'limit': '1000'},
-        )
-        lecturas = lecturas_future.result()
-        sensores = sensores_future.result()
-        try:
-            tanques = tanques_future.result()
-        except Exception:
-            tanques = []
-    sensor_lookup = {str(sensor.get('id_sensor')): sensor for sensor in sensores}
-    for lectura in lecturas:
-        sensor = sensor_lookup.get(str(lectura.get('id_sensor')), {})
-        lectura['tipo_sensor'] = (sensor.get('tipo_sensor') or '').lower()
-        lectura['unidad_medida'] = sensor.get('unidad_medida') or ''
-    return viviendas, sensores, lecturas, tanques
-
-
-def _owned_consumption(request, viviendas=None):
-    propietario_id = getattr(request.user, 'supabase_id', None) or request.user.id_usuario
-    if viviendas is None:
-        viviendas = supabase_client.select(
-            'vivienda',
-            'id_vivienda,nic,direccion',
-            {'id_usuario_propietario': f'eq.{propietario_id}', 'limit': '1000'},
-        )
-    vivienda_ids = [str(row['id_vivienda']) for row in viviendas if row.get('id_vivienda')]
-    if not vivienda_ids:
-        return viviendas, []
-    rows = supabase_client.select(
-        'consumo',
-        '*',
-        {
-            'id_vivienda': f"in.({','.join(vivienda_ids)})",
-            'order': 'fecha.desc',
-            'limit': '1000',
-        },
-    )
-    return viviendas, rows
-
-
-def _safe_float(value, default=0):
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return default
-
-
 def _search_rows(table, search_term):
     try:
         rows = supabase_client.select(table, '*', {'limit': '1000'})
@@ -286,84 +216,14 @@ def busqueda_global_view(request):
     }
 
     search_term = query.casefold()
-    sections = [
-        {
-            'titulo': 'Inicio / Estado de Agua',
-            'url': reverse('dashboard'),
-            'contenido': 'estado de agua, presión actual, calidad del agua, TDS, nivel de tanque, litros disponibles, consumo de agua, uptime del sistema, temperatura, pH, vivienda, lecturas y sensores',
-        },
-        {
-            'titulo': 'Retroalimentación e Indicadores de Consumo',
-            'url': reverse('retroalimentacion'),
-            'contenido': 'retroalimentación, indicadores de consumo, consumo total, consumo promedio, diferencia de consumo, fecha de registro, análisis y comparación',
-        },
-        {
-            'titulo': 'Presión del Agua',
-            'url': reverse('presion'),
-            'contenido': 'presión del agua, presión, bar, psi, valor, mínimo del día, máximo del día, promedio del día, válvula, lectura y actualizado ahora',
-        },
-        {
-            'titulo': 'Calidad del Agua - TDS',
-            'url': reverse('calidad'),
-            'contenido': 'calidad del agua, TDS, ppm, pH, cloro, turbidez, conductividad, temperatura, buena, media, mala, óptima, aceptable y anomalías',
-        },
-        {
-            'titulo': 'Nivel de Tanque',
-            'url': reverse('tanque'),
-            'contenido': 'nivel de tanque, tanque, porcentaje, litros, capacidad, autonomía, horas restantes, bomba, suministro y última lectura',
-        },
-        {
-            'titulo': 'Consumo Diario',
-            'url': reverse('consumo'),
-            'contenido': 'consumo diario, consumo de agua, litros, L, fecha, mes, consumo total, consumo promedio, consumo máximo, consumo mínimo, período y estado de pago',
-        },
-        {
-            'titulo': 'Recomendaciones de Ahorro',
-            'url': reverse('recomendaciones'),
-            'contenido': 'recomendaciones de ahorro, ahorrar agua, impacto, reutilizar agua, reparar fugas, suministro y consumo elevado',
-        },
-        {
-            'titulo': 'Mi Perfil',
-            'url': reverse('usuario'),
-            'contenido': 'mi perfil, usuario, nombre, correo, dirección, ciudad, teléfono, miembro desde, notificaciones y preferencias',
-        },
-    ]
-    if _admin_only(request):
-        sections.extend([
-            {
-                'titulo': 'Panel Administrativo',
-                'url': reverse('admin_panel'),
-                'contenido': 'panel administrativo, usuarios, viviendas, sensores, lecturas, monitoreo global, datos recientes y supervisión',
-            },
-            {
-                'titulo': 'Electroválvulas',
-                'url': reverse('valvulas'),
-                'contenido': 'electroválvulas, abrir, cerrar, estado actual, estado operativo, MQTT, historial, logs, acciones manuales y automáticas',
-            },
-        ])
-    resultados['secciones'] = [
-        section for section in sections
-        if search_term and (
-            search_term in section['titulo'].casefold()
-            or search_term in section['contenido'].casefold()
+    is_admin = _admin_only(request)
+    resultados['secciones'] = matching_sections(search_term, is_admin)
+    if is_admin and search_term:
+        usuarios, logs, alertas = run_parallel(
+            lambda: _search_rows('usuario', search_term),
+            lambda: _search_rows('log_valvula', search_term),
+            lambda: _search_rows('alerta', search_term),
         )
-    ]
-
-    if _admin_only(request) and search_term:
-        search_jobs = {
-            'usuarios': 'usuario',
-            'logs': 'log_valvula',
-            'alertas': 'alerta',
-        }
-        with ThreadPoolExecutor(max_workers=len(search_jobs)) as executor:
-            futures = {
-                executor.submit(_search_rows, table, search_term): key
-                for key, table in search_jobs.items()
-            }
-            fetched = {
-                futures[future]: future.result()
-                for future in as_completed(futures)
-            }
 
         resultados['registros'] = [
             {
@@ -373,7 +233,7 @@ def busqueda_global_view(request):
                 'icono': 'ti-user',
                 'url': reverse('admin_panel'),
             }
-            for row in fetched.get('usuarios', [])
+            for row in usuarios
         ] + [
             {
                 'tipo': 'Log de válvula',
@@ -382,7 +242,7 @@ def busqueda_global_view(request):
                 'icono': 'ti-list-details',
                 'url': reverse('valvulas'),
             }
-            for row in fetched.get('logs', [])
+            for row in logs
         ] + [
             {
                 'tipo': 'Alerta',
@@ -391,7 +251,7 @@ def busqueda_global_view(request):
                 'icono': 'ti-alert-triangle',
                 'url': reverse('admin_panel'),
             }
-            for row in fetched.get('alertas', [])
+            for row in alertas
         ]
 
     return render(request, 'App/busqueda_resultados.html', {
@@ -428,24 +288,27 @@ def _quality_status(tds_value):
     return 'Mala', 'Revisar', 1
 
 
+_QUALITY_MESSAGES = {
+    'Buena': 'El agua es segura para beber. Excelente calidad.',
+    'Media': 'El agua es consumible pero con sales disueltas. Aceptable.',
+    'Mala': 'El agua no es recomendable para beber. Requiere tratamiento.',
+}
+
+
 def _friendly_quality_message(tds_value):
     """Retorna un mensaje amigable sobre la calidad del agua basado en TDS."""
-    if tds_value is None:
-        return 'Sin datos de calidad disponibles', 0
-    tds = _safe_float(tds_value)
-    if tds <= 300:
-        return 'El agua es segura para beber. Excelente calidad.', 5
-    elif tds <= 600:
-        return 'El agua es consumible pero con sales disueltas. Aceptable.', 3
-    else:
-        return 'El agua no es recomendable para beber. Requiere tratamiento.', 1
+    state, _, stars = _quality_status(tds_value)
+    return _QUALITY_MESSAGES.get(state, 'Sin datos de calidad disponibles'), stars
+
+
+_PRESSURE_LABELS = {'normal': 'Estable', 'baja': 'Baja', 'alta': 'Alta', 'muy_alta': 'Muy alta'}
 
 
 def _friendly_pressure_message(pressure_value):
     """Retorna un mensaje amigable sobre la presión del agua."""
     if pressure_value is None:
         return 'Sin datos de presión', 'desconocido'
-    pressure = _safe_float(pressure_value)
+    pressure = safe_float(pressure_value)
     if pressure < 1:
         return 'Presión muy baja. Poco flujo de agua.', 'baja'
     elif pressure < 2:
@@ -462,7 +325,7 @@ def _friendly_tank_message(percentage, liters):
     """Retorna un mensaje amigable sobre el nivel del tanque."""
     if percentage is None or percentage < 0:
         return 'Sin datos del nivel', 'desconocido'
-    pct = _safe_float(percentage)
+    pct = safe_float(percentage)
     if pct < 5:
         return f'Tanque casi vacío. {liters}L disponibles.', 'critico'
     elif pct < 25:
@@ -483,22 +346,31 @@ def _status_badge_class(status):
     return 'badge-closed'
 
 
-def _tank_level_data(level, sensors):
+def _tank_summary(level, sensores, tanques):
+    """(litros, porcentaje, capacidad) del tanque a partir de la última lectura de nivel."""
     if not level:
         return 0, 0, 0
-    value = _safe_float(level.get('valor'))
-    sensor = next((item for item in sensors if str(item.get('id_sensor')) == str(level.get('id_sensor'))), {})
-    configured_capacity = _safe_float(sensor.get('capacidad_maxima_litros'))
-    configured_height = _safe_float(sensor.get('altura_total'))
-    sensor_min = _safe_float(sensor.get('rango_min'))
-    sensor_max = _safe_float(sensor.get('rango_max'))
+    level_sensor_id = str(level.get('id_sensor'))
+    sensor = next((item for item in sensores if str(item.get('id_sensor')) == level_sensor_id), {})
+    tank = next((item for item in tanques if str(item.get('id_sensor_nivel')) == level_sensor_id), {})
+    sensor = {**sensor, **tank}
+    value = safe_float(level.get('valor'))
+    configured_capacity = safe_float(sensor.get('capacidad_maxima_litros'))
+    configured_height = safe_float(sensor.get('altura_total'))
+    sensor_min = safe_float(sensor.get('rango_min'))
+    sensor_max = safe_float(sensor.get('rango_max'))
     capacity = sensor_max if sensor_max > sensor_min else 100
     percentage = ((value - sensor_min) / (capacity - sensor_min) * 100) if capacity > sensor_min else 0
     if configured_height > 0:
         percentage = value / configured_height * 100
     display_capacity = configured_capacity or capacity
-    liters = display_capacity * percentage / 100
-    return round(liters, 2), round(min(max(percentage, 0), 100), 2), round(display_capacity, 2)
+    percentage = round(min(max(percentage, 0), 100), 2)
+    display_capacity = round(display_capacity, 2)
+    return round(display_capacity * percentage / 100, 2), percentage, display_capacity
+
+
+def _ago(count, unit):
+    return f'hace {count} {unit}' + ('s' if count != 1 else '')
 
 
 def _public_valve_status():
@@ -512,22 +384,17 @@ def _public_valve_status():
     is_open = state in {'abierta', 'abierto', 'open'}
     updated_at = valve.get('ultima_apertura') if is_open else None
     updated_label = 'Sin actualización registrada'
-    if updated_at:
-        try:
-            updated_time = datetime.fromisoformat(str(updated_at).replace('Z', '+00:00'))
-            if timezone.is_naive(updated_time):
-                updated_time = timezone.make_aware(updated_time, timezone.get_current_timezone())
-            elapsed = max(0, int((timezone.now() - updated_time).total_seconds()))
-            if elapsed < 60:
-                updated_label = f'hace {elapsed} segundo' + ('s' if elapsed != 1 else '')
-            elif elapsed < 3600:
-                minutes = elapsed // 60
-                updated_label = f'hace {minutes} minuto' + ('s' if minutes != 1 else '')
-            else:
-                hours = elapsed // 3600
-                updated_label = f'hace {hours} hora' + ('s' if hours != 1 else '')
-        except (TypeError, ValueError):
-            updated_label = str(updated_at)
+    updated_time = _parse_valve_timestamp(updated_at)
+    if updated_time:
+        elapsed = max(0, int((timezone.now() - updated_time).total_seconds()))
+        if elapsed < 60:
+            updated_label = _ago(elapsed, 'segundo')
+        elif elapsed < 3600:
+            updated_label = _ago(elapsed // 60, 'minuto')
+        else:
+            updated_label = _ago(elapsed // 3600, 'hora')
+    elif updated_at:
+        updated_label = str(updated_at)
     return {
         'disponible': bool(valve),
         'id_valvula': valve.get('id_valvula'),
@@ -538,57 +405,65 @@ def _public_valve_status():
     }
 
 
-@login_required(login_url='login')
-def dashboard(request):
-    if getattr(request.user, 'rol_id', None) == 2:
-        return redirect('admin_panel')
-
+def _valve_status_or_unavailable():
     try:
-        viviendas, sensores, lecturas, tanques = _owned_sensor_data(request)
-        _, consumption_rows = _owned_consumption(request, viviendas)
+        return _public_valve_status()
     except Exception:
-        viviendas, sensores, lecturas, tanques, consumption_rows = [], [], [], [], []
-    latest = _latest_readings_by_type(lecturas)
-    pressure = _find_reading(latest, 'presion', 'pressure')
-    quality = _find_reading(latest, 'tds', 'calidad', 'ph')
-    level = _find_reading(latest, 'nivel', 'level')
-    tds_value = _safe_float(quality.get('valor')) if quality else None
-    quality_state, quality_badge, _ = _quality_status(tds_value)
-    tank = next((item for item in tanques if str(item.get('id_sensor_nivel')) == str(level.get('id_sensor'))), {}) if level else {}
-    level_value, level_percentage, level_capacity = _tank_level_data(level, [dict(sensor, **tank) for sensor in sensores])
-    consumption = _safe_float(
-        consumption_rows[0].get('consumo_total') or consumption_rows[0].get('consumo_promedio')
-    ) if consumption_rows else 0
-    try:
-        valve_status = _public_valve_status()
-    except Exception:
-        valve_status = {
+        return {
             'disponible': False,
             'estado': 'SIN DATOS',
             'clase': 'unknown',
             'ultima_actualizacion': 'No disponible',
         }
 
+
+def _json_requested(request):
+    return request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.headers.get('Accept') == 'application/json'
+
+
+def _owned_data_or_empty(user, consumption=False):
+    try:
+        return owned_data(user, consumption)
+    except Exception:
+        return NO_DATA
+
+
+@login_required(login_url='login')
+def dashboard(request):
+    if _admin_only(request):
+        return redirect('admin_panel')
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        valve_future = executor.submit(_valve_status_or_unavailable)
+        data = _owned_data_or_empty(request.user, consumption=True)
+        valve_status = valve_future.result()
+    viviendas, lecturas, consumption_rows = data.viviendas, data.lecturas, data.consumo
+    latest = _latest_readings_by_type(lecturas)
+    pressure = _find_reading(latest, 'presion', 'pressure')
+    quality = _find_reading(latest, 'tds', 'calidad', 'ph')
+    level = _find_reading(latest, 'nivel', 'level')
+    ph = _find_reading(latest, 'ph')
+    temperature = _find_reading(latest, 'temper')
+    tds_value = safe_float(quality.get('valor')) if quality else None
+    quality_state, quality_badge, _ = _quality_status(tds_value)
+    tank_liters, level_percentage, _ = _tank_summary(level, data.sensores, data.tanques)
+    consumption = safe_float(
+        consumption_rows[0].get('consumo_total') or consumption_rows[0].get('consumo_promedio')
+    ) if consumption_rows else 0
+
     # Obtener mensajes amigables
-    pressure_value = _safe_float(pressure.get('valor')) if pressure else None
+    pressure_value = safe_float(pressure.get('valor')) if pressure else None
     pressure_msg, pressure_status = _friendly_pressure_message(pressure_value)
     
     quality_msg, quality_icon = _friendly_quality_message(tds_value)
     
-    tank_liters = round(level_capacity * level_percentage / 100, 2)
     tank_msg, tank_status = _friendly_tank_message(level_percentage, tank_liters)
-    pressure_badges = {
-        'normal': 'Estable',
-        'baja': 'Baja',
-        'alta': 'Alta',
-        'muy_alta': 'Muy alta',
-        'desconocido': 'Sin lectura',
-    }
+    pressure_label = _PRESSURE_LABELS.get(pressure_status, 'Sin lectura')
     
     context = {
         'presion': {
-            'estado': pressure_badges.get(pressure_status, 'Sin datos'),
-            'badge': pressure_badges.get(pressure_status, 'Sin lectura'),
+            'estado': pressure_label,
+            'badge': pressure_label,
             'badge_class': _status_badge_class(pressure_status),
             'valor_exacto': f"{pressure_value} bar",
             'mensaje_amigable': pressure_msg,
@@ -612,8 +487,8 @@ def dashboard(request):
         'stats': {
             'uptime':        'Disponible' if lecturas else 'Sin datos',
             'presion_exacta':f"{pressure_value} bar",
-            'ph':            f"{_safe_float(_find_reading(latest, 'ph').get('valor')) if _find_reading(latest, 'ph') else 0} pH",
-            'temperatura':   f"{_safe_float(_find_reading(latest, 'temper').get('valor')) if _find_reading(latest, 'temper') else 0}°C",
+            'ph':            f"{safe_float(ph.get('valor')) if ph else 0} pH",
+            'temperatura':   f"{safe_float(temperature.get('valor')) if temperature else 0}°C",
         },
         'viviendas': viviendas,
         'realtime_readings': list(latest.values()),
@@ -624,19 +499,10 @@ def dashboard(request):
 
 @login_required(login_url='login')
 def estado_sistema(request):
-    if getattr(request.user, 'rol_id', None) == 2:
+    if _admin_only(request):
         return redirect('admin_panel')
-    try:
-        valve_status = _public_valve_status()
-    except Exception:
-        valve_status = {
-            'disponible': False,
-            'estado': 'SIN DATOS',
-            'clase': 'unknown',
-            'ultima_actualizacion': 'No disponible',
-        }
     return render(request, 'App/estado_sistema.html', {
-        'valvula': valve_status,
+        'valvula': _valve_status_or_unavailable(),
         'ultima_actualizacion': 'hace unos segundos',
     })
 
@@ -645,7 +511,7 @@ def estado_sistema(request):
 @require_http_methods(['GET'])
 def api_estado_valvula(request):
     """Devuelve el estado de la válvula para usuarios en modo consulta."""
-    if getattr(request.user, 'rol_id', None) == 2:
+    if _admin_only(request):
         return JsonResponse({'ok': False, 'error': 'Los administradores usan el panel de control'}, status=403)
     try:
         return JsonResponse({'ok': True, 'valvula': _public_valve_status()})
@@ -654,60 +520,69 @@ def api_estado_valvula(request):
         return JsonResponse({'ok': False, 'error': 'No se pudo consultar el estado de la válvula'}, status=502)
 
 
+def _tank_autonomy(vivienda_id):
+    try:
+        predicciones = supabase_client.select(
+            'prediccion_desabasto',
+            '*',
+            {'id_vivienda': f'eq.{vivienda_id}', 'order': 'fecha.desc', 'limit': '1'},
+        )
+        prediccion = predicciones[0] if predicciones else {}
+        horas_restantes = prediccion.get('horas_restantes')
+        if horas_restantes is not None:
+            dias, horas = divmod(int(float(horas_restantes)), 24)
+            return (
+                f'{dias} día{"s" if dias != 1 else ""} y {horas} hrs aprox.'
+                if dias else f'{horas} hrs aprox.'
+            )
+        if prediccion.get('mensaje'):
+            return str(prediccion['mensaje'])
+    except Exception:
+        pass
+    return 'Sin estimación'
+
+
+def _pump_status(vivienda_id):
+    try:
+        bombas = supabase_client.select(
+            'bomba',
+            '*',
+            {'id_vivienda': f'eq.{vivienda_id}', 'limit': '1'},
+        )
+        bomba = bombas[0] if bombas else {}
+        estado = str(bomba.get('estado_actual') or bomba.get('estado') or '').lower()
+        if estado in {'encendida', 'encendido', 'activa', 'automatico', 'automatica'}:
+            return 'Enciende automáticamente'
+        if bomba:
+            return 'Apagada (Standby)'
+    except Exception:
+        pass
+    return 'Sin bomba registrada'
+
+
 @login_required(login_url='login')
 def tanque(request):
     try:
-        viviendas, sensores, lecturas, tanques = _owned_sensor_data(request)
+        viviendas = user_viviendas(request.user)
     except Exception:
-        viviendas, sensores, lecturas, tanques = [], [], [], []
+        viviendas = []
 
     vivienda_id = request.session.get('vivienda_id')
     viviendas_ids = {str(vivienda.get('id_vivienda')) for vivienda in viviendas}
     if str(vivienda_id) not in viviendas_ids:
         vivienda_id = viviendas[0].get('id_vivienda') if viviendas else None
 
-    autonomia = 'Sin estimación'
-    estado_bomba = 'Sin bomba registrada'
     if vivienda_id:
-        try:
-            predicciones = supabase_client.select(
-                'prediccion_desabasto',
-                '*',
-                {'id_vivienda': f'eq.{vivienda_id}', 'order': 'fecha.desc', 'limit': '1'},
-            )
-            prediccion = predicciones[0] if predicciones else {}
-            horas_restantes = prediccion.get('horas_restantes')
-            if horas_restantes is not None:
-                horas = float(horas_restantes)
-                dias, horas = divmod(int(horas), 24)
-                autonomia = (
-                    f'{dias} día{"s" if dias != 1 else ""} y {horas} hrs aprox.'
-                    if dias else f'{horas} hrs aprox.'
-                )
-            elif prediccion.get('mensaje'):
-                autonomia = str(prediccion['mensaje'])
-        except Exception:
-            pass
+        data, autonomia, estado_bomba = run_parallel(
+            lambda: _owned_data_or_empty(request.user),
+            lambda: _tank_autonomy(vivienda_id),
+            lambda: _pump_status(vivienda_id),
+        )
+    else:
+        data, autonomia, estado_bomba = _owned_data_or_empty(request.user), 'Sin estimación', 'Sin bomba registrada'
 
-        try:
-            bombas = supabase_client.select(
-                'bomba',
-                '*',
-                {'id_vivienda': f'eq.{vivienda_id}', 'limit': '1'},
-            )
-            bomba = bombas[0] if bombas else {}
-            estado = str(bomba.get('estado_actual') or bomba.get('estado') or '').lower()
-            if estado in {'encendida', 'encendido', 'activa', 'automatico', 'automatica'}:
-                estado_bomba = 'Enciende automáticamente'
-            elif bomba:
-                estado_bomba = 'Apagada (Standby)'
-        except Exception:
-            pass
-
-    level = _find_reading(_latest_readings_by_type(lecturas), 'nivel', 'level')
-    tank = next((item for item in tanques if str(item.get('id_sensor_nivel')) == str(level.get('id_sensor'))), {}) if level else {}
-    nivel, porcentaje, capacidad = _tank_level_data(level, [dict(sensor, **tank) for sensor in sensores])
-    litros = round(capacidad * porcentaje / 100, 2)
+    level = _find_reading(_latest_readings_by_type(data.lecturas), 'nivel', 'level')
+    litros, porcentaje, capacidad = _tank_summary(level, data.sensores, data.tanques)
     _, tank_status = _friendly_tank_message(porcentaje, litros)
     tank_note = (
         'No hay una lectura de nivel disponible para este tanque.'
@@ -735,18 +610,16 @@ def tanque(request):
 
 @login_required(login_url='login')
 def calidad(request):
-    try:
-        viviendas, _, lecturas, _ = _owned_sensor_data(request)
-    except Exception:
-        viviendas, lecturas = [], []
-    latest = _latest_readings_by_type(lecturas)
+    data = _owned_data_or_empty(request.user)
+    viviendas = data.viviendas
+    latest = _latest_readings_by_type(data.lecturas)
     tds = _find_reading(latest, 'tds', 'calidad')
     ph = _find_reading(latest, 'ph')
     chlorine = _find_reading(latest, 'cloro', 'chlorine')
     turbidity = _find_reading(latest, 'turbidez', 'turbidity')
     conductivity = _find_reading(latest, 'conductividad', 'conductivity')
     temperature = _find_reading(latest, 'temper')
-    tds_value = _safe_float(tds.get('valor')) if tds else None
+    tds_value = safe_float(tds.get('valor')) if tds else None
     quality_state, quality_badge, quality_stars = _quality_status(tds_value)
     context = {
         'calidad': {
@@ -760,11 +633,11 @@ def calidad(request):
             'anomalias':      f'Clasificación TDS: {quality_state}.' if tds else 'No se han recibido lecturas.',
             'ultimo_analisis':(tds or ph or {}).get('fecha_registro', 'Sin datos'),
             'tds':            tds_value or 0,
-            'ph':             _safe_float(ph.get('valor')) if ph else 0,
-            'cloro':          _safe_float(chlorine.get('valor')) if chlorine else 0,
-            'turbidez':       _safe_float(turbidity.get('valor')) if turbidity else 0,
-            'conductividad':  _safe_float(conductivity.get('valor')) if conductivity else 0,
-            'temperatura':    _safe_float(temperature.get('valor')) if temperature else 0,
+            'ph':             safe_float(ph.get('valor')) if ph else 0,
+            'cloro':          safe_float(chlorine.get('valor')) if chlorine else 0,
+            'turbidez':       safe_float(turbidity.get('valor')) if turbidity else 0,
+            'conductividad':  safe_float(conductivity.get('valor')) if conductivity else 0,
+            'temperatura':    safe_float(temperature.get('valor')) if temperature else 0,
         },
         'viviendas': viviendas,
         'ultima_actualizacion': 'hace unos segundos',
@@ -774,40 +647,31 @@ def calidad(request):
 
 @login_required(login_url='login')
 def presion(request):
-    try:
-        viviendas, sensores, lecturas, _ = _owned_sensor_data(request)
-    except Exception:
-        viviendas, sensores, lecturas = [], [], []
+    data = _owned_data_or_empty(request.user)
+    viviendas, sensores, lecturas = data.viviendas, data.sensores, data.lecturas
     pressure_rows = [row for row in lecturas if 'presion' in row.get('tipo_sensor', '') or 'pressure' in row.get('tipo_sensor', '')]
     latest_pressure = max(
         pressure_rows,
         key=lambda row: str(row.get('fecha_registro') or ''),
         default=None,
     )
-    valor = _safe_float(latest_pressure.get('valor')) if latest_pressure else 0
+    valor = safe_float(latest_pressure.get('valor')) if latest_pressure else 0
     pressure_sensor = next(
         (sensor for sensor in sensores if 'presion' in str(sensor.get('tipo_sensor', '')).lower()
          or 'pressure' in str(sensor.get('tipo_sensor', '')).lower()),
         {},
     )
-    configured_max = _safe_float(pressure_sensor.get('rango_max'))
+    configured_max = safe_float(pressure_sensor.get('rango_max'))
     max_bar = configured_max if configured_max > 0 else 5.0
     pct       = min(max((valor / max_bar) * 100, 0), 100)
     # Arco SVG: longitud total del arco ≈ 251px
     gauge_dash = int((pct / 100) * 251)
     pressure_value = valor if pressure_rows else None
     pressure_message, pressure_status = _friendly_pressure_message(pressure_value)
-    pressure_labels = {
-        'normal': 'Estable',
-        'baja': 'Baja',
-        'alta': 'Alta',
-        'muy_alta': 'Muy alta',
-        'desconocido': 'Sin datos',
-    }
 
     context = {
         'presion': {
-            'estado':     pressure_labels.get(pressure_status, 'Sin datos'),
+            'estado':     _PRESSURE_LABELS.get(pressure_status, 'Sin datos'),
             'badge_class': _status_badge_class(pressure_status),
             'valvula':    'Sin datos',
             'valor':       valor,
@@ -816,9 +680,9 @@ def presion(request):
             'nota':       'Valor recibido desde el sensor de presión de tu vivienda.' if pressure_rows else 'No hay lecturas de presión para tu vivienda.',
             'mensaje':    pressure_message,
             'actualizado':'Actualizado ahora' if pressure_rows else 'Sin lectura',
-            'min_dia':    min((_safe_float(row.get('valor')) for row in pressure_rows), default=0),
-            'max_dia':    max((_safe_float(row.get('valor')) for row in pressure_rows), default=0),
-            'prom_dia':   round(sum(_safe_float(row.get('valor')) for row in pressure_rows) / len(pressure_rows), 2) if pressure_rows else 0,
+            'min_dia':    min((safe_float(row.get('valor')) for row in pressure_rows), default=0),
+            'max_dia':    max((safe_float(row.get('valor')) for row in pressure_rows), default=0),
+            'prom_dia':   round(sum(safe_float(row.get('valor')) for row in pressure_rows) / len(pressure_rows), 2) if pressure_rows else 0,
         },
         'viviendas': viviendas,
         'ultima_actualizacion': 'hace unos segundos',
@@ -826,38 +690,38 @@ def presion(request):
     return render(request, 'App/presion.html', context)
 
 
+def _consumption_date(raw_date):
+    row_date = datetime.fromisoformat(str(raw_date).replace('Z', '+00:00'))
+    if row_date.tzinfo:
+        row_date = timezone.localtime(row_date)
+    return row_date.date()
+
+
+def _record_alert_once(cache_key, destination_user_id, alert, ttl=3600):
+    """Registra una alerta y su notificación una sola vez por `ttl`, en vez de en cada visita."""
+    if cache.get(cache_key):
+        return
+    created = supabase_client.insert('alerta', alert) or {}
+    if created.get('id_alerta'):
+        supabase_client.insert('notificacion', {
+            'id_alerta': created['id_alerta'],
+            'id_usario_destino': destination_user_id,
+            'canal_envio': 'dashboard',
+            'estado_visualizacion': 'no_leida',
+            'fecha_envio': timezone.now().isoformat(),
+        })
+    cache.set(cache_key, True, ttl)
+
+
 @login_required(login_url='login')
 def consumo(request):
-    viviendas = []
-    rows = []
     try:
-        propietario_id = getattr(request.user, 'supabase_id', None) or request.user.id_usuario
-        viviendas = supabase_client.select(
-            'vivienda',
-            'id_vivienda,nic,direccion',
-            {
-                'id_usuario_propietario': f'eq.{propietario_id}',
-                'limit': '1000',
-            },
-        )
-        vivienda_ids = [str(vivienda['id_vivienda']) for vivienda in viviendas if vivienda.get('id_vivienda')]
-        if vivienda_ids:
-            rows = supabase_client.select(
-                'consumo',
-                'id_vivienda,fecha,consumo_total',
-                {
-                    'id_vivienda': f"in.({','.join(vivienda_ids)})",
-                    'order': 'fecha.desc',
-                    'limit': '1000',
-                },
-            )
+        viviendas, rows = owned_consumption(request.user)
     except Exception:
         # No mostrar datos de otra vivienda si la consulta no está disponible.
-        viviendas = []
-        rows = []
+        viviendas, rows = [], []
 
-    now = timezone.localtime()
-    today = now.date()
+    today = timezone.localdate()
     selected_month = today.replace(day=1)
     requested_month = request.GET.get('mes')
     if requested_month:
@@ -872,27 +736,18 @@ def consumo(request):
         if not raw_date or raw_value is None:
             continue
         try:
-            row_date = datetime.fromisoformat(str(raw_date).replace('Z', '+00:00'))
-            if row_date.tzinfo:
-                row_date = timezone.localtime(row_date)
-            value = float(raw_value)
+            parsed_rows.append((_consumption_date(raw_date), float(raw_value)))
         except (TypeError, ValueError, OverflowError):
             continue
-        parsed_rows.append((row_date.date(), value))
 
-    week_start = today - timedelta(days=6)
-    week_values = {week_start + timedelta(days=offset): 0 for offset in range(7)}
     month_values = {}
     day_values = []
     for row_date, value in parsed_rows:
-        if row_date in week_values:
-            week_values[row_date] += value
         if row_date == today:
             day_values.append(value)
         month_key = row_date.replace(day=1)
         month_values[month_key] = month_values.get(month_key, 0) + value
 
-    etiquetas_dias = ('Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom')
     dias_espanol = ('Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo')
     meses_espanol = (
         'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
@@ -1003,9 +858,8 @@ def retroalimentacion(request):
     viviendas = []
     retro = None
     try:
-        viviendas, consumption_rows = _owned_consumption(request)
-        now = timezone.localtime()
-        current_month = now.date().replace(day=1)
+        viviendas, consumption_rows = owned_consumption(request.user)
+        current_month = timezone.localdate().replace(day=1)
         previous_month = (current_month - timedelta(days=1)).replace(day=1)
         parsed_rows = []
         for row in consumption_rows:
@@ -1013,11 +867,10 @@ def retroalimentacion(request):
             if not raw_date:
                 continue
             try:
-                row_date = datetime.fromisoformat(str(raw_date).replace('Z', '+00:00'))
-                if row_date.tzinfo:
-                    row_date = timezone.localtime(row_date)
-                value = _safe_float(row.get('consumo_total') or row.get('consumo_promedio'))
-                parsed_rows.append((row_date.date(), value))
+                parsed_rows.append((
+                    _consumption_date(raw_date),
+                    safe_float(row.get('consumo_total') or row.get('consumo_promedio')),
+                ))
             except (TypeError, ValueError, OverflowError):
                 continue
 
@@ -1075,28 +928,23 @@ def retroalimentacion(request):
             }
             if alert_message:
                 try:
-                    alert = supabase_client.insert('alerta', {
-                        'tipo_alerta': 'consumo_elevado',
-                        'prioridad': 'media',
-                        'mensaje': alert_message,
-                        'estado_confirmacion': 'pendiente',
-                        'datos_adicionales': {
-                            'consumo_actual': current,
-                            'periodo_comparacion': comparison_period,
-                            'consumo_comparacion': comparison_base,
-                            'variacion_porcentual': variation,
-                            'sugerencias': recommendations[:3],
+                    _record_alert_once(
+                        f'alerta-consumo:{owner_id(request.user)}:{current_month}',
+                        owner_id(request.user),
+                        {
+                            'tipo_alerta': 'consumo_elevado',
+                            'prioridad': 'media',
+                            'mensaje': alert_message,
+                            'estado_confirmacion': 'pendiente',
+                            'datos_adicionales': {
+                                'consumo_actual': current,
+                                'periodo_comparacion': comparison_period,
+                                'consumo_comparacion': comparison_base,
+                                'variacion_porcentual': variation,
+                                'sugerencias': recommendations[:3],
+                            },
                         },
-                    }) or {}
-                    if alert.get('id_alerta'):
-                        notification_user_id = getattr(request.user, 'supabase_id', None) or request.user.id_usuario
-                        supabase_client.insert('notificacion', {
-                            'id_alerta': alert['id_alerta'],
-                            'id_usario_destino': notification_user_id,
-                            'canal_envio': 'dashboard',
-                            'estado_visualizacion': 'no_leida',
-                            'fecha_envio': timezone.now().isoformat(),
-                        })
+                    )
                 except Exception:
                     logger.exception('No se pudo registrar la alerta de consumo elevado')
     except Exception:
@@ -1126,7 +974,7 @@ def retroalimentacion(request):
 
     context = {
         'retro': retro,
-        'viviendas': viviendas if 'viviendas' in locals() else [],
+        'viviendas': viviendas,
         'ultima_actualizacion': 'hace unos segundos',
     }
     return render(request, 'App/retroalimentacion.html', context)
@@ -1135,10 +983,10 @@ def retroalimentacion(request):
 @login_required(login_url='login')
 def recomendaciones(request):
     try:
-        viviendas, consumption_rows = _owned_consumption(request)
+        viviendas, consumption_rows = owned_consumption(request.user)
     except Exception:
         viviendas, consumption_rows = [], []
-    total_consumption = round(sum(_safe_float(row.get('consumo_total') or row.get('consumo_promedio')) for row in consumption_rows), 2)
+    total_consumption = round(sum(safe_float(row.get('consumo_total') or row.get('consumo_promedio')) for row in consumption_rows), 2)
     consumption_note = f'Has registrado {total_consumption}L en tus lecturas recientes.' if consumption_rows else 'Aún no hay consumo registrado para tu vivienda.'
     context = {
         'recomendaciones': [
@@ -1264,28 +1112,33 @@ def valvulas(request):
     if not _admin_only(request):
         return redirect('dashboard')
 
-    valvulas_disponibles = []
-    error = None
-    try:
-        valvulas_disponibles = supabase_client.select(
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        valves_future = executor.submit(
+            supabase_client.select,
             'valvula',
             'id_valvula,nombre,ping_gpio,estado_actual,estado_operativo,topic_mqtt_comando,ultima_conexion_mqtt,ultima_apertura',
             {'order': 'id_valvula.asc', 'limit': '1000'},
         )
-    except Exception:
-        error = 'No se pudieron cargar las electroválvulas.'
-
-    movimientos = []
-    movimientos_filtrados = []
-    usuarios = []
-    try:
-        movimientos = supabase_client.select(
+        movements_future = executor.submit(
+            supabase_client.select,
             'log_valvula',
             'id_log_valvula,id_valvula,accion,estado_anterior,estado_nuevo,'
             'tipo_activacion,id_usuario,fecha_hora,razon,origen_accion,ip_dispositivo,'
             'duracion_programada,duracion_real',
             {'order': 'fecha_hora.desc', 'limit': '50'},
         )
+
+    valvulas_disponibles = []
+    error = None
+    try:
+        valvulas_disponibles = valves_future.result()
+    except Exception:
+        error = 'No se pudieron cargar las electroválvulas.'
+
+    movimientos = []
+    movimientos_filtrados = []
+    try:
+        movimientos = movements_future.result()
         user_ids = [str(row['id_usuario']) for row in movimientos if row.get('id_usuario')]
         usuarios = supabase_client.select(
             'usuario',
@@ -1332,7 +1185,6 @@ def valvulas(request):
                 nombres_valvulas.get(str(movimiento.get('id_valvula')))
                 or f"Válvula #{movimiento.get('id_valvula', 'desconocida')}"
             )
-        movimientos = movimientos[:1000]
         fecha = request.GET.get('fecha', '').strip()
         usuario = request.GET.get('usuario', '').strip().lower()
         origen = request.GET.get('origen', '').strip().lower()
@@ -1370,21 +1222,13 @@ def valvulas(request):
         alerta_actividad = f'Actividad inusual detectada - {len(unusual_movements)} cambios en última hora'
         try:
             admin_id = _supabase_user_id(request.user)
-            alert = supabase_client.insert('alerta', {
+            _record_alert_once(f'alerta-valvulas:{admin_id}', admin_id, {
                 'tipo_alerta': 'actividad_valvula',
                 'prioridad': 'alta',
                 'mensaje': alerta_actividad,
                 'estado_confirmacion': 'pendiente',
                 'datos_adicionales': {'sugerencia': 'Revisar sistema - posible mal funcionamiento'},
-            }) or {}
-            if alert.get('id_alerta'):
-                supabase_client.insert('notificacion', {
-                    'id_alerta': alert['id_alerta'],
-                    'id_usario_destino': admin_id,
-                    'canal_envio': 'dashboard',
-                    'estado_visualizacion': 'no_leida',
-                    'fecha_envio': timezone.now().isoformat(),
-                })
+            })
         except Exception:
             logger.exception('No se pudo generar la alerta de actividad inusual de válvulas')
 
@@ -1424,7 +1268,7 @@ def valvula_comando(request, valvula_id):
     try:
         duracion_seg = _parse_duracion_seg(request)
     except ValueError as exc:
-        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.headers.get('Accept') == 'application/json':
+        if _json_requested(request):
             return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
         return render(request, 'App/valvulas.html', {
             'valvulas': [],
@@ -1435,7 +1279,6 @@ def valvula_comando(request, valvula_id):
     valvula = None
     try:
         admin_supabase_id = _supabase_user_id(request.user)
-        origen_accion = 'web'
         rows = supabase_client.select(
             'valvula',
             'id_valvula,nombre,estado_actual,topic_mqtt_comando',
@@ -1456,8 +1299,6 @@ def valvula_comando(request, valvula_id):
             'estado_actual': estado_nuevo,
             'ultima_apertura': timezone.now().isoformat() if comando == 'abrir' else None,
         }
-        if comando == 'abrir' and duracion_seg:
-            update_payload['ultima_apertura'] = timezone.now().isoformat()
 
         supabase_client.update(
             'valvula',
@@ -1480,7 +1321,7 @@ def valvula_comando(request, valvula_id):
             'id_usuario': admin_supabase_id,
             'fecha_hora': timezone.now().isoformat(),
             'ip_dispositivo': request.META.get('REMOTE_ADDR'),
-            'origen_accion': origen_accion,
+            'origen_accion': 'web',
             'duracion_programada': duracion_seg,
             'duracion_real': duracion_seg if comando == 'abrir' and duracion_seg else None,
             'razon': razon,
@@ -1498,7 +1339,7 @@ def valvula_comando(request, valvula_id):
 
         log_row = supabase_client.insert('log_valvula', log_payload) or log_payload
 
-        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.headers.get('Accept') == 'application/json':
+        if _json_requested(request):
             return JsonResponse({
                 'ok': True,
                 'id_valvula': valvula['id_valvula'],
@@ -1519,7 +1360,7 @@ def valvula_comando(request, valvula_id):
             })
         return redirect('valvulas')
     except (MqttError, supabase_client.SupabaseError, ValueError, TypeError) as exc:
-        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.headers.get('Accept') == 'application/json':
+        if _json_requested(request):
             return JsonResponse({'ok': False, 'error': str(exc)}, status=502)
         return render(request, 'App/valvulas.html', {
             'valvulas': [valvula] if valvula else [],
@@ -1681,18 +1522,18 @@ def api_lectura(request):
     return JsonResponse({'ok': True, 'lectura': row}, status=201)
 
 
+def _home_for(user):
+    return redirect('admin_panel' if getattr(user, 'rol_id', None) == 2 else 'dashboard')
+
+
 def login_view(request):
     if request.user.is_authenticated:
-        if getattr(request.user, 'rol_id', None) == 2:
-            return redirect('admin_panel')
-        return redirect('dashboard')
+        return _home_for(request.user)
     form = LoginForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
         user = form.cleaned_data['user']
         login(request, user)
-        if getattr(user, 'rol_id', None) == 2:
-            return redirect('admin_panel')
-        return redirect('dashboard')
+        return _home_for(user)
 
     return render(request, 'App/login.html', {'form': form})
 
@@ -1703,67 +1544,43 @@ def admin_panel(request):
 
     Muestra lecturas recientes, viviendas y sensores para supervisión global.
     """
-    # Authorize only users that have role id == 2 (admin)
-    if getattr(request.user, 'rol_id', None) != 2:
+    if not _admin_only(request):
         return redirect('dashboard')
 
-    lecturas = []
-    viviendas = []
-    sensores = []
     try:
-        lecturas = supabase_client.select('lectura', '*', {'order': 'fecha_registro.desc', 'limit': '200'})
-        viviendas = supabase_client.select('vivienda', '*', {'limit': '1000'})
-        sensores = supabase_client.select('sensor', '*', {'limit': '1000'})
+        lecturas, viviendas, sensores = run_parallel(
+            lambda: supabase_client.select('lectura', '*', {'order': 'fecha_registro.desc', 'limit': '200'}),
+            lambda: supabase_client.select('vivienda', '*', {'limit': '1000'}),
+            sensors,
+        )
     except Exception:
         # En caso de fallo con Supabase, devolver listas vacías y permitir que la plantilla lo muestre
-        pass
+        lecturas, viviendas, sensores = [], [], []
 
-    # Construir lookup de sensores por id para mostrar tipo/unidad/icono en la UI
+    # Lookup de sensores por id para mostrar tipo/unidad/icono en la UI
     sensor_lookup = {}
-    try:
-        for s in sensores:
-            # normalizar y garantizar claves para la plantilla
-            if 'unidad' not in s:
-                s['unidad'] = s.get('unidad_medida') or s.get('unidad') or ''
-            if 'tipo_sensor' not in s:
-                s['tipo_sensor'] = s.get('tipo') or s.get('tipo_sensor') or 'desconocido'
-            sid = s.get('id_sensor')
-            try:
-                sid_key = int(sid)
-            except Exception:
-                sid_key = sid
-            sensor_lookup[sid_key] = s
-    except Exception:
-        sensor_lookup = {}
+    for sensor in sensores:
+        sensor.setdefault('unidad', sensor.get('unidad_medida') or '')
+        sensor.setdefault('tipo_sensor', sensor.get('tipo') or 'desconocido')
+        sensor_lookup[str(sensor.get('id_sensor'))] = sensor
 
     icon_map = {
         'nivel': 'ti ti-droplet',
-        'calidad': 'ti ti-test-tube',
+        'calidad': 'ti ti-test-pipe',
         'flujo': 'ti ti-wave-sine',
         'presion': 'ti ti-gauge',
     }
 
     enriched = []
-    try:
-        for row in lecturas:
-            sid = row.get('id_sensor')
-            try:
-                sid_key = int(sid)
-            except Exception:
-                sid_key = sid
-            sensor = sensor_lookup.get(sid_key) or {}
-            tipo = (sensor.get('tipo_sensor') or sensor.get('tipo') or 'desconocido')
-            unidad = sensor.get('unidad_medida') or sensor.get('unidad') or ''
-            icon = icon_map.get(tipo, 'ti ti-device')
-            newrow = dict(row)
-            newrow['sensor_tipo'] = tipo
-            newrow['sensor_unidad'] = unidad
-            newrow['sensor_icon'] = icon
-            enriched.append(newrow)
-    except Exception:
-        enriched = lecturas
-
-    # Nota: no se construyen arrays de gráfico aquí (limpieza de UI de sensores)
+    for row in lecturas:
+        sensor = sensor_lookup.get(str(row.get('id_sensor')), {})
+        tipo = sensor.get('tipo_sensor') or sensor.get('tipo') or 'desconocido'
+        enriched.append({
+            **row,
+            'sensor_tipo': tipo,
+            'sensor_unidad': sensor.get('unidad_medida') or sensor.get('unidad') or '',
+            'sensor_icon': icon_map.get(tipo, 'ti ti-devices'),
+        })
 
     context = {
         'lecturas': enriched,
@@ -1774,55 +1591,33 @@ def admin_panel(request):
     return render(request, 'App/admin_panel.html', context)
 
 
+def _sensor_readings(sensor_ids, since=None, limit=1000):
+    """Lecturas (más recientes primero) de los sensores indicados, filtradas en Supabase."""
+    ids = [sid for sid in sensor_ids if sid.isascii() and sid.isdigit()]
+    if not ids:
+        return []
+    params = {'id_sensor': f"in.({','.join(ids)})", 'order': 'fecha_registro.desc', 'limit': str(limit)}
+    if since:
+        params['fecha_registro'] = f"gte.{since.strftime('%Y-%m-%dT%H:%M:%SZ')}"
+    return supabase_client.select('lectura', 'id_sensor,fecha_registro,valor', params)
+
+
 @login_required(login_url='login')
 def sensor_detail(request, sensor_id):
-    # Admin-only
-    if getattr(request.user, 'rol_id', None) != 2:
+    if not _admin_only(request):
         return redirect('dashboard')
 
-    sensores = []
-    lecturas = []
     try:
-        sensores = supabase_client.select('sensor', '*', {'limit': '1000'})
-        lecturas = supabase_client.select('lectura', '*', {'order': 'fecha_registro.desc', 'limit': '1000'})
+        sensores, lecturas = run_parallel(sensors, lambda: _sensor_readings([sensor_id]))
     except Exception:
-        pass
+        sensores, lecturas = [], []
 
-    # buscar sensor
-    sensor = None
-    try:
-        for s in sensores:
-            sid = s.get('id_sensor')
-            try:
-                if str(sid) == str(sensor_id):
-                    sensor = s
-                    break
-            except Exception:
-                continue
-    except Exception:
-        sensor = None
-
-    # filtrar lecturas para este sensor
-    rows = []
-    try:
-        for r in lecturas:
-            try:
-                if str(r.get('id_sensor')) == str(sensor_id):
-                    rows.append(r)
-            except Exception:
-                continue
-    except Exception:
-        rows = []
+    sensor = next((s for s in sensores if str(s.get('id_sensor')) == str(sensor_id)), None)
 
     # Los datos vienen ordenados desc desde Supabase; invertir para gráfica ascendente
-    rows_asc = list(reversed(rows))
+    rows_asc = list(reversed(lecturas))
     labels = [row.get('fecha_registro') for row in rows_asc]
-    data = []
-    for row in rows_asc:
-        try:
-            data.append(float(row.get('valor') or 0))
-        except Exception:
-            data.append(0)
+    data = [safe_float(row.get('valor') or 0) for row in rows_asc]
 
     context = {
         'sensor': sensor or {'id_sensor': sensor_id, 'tipo_sensor': 'Sensor', 'modelo': '', 'unidad': ''},
@@ -1834,28 +1629,25 @@ def sensor_detail(request, sensor_id):
     return render(request, 'App/sensor_detail.html', context)
 
 
+_SENSOR_RANGES = {'1h': timedelta(hours=1), '1w': timedelta(days=7), '1m': timedelta(days=30)}
+
+
 @login_required(login_url='login')
 def sensor_data(request, sensor_id):
     """Return JSON labels/data for a sensor filtered by range GET param.
     range: one of '1h','1d','1w','1m' (defaults to '1d')
     """
-    if getattr(request.user, 'rol_id', None) != 2:
+    if not _admin_only(request):
         return JsonResponse({'ok': False, 'error': 'unauthorized'}, status=403)
 
-    rng = request.GET.get('range', '1d')
-    now = datetime.utcnow()
-    if rng == '1h':
-        cutoff = now - timedelta(hours=1)
-    elif rng == '1w':
-        cutoff = now - timedelta(days=7)
-    elif rng == '1m':
-        cutoff = now - timedelta(days=30)
-    else:
-        cutoff = now - timedelta(days=1)
+    window = _SENSOR_RANGES.get(request.GET.get('range', '1d'), timedelta(days=1))
+    cutoff = datetime.now(dt_timezone.utc).replace(tzinfo=None) - window
     compare_id = request.GET.get('compare_id', '').strip()
     try:
-        sensores = supabase_client.select('sensor', '*', {'limit': '1000'})
-        lecturas = supabase_client.select('lectura', '*', {'order': 'fecha_registro.desc', 'limit': '2000'})
+        sensores, lecturas = run_parallel(
+            sensors,
+            lambda: _sensor_readings([sensor_id, compare_id], since=cutoff, limit=2000),
+        )
     except Exception:
         return JsonResponse({'ok': False, 'error': 'db_error'}, status=500)
 
@@ -1881,9 +1673,9 @@ def sensor_data(request, sensor_id):
     filtered.sort(key=lambda item: item[0])
     comparison_filtered.sort(key=lambda item: item[0])
     labels = [item[0].isoformat() for item in filtered]
-    data = [_safe_float(item[1].get('valor')) for item in filtered]
+    data = [safe_float(item[1].get('valor')) for item in filtered]
     comparison_labels = [item[0].isoformat() for item in comparison_filtered]
-    comparison_data = [_safe_float(item[1].get('valor')) for item in comparison_filtered]
+    comparison_data = [safe_float(item[1].get('valor')) for item in comparison_filtered]
     return JsonResponse({
         'ok': True,
         'labels': labels,

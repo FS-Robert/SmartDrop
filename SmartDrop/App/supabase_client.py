@@ -1,18 +1,13 @@
 import requests
-import threading
 from requests import RequestException
+from requests.adapters import HTTPAdapter
 from django.conf import settings
 from passlib.hash import bcrypt
 
-_thread_state = threading.local()
-
-
-def _http_session() -> requests.Session:
-    session = getattr(_thread_state, 'session', None)
-    if session is None:
-        session = requests.Session()
-        _thread_state.session = session
-    return session
+# Una sola sesión para todos los hilos: abrir TCP+TLS hacia Supabase cuesta ~2 s,
+# una consulta con la conexión ya abierta ~0,7 s.
+_session = requests.Session()
+_session.mount('https://', HTTPAdapter(pool_connections=4, pool_maxsize=16))
 
 
 def _supabase_url() -> str:
@@ -79,7 +74,7 @@ def _handle_response(resp: requests.Response) -> dict | list | None:
 
 def _request(method: str, url: str, **kwargs):
     try:
-        return _http_session().request(method, url, timeout=10, **kwargs)
+        return _session.request(method, url, timeout=10, **kwargs)
     except RequestException as exc:
         raise SupabaseError(
             f'No se pudo conectar con Supabase ({exc.__class__.__name__}). '
@@ -99,23 +94,6 @@ def insert(table: str, data: dict, return_representation: bool = True) -> dict |
     if isinstance(result, list) and result:
         return result[0]
     return result if isinstance(result, dict) else None
-
-
-def fetch_latest(table: str, select: str = '*') -> dict | None:
-    """Fetch the latest row from a table ordered by `fecha_registro`.
-
-    Returns a dict or None if no rows.
-    """
-    _check_config()
-    url = _base_url(table)
-    params = {
-        'select': select,
-        'order': 'fecha_registro.desc',
-        'limit': 1,
-    }
-    resp = _request('GET', url, headers=_headers(), params=params)
-    data = _handle_response(resp)
-    return data[0] if isinstance(data, list) and data else None
 
 
 def select(table: str, select: str = '*', params: dict | None = None) -> list:

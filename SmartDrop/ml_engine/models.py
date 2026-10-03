@@ -139,6 +139,10 @@ class ConsumptionAggregate(models.Model):
     presion_media = models.FloatField(null=True, blank=True)
     calidad_media = models.FloatField(null=True, blank=True)
     sensor_offline = models.BooleanField(default=False)
+    anomaly_kind = models.CharField(
+        max_length=32, blank=True, default='',
+        help_text='Etiqueta del simulador (leak/burst/…) para entrenar predicción de fugas. Vacío en datos reales.',
+    )
 
     class Meta:
         db_table = 'ml_consumption_aggregate'
@@ -155,6 +159,7 @@ class ModelArtifact(models.Model):
     class Kind(models.TextChoices):
         CONSUMPTION_QUANTILE = 'consumption_quantile', 'Consumo (cuantiles)'
         ANOMALY_DETECTOR = 'anomaly_detector', 'Detector de anomalías'
+        LEAK_PREDICTOR = 'leak_predictor', 'Predictor de fugas'
 
     kind = models.CharField(max_length=30, choices=Kind.choices)
     version = models.CharField(max_length=40)
@@ -252,3 +257,29 @@ class AnomalyEvent(models.Model):
         db_table = 'ml_anomaly_event'
         indexes = [models.Index(fields=['home', 'ts']), models.Index(fields=['zone', 'ts'])]
         ordering = ['-ts']
+
+
+class LeakPrediction(models.Model):
+    """Probabilidad de fuga en el horizonte (horas siguientes), por hogar."""
+
+    home = models.ForeignKey(Home, on_delete=models.CASCADE, related_name='leak_predictions')
+    zone = models.ForeignKey(Zone, null=True, blank=True, on_delete=models.CASCADE, related_name='leak_predictions')
+    generated_at = models.DateTimeField(auto_now_add=True)
+    horizonte_horas = models.PositiveIntegerField(default=12)
+    probabilidad = models.FloatField(help_text='Probabilidad 0–1 de fuga en el horizonte.')
+    nivel_riesgo = models.CharField(max_length=15, default='bajo')
+    method = models.CharField(max_length=20, default='heuristic')
+    drivers = models.JSONField(default=list, blank=True)
+    model_artifact = models.ForeignKey(ModelArtifact, null=True, blank=True, on_delete=models.SET_NULL)
+
+    class Meta:
+        db_table = 'ml_leak_prediction'
+        indexes = [models.Index(fields=['home', 'generated_at']), models.Index(fields=['zone', 'generated_at'])]
+        ordering = ['-generated_at']
+
+    def __str__(self):
+        return f'home={self.home_id} riesgo={self.nivel_riesgo} p={self.probabilidad:.2f}'
+
+    @property
+    def porcentaje(self) -> float:
+        return round(max(0.0, min(1.0, self.probabilidad)) * 100.0, 1)
