@@ -8,12 +8,13 @@ from .views_mobile_data import (
     MobileVincularViviendaView,
     MobileViviendasView,
 )
-from .views_valves import MobileValvulaCommandView, MobileValvulaEstadoView
+from .views_valves import MobileValvulaCommandView, MobileValvulaEstadoView, MobileValvulaLogsView
 from .views_mobile_consumption import (
     MobileConsumoView,
     MobileRecomendacionesView,
     MobileRetroalimentacionView,
 )
+from .views_mobile_search import MobileBusquedaGlobalView
 
 urlpatterns = [
     path('auth/registro/', MobileRegisterView.as_view(), name='mobile_register'),
@@ -28,5 +29,7 @@ urlpatterns = [
     path('api/graficas/', MobileGraficasView.as_view(), name='mobile_graficas'),
     path('api/resumen/', MobileResumenView.as_view(), name='mobile_resumen'),
     path('api/valvula/<int:id_valvula>/estado/', MobileValvulaEstadoView.as_view(), name='mobile_valvula_estado'),
+    path('api/valvula/<int:id_valvula>/logs/', MobileValvulaLogsView.as_view(), name='mobile_valvula_logs'),
     path('api/valvula/<int:id_valvula>/<str:action>/', MobileValvulaCommandView.as_view(), name='mobile_valvula_command'),
+    path('api/buscar/', MobileBusquedaGlobalView.as_view(), name='mobile_buscar'),
 ]
