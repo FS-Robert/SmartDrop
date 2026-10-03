@@ -1,5 +1,6 @@
 import requests
 import threading
+from requests import RequestException
 from django.conf import settings
 from passlib.hash import bcrypt
 
@@ -76,6 +77,16 @@ def _handle_response(resp: requests.Response) -> dict | list | None:
     raise SupabaseError(message, status_code=resp.status_code)
 
 
+def _request(method: str, url: str, **kwargs):
+    try:
+        return _http_session().request(method, url, timeout=10, **kwargs)
+    except RequestException as exc:
+        raise SupabaseError(
+            f'No se pudo conectar con Supabase ({exc.__class__.__name__}). '
+            'Verifica SUPABASE_URL, DNS y conexión a Internet.'
+        ) from exc
+
+
 def insert(table: str, data: dict, return_representation: bool = True) -> dict | None:
     """Inserta una fila en una tabla de Supabase."""
     _check_config()
@@ -83,7 +94,7 @@ def insert(table: str, data: dict, return_representation: bool = True) -> dict |
     if return_representation:
         headers['Prefer'] = 'return=representation'
 
-    resp = _http_session().post(_base_url(table), headers=headers, json=data, timeout=10)
+    resp = _request('POST', _base_url(table), headers=headers, json=data)
     result = _handle_response(resp)
     if isinstance(result, list) and result:
         return result[0]
@@ -102,7 +113,7 @@ def fetch_latest(table: str, select: str = '*') -> dict | None:
         'order': 'fecha_registro.desc',
         'limit': 1,
     }
-    resp = _http_session().get(url, headers=_headers(), params=params, timeout=10)
+    resp = _request('GET', url, headers=_headers(), params=params)
     data = _handle_response(resp)
     return data[0] if isinstance(data, list) and data else None
 
@@ -114,7 +125,7 @@ def select(table: str, select: str = '*', params: dict | None = None) -> list:
     query = {'select': select}
     if params:
         query.update(params)
-    resp = _http_session().get(url, headers=_headers(), params=query, timeout=10)
+    resp = _request('GET', url, headers=_headers(), params=query)
     data = _handle_response(resp)
     return data if isinstance(data, list) else []
 
@@ -131,12 +142,12 @@ def update(
     if return_representation:
         headers['Prefer'] = 'return=representation'
 
-    resp = _http_session().patch(
+    resp = _request(
+        'PATCH',
         _base_url(table),
         headers=headers,
         params=params,
         json=data,
-        timeout=10,
     )
     result = _handle_response(resp)
     if isinstance(result, list) and result:
