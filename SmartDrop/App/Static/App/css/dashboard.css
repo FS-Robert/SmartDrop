@@ -231,9 +231,9 @@ h1, h2, h3, h4, h5, h6,
   display: inline-block; font-size: 11px; font-weight: 800;
  padding-top:1rem; padding-right:0.6rem; border-radius: 20px; color:#6B21A8;
 }
-.badge-normal  { background: #e1f5ee; color: #0F6E56; }
-.badge-perfect { background: #e6f1fb; color: #185FA5; }
-.badge-high    { background: #faeeda; color: #854F0B; }
+.badge-normal  { display: inline-block; font-size:11px; padding-top:1rem; padding-right:0.6rem; font-weight: 800; color: #0F6E56; }
+.badge-perfect { display: inline-block; font-size:11px; padding-top:1rem; padding-right:0.6rem; font-weight: 800; color: #185FA5; }
+.badge-high    { display: inline-block; font-size:11px; padding-top:1rem; padding-right:0.6rem; font-weight: 800; color: #854F0B; }
 
 .card-link {
   font-size: 12px; color: #8e6fbf; font-weight: 600;
@@ -330,8 +330,8 @@ footer.site-footer {
 .chart-value { font-size:22px; font-weight:900; color:#2d1a4a; }
 .chart-canvas-wrap { width:100%; height:300px; padding-top:6px; }
 
-.consumo-side { display:flex; flex-direction:column; gap:0.9rem; }
-.comparison-card, .historial-card { background:#fff; border-radius:10px; padding:12px; border:1px solid #f1e8fb; }
+.consumo-side { display:grid;  grid-template-columns: repeat(3, 1fr); gap: 24px; align-items: stretch; }
+.comparison-card, .historial-card { background:#fff; border-radius:10px; padding:12px; height: 100%; border:1px solid #f1e8fb; }
 .comparison-label { font-weight:800; color:#6B21A8; margin-bottom:6px; }
 .comparison-val { font-weight:700; color:#2d1a4a; }
 .comparison-val.up { color:#0F6E56; }
@@ -618,10 +618,11 @@ body.dark-mode .detail-row { color: #e0e0e0 !important; }
 }
 
 /* ===== Tanque page styles ===== */
-.tanque-layout { display:grid; grid-template-columns: 1fr 360px; gap:1rem; align-items:start; }
+.tanque-layout { display:grid; grid-template-columns: 1fr 360px; gap: 16px; align-items:stretch; }
 .capacity-header { display:flex; gap:10px; align-items:center; font-weight:700; color:#333; margin-bottom:8px; }
-.capacity-icon { color:#7c3aed; font-size:20px; }
+.capacity-icon { color:#7c3aed; font-size:23px; background:#f0e8ff; border-radius: 12px; display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; }
 .capacity-text { font-size:15px; }
+.card-label-content { display: flex; align-items: center; gap: 8px; }
 
 .cylinder-wrap { display:flex; justify-content:center; padding:10px 0; }
 .cylinder { position:relative; width:160px; height:260px; background:#fff; border-radius:18px; border:1px solid #f1e8fb; box-shadow:0 6px 18px rgba(107,33,168,0.03); overflow:hidden; }
@@ -632,12 +633,12 @@ body.dark-mode .detail-row { color: #e0e0e0 !important; }
 
 .tank-available { font-size:13px; padding:6px 14px; display:inline-block; margin-top:8px; }
 
-.tanque-info { display:flex; flex-direction:column; gap:10px; }
+.tanque-info { display:grid; flex-direction:column; gap:16px; align-items: stretch; }
 .info-card { display:flex; gap:10px; align-items:flex-start; padding:12px; background:#fff; border-radius:10px; border:1px solid #f3ecfb; }
 .info-icon { font-size:20px; color:#7c3aed; flex-shrink:0; }
 .info-card-body { flex:1; }
-.info-card-label { font-weight:800; color:#6B21A8; margin-bottom:6px; }
-.info-card-value { font-weight:800; color:#222; }
+.info-card-label { font-size: 16px; font-weight:700; color:#6B21A8; margin-bottom:6px; text-transform: uppercase; letter-spacing: 0.6px; padding-bottom: 0.5rem;  }
+.info-card-value { font-weight:800; color:#333; }
 .info-card-sub { font-size:12px; color:#888; margin-top:4px; }
 .status-badge { padding:4px 8px; }
 
@@ -656,13 +657,14 @@ body.dark-mode .detail-row { color: #e0e0e0 !important; }
 }
 
 /* ===== Calidad page styles ===== */
-.calidad-page-subtitle { margin-bottom:1.4rem; }
-.calidad-page-subtitle { font-size:0.9rem; }
+.calidad-heading { max-width:1200px; margin:0 auto; }
+.calidad-heading .page-title { text-align:left; font-size:50px; font-weight:800; margin-top: 1rem; margin-bottom: 3rem; padding-top: 1rem; }
+.calidad-heading .page-subtitle { text-align:left; font-size: 1.05rem; margin: 0 0 2rem 0; }
 .quality-summary-grid { display:grid; grid-template-columns:minmax(0,1.45fr) minmax(190px,0.75fr) minmax(190px,0.75fr); gap:1rem; }
 .quality-summary-grid .card { min-height:150px; padding:1rem; border-radius:12px; }
 .quality-summary-heading { display:flex; align-items:center; gap:0.55rem; }
-.quality-icon, .parameter-icon { display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:7px; background:#e6f5ff; color:#1596d1; }
-.quality-icon i, .parameter-icon i { font-size:15px; }
+.quality-icon, .parameter-icon { font-size:23px; background: #e6f1fb; border-radius: 12px; display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; color:#1596d1; }
+.quality-icon i, .parameter-icon i { font-size:23px; }
 .quality-summary-heading .card-header { margin:0; }
 .quality-summary-card .safe-label { font-size:1.15rem; color:#1596d1; margin-top:0.55rem; }
 .quality-summary-card .stars { font-size:1.15rem; margin:0.3rem 0; }
@@ -671,13 +673,14 @@ body.dark-mode .detail-row { color: #e0e0e0 !important; }
 .quality-analysis { display:flex; justify-content:space-between; color:var(--muted); font-size:0.8rem; margin-top:0.75rem; }
 .quality-analysis strong { color:var(--text); }
 .quality-state-card .card-header, .quality-sensor-card .card-header { margin-bottom:0.65rem; }
-.quality-state-card .state-row { padding:0.5rem 0; font-size:0.82rem; border-top:1px solid #f1e8fb; }
-.quality-sensor-card { display:flex; flex-direction:column; gap:0.65rem; font-size:0.82rem; }
-.quality-sensor-card strong { font-family:var(--font-heading); font-size:0.95rem; }
-.quality-sensor-card span { color:var(--muted); text-align:center; line-height:1.3; }
-.quality-parameters-title { color:#555; font-size:0.82rem; font-weight:600; margin:1.5rem 0 0.7rem; text-transform:uppercase; }
+.quality-state-card .state-row { align-items: center; }
+.quality-sensor-card { display:flex; flex-direction:column; padding: 20px; min-height: 260px; background: #fff; border-radius: 24px; }
+.quality-sensor-card strong { font-family:var(--font-heading); font-size:1.15rem; }
+.quality-sensor-card .sensor-body { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 17px; }
+.quality-sensor-card span { color:var(--muted); text-align:center; max-width: 200px; line-height:1.3; }
+.quality-parameters-title { font-size: 15px; font-weight: 700; color: #666; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom:0.5rem; margin-top:2rem; }
 .quality-parameters-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:1rem; }
-.quality-parameter { min-height:132px; padding:0.8rem; border-radius:11px; display:grid; grid-template-columns:28px 1fr; grid-template-rows:auto auto 1fr auto; column-gap:0.55rem; align-items:center; }
+.quality-parameter { gap:0.95rem; min-height:132px; padding:0.9rem; border-radius:11px; display:grid; grid-template-columns:28px 1fr; grid-template-rows:auto auto 1fr auto; column-gap:0.55rem; align-items:center; }
 .quality-parameter > span:not(.parameter-icon) { color:#666; font-size:0.82rem; }
 .quality-parameter strong { grid-column:1 / -1; font-family:var(--font-heading); font-size:1.2rem; margin-top:0.25rem; }
 .quality-parameter strong small { font-family:var(--font-body); font-size:0.72rem; font-weight:500; }
@@ -685,14 +688,18 @@ body.dark-mode .detail-row { color: #e0e0e0 !important; }
 .parameter-bar i { display:block; height:100%; border-radius:inherit; background:#d2e4f5; }
 .quality-parameter > small { grid-column:1 / -1; color:#888; font-size:0.62rem; }
 .quality-parameter > small b { float:right; font-weight:500; }
+.quality-parameter .card-header {
+  margin-left: 8px;
+}
 .safe-label { font-size:20px; font-weight:800; color:#0F6E56; margin-top:6px; }
 .stars { color:#222; margin:8px 0; font-size:18px; letter-spacing:2px; }
 .calidad-desc { margin:8px 0 12px; color:#444; }
 .alert-box.full-width { display:flex; gap:10px; align-items:center; padding:12px; background:#fff; border-radius:8px; border:1px solid #e6f4f0; }
 .alert-box.full-width i { color:#0F6E56; font-size:20px; }
 .alert-text { margin:0; color:#444; }
+.calidad-details { display:flex; flex-direction:column; gap:0.5rem; margin-top:0.8rem; }
 
-.card-header { font-size:15px; font-weight:800; color:#2d1a4a; margin-bottom:12px; }
+.card-header { font-size: 15px; font-weight: 700; color: #666; text-transform: uppercase; letter-spacing: 0.6px; }
 .card-body-col { display:flex; flex-direction:column; gap:10px; }
 .state-row { display:flex; align-items:center; justify-content:space-between; }
 .state-label { font-size:14px; font-weight:600; color:#444; }
@@ -831,19 +838,20 @@ body.dark-mode .detail-row { color: #e0e0e0 !important; }
 }
 
 /* Tank page reference layout */
-.tanque-page .page-title { text-align:left; margin-bottom:0.35rem; font-size:1.8rem; }
-.tanque-page .page-subtitle { text-align:left; margin:0 0 1.9rem; font-size:0.9rem; }
+.tanque-page { max-width:1200px; margin:0 auto; }
+.tanque-page .page-title { text-align:left; font-size:50px; font-weight:800; margin-top: 1rem; margin-bottom: 3rem; padding-top: 1rem; }
+.tanque-page .page-subtitle { text-align:left; font-size: 1.05rem; margin: 0 0 2rem 0; }
 .tanque-page .tanque-layout { display:grid; grid-template-columns:minmax(0,1.5fr) minmax(320px,0.9fr); gap:1.25rem; align-items:start; }
 .tanque-page .tanque-visual { min-height:390px; padding:1.35rem 1.5rem; border-radius:14px; }
 .tanque-page .capacity-header { margin-bottom:0.3rem; }
-.tanque-page .capacity-text { font-size:0.9rem; }
+.tanque-page .capacity-text { font-size:0.9rem; padding-top:0.7rem; }
 .tanque-page .cylinder-wrap { padding:0.8rem 0 1rem; }
 .tanque-page .cylinder { width:120px; height:230px; border-radius:16px; }
 .tanque-page .cylinder-label { font-size:0.78rem; padding:0 0.25rem; }
 .tanque-page .cylinder-ladder { gap:6px; }
 .tanque-page .cylinder-ladder .rung { width:58%; }
 .tanque-page .tank-available { display:block; width:max-content; margin:0 auto; font-size:0.78rem; padding:5px 10px; }
-.tanque-page .tanque-info { gap:1rem; }
+.tanque-page .tanque-info { display:grid; flex-direction:column; gap:16px; align-items:start; grid-template-rows: auto auto; }
 .tanque-page .info-card { min-height:88px; padding:1.05rem; border-radius:12px; }
 .tanque-page .info-card-label { font-size:0.82rem; margin-bottom:0.45rem; text-transform:uppercase; }
 .tanque-page .info-card-value { font-size:1.05rem; }
@@ -851,8 +859,8 @@ body.dark-mode .detail-row { color: #e0e0e0 !important; }
 .tanque-page .info-card-sub { font-size:0.75rem; }
 .tanque-page .tank-bar-wrap { margin-top:0.4rem; }
 .tanque-page .tank-legend { font-size:0.68rem; }
-.tank-note { margin-top:1.5rem; padding:1.1rem 1.25rem; border-radius:14px; background:#dcecf9; color:#34495e; }
-.tank-note strong { display:block; color:#1578ad; font-size:0.82rem; margin-bottom:0.45rem; }
+.tank-note { margin-bottom:3rem; margin-top:2rem; padding:1.1rem 1.25rem; border-radius:14px; background:#dcecf9; color:#34495e; }
+.tank-note strong { display:block; color:#1578ad; font-size:1rem; margin-bottom:0.45rem; }
 .tank-note p { margin:0; font-size:0.82rem; line-height:1.4; }
 
 /* Shared page heading scale */
@@ -952,6 +960,101 @@ body.dark-mode .detail-row { color: #e0e0e0 !important; }
 
 
 
+.content:has(.consumo-heading) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+}
+.consumo-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  width: 100%;
+  margin: 0 0 2rem;
+  gap: 0.75rem 1rem;
+}
+.consumo-heading .page-title {
+  text-align: left;
+  font-size: 1.8rem;
+  font-weight: 800;
+  margin-top: 1rem;
+  padding-top: 1rem;
+}
+.consumo-heading .page-subtitle {
+  text-align: left;
+  font-size: 0.9rem;
+  margin: 0;
+}
+.consumo-heading .tab-row {
+  justify-content: flex-end;
+  margin: 0.35rem 0 0;
+}
+.content:has(.consumo-heading) > .page-subtitle {
+  margin: 0 0 0.5rem;
+  color: #555;
+  font-size: 0.82rem;
+}
+.consumo-layout { display: contents; }
+.consumo-layout > .chart-card {
+  width: 100%;
+  border-color: var(--border);
+  border-radius: 16px;
+  padding: 0.9rem;
+  box-shadow: 0 2px 4px rgba(61,35,93,0.12);
+}
+.chart-header { margin-bottom: 0.35rem; }
+.chart-status { font-size: 15px; font-weight: 700; color: #666; text-transform: uppercase; letter-spacing: 0.6px; }
+.chart-value { color: #171717; font-size: 1.05rem; }
+.chart-card .chart-badge,
+.chart-card .badge {
+  padding: 0.25rem 0.5rem;
+  border-radius: 999px;
+  background: #faf7e8;
+  color: #9b873d;
+  font-size: 0.62rem;
+  line-height: 1.2;
+}
+.chart-canvas-wrap { height: 250px; }
+#consumo-detail { color: #6b21a8 !important; font-size: 0.78rem !important; }
+.consumo-side {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(1rem, 3.5vw, 2rem);
+  align-items: stretch;
+  margin-bottom:0.5rem; 
+  margin-top:2rem;
+}
+.comparison-card,
+.historial-card,
+.consumo-side > .card {
+  min-width: 0;
+  min-height: 230px;
+  height: auto;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 2px 4px rgba(61,35,93,0.12);
+}
+.historial-title,
+.comparison-label {
+  color: #888;
+  font-size: 0.82rem;
+}
+.month-nav { gap: 0.4rem; font-size: 0.72rem; }
+.month-nav button { padding: 0.15rem 0.4rem; border-radius: 4px; }
+.comparison-card { display: flex; flex-direction: column; }
+.comparison-label { align-self: flex-start; }
+.comparison-val { margin: auto 0; text-align: center; }
+
+
+@media (max-width: 620px) {
+  .consumo-heading { margin-bottom: 1.5rem; }
+  .consumo-heading .tab-row { justify-content: flex-start; }
+  .chart-canvas-wrap { height: 220px; }
+  .consumo-side { grid-template-columns: 1fr; margin-top: 1.5rem; }
+}
+
 @media (max-width:1024px) {
   .dashboard-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .dashboard-lower { grid-template-columns:1fr; }
@@ -969,7 +1072,4 @@ body.dark-mode .detail-row { color: #e0e0e0 !important; }
 
 /* Keep the dashboard's Estado del Agua heading in its original centered format. */
 .dashboard-heading .page-title { text-align:center; font-size:1.65rem; }
-
-
-
 
