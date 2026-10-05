@@ -256,15 +256,33 @@ def reporte_detalle(request, reporte_id):
 
     if request.method == 'POST':
         mensaje = (request.POST.get('mensaje') or '').strip()
+        es_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest' or 'application/json' in request.headers.get('Accept', '')
         if mensaje:
             try:
-                supabase_client.insert('reporte_mensaje', {
+                row = supabase_client.insert('reporte_mensaje', {
                     'id_reporte': reporte_id,
                     'id_usuario': _supabase_id(request),
                     'mensaje': mensaje,
                 })
+                if es_ajax:
+                    autor_nombre = request.user.get_full_name() or getattr(request.user, 'nombre', 'Usuario')
+                    return JsonResponse({
+                        'ok': True,
+                        'mensaje': {
+                            'id_mensaje': row.get('id_mensaje') if row else None,
+                            'mensaje': mensaje,
+                            'fecha_envio': (row or {}).get('fecha_envio'),
+                            'propio': True,
+                            'es_admin_emisor': es_admin,
+                            'autor_nombre': autor_nombre,
+                        },
+                    })
             except supabase_client.SupabaseError as exc:
+                if es_ajax:
+                    return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
                 messages.error(request, f'No se pudo enviar el mensaje: {exc}')
+        elif es_ajax:
+            return JsonResponse({'ok': False, 'error': 'mensaje_vacio'}, status=400)
         return redirect('reporte_detalle', reporte_id=reporte_id)
 
     try:

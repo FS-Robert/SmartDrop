@@ -1625,14 +1625,15 @@ def admin_panel(request):
         return redirect('dashboard')
 
     try:
-        lecturas, viviendas, sensores = run_parallel(
+        lecturas, viviendas, sensores, reportes_pendientes = run_parallel(
             lambda: supabase_client.select('lectura', '*', {'order': 'fecha_registro.desc', 'limit': '200'}),
             lambda: supabase_client.select('vivienda', '*', {'limit': '1000'}),
             sensors,
+            lambda: supabase_client.select('reporte', 'id_reporte', {'estado': 'eq.pendiente', 'limit': '500'}),
         )
     except Exception:
         # En caso de fallo con Supabase, devolver listas vacías y permitir que la plantilla lo muestre
-        lecturas, viviendas, sensores = [], [], []
+        lecturas, viviendas, sensores, reportes_pendientes = [], [], [], []
 
     # Lookup de sensores por id para mostrar tipo/unidad/icono en la UI
     sensor_lookup = {}
@@ -1663,6 +1664,7 @@ def admin_panel(request):
         'lecturas': enriched,
         'viviendas': viviendas,
         'sensores': sensores,
+        'n_reportes_pendientes': len(reportes_pendientes),
         'ultima_actualizacion': 'hace unos segundos',
     }
     return render(request, 'App/admin_panel.html', context)

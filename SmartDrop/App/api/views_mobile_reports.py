@@ -88,20 +88,22 @@ def _nombres_usuarios(ids):
 
 
 class MobileReportesView(APIView):
-    """GET: mis reportes. POST: crear reporte (multipart con adjuntos)."""
+    """GET: mis reportes (o todos los reportes si es admin). POST: crear reporte (multipart con adjuntos)."""
     permission_classes = [IsAuthenticatedUser]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def get(self, request):
         try:
-            rows = supabase_client.select(
-                'reporte', '*',
-                {'id_usuario': f'eq.{_user_id(request.user)}', 'order': 'fecha_reporte.desc', 'limit': '100'},
-            )
+            params = {'order': 'fecha_reporte.desc', 'limit': '100'}
+            if not _es_admin(request.user):
+                params['id_usuario'] = f'eq.{_user_id(request.user)}'
+            rows = supabase_client.select('reporte', '*', params)
         except supabase_client.SupabaseError as exc:
             return Response({'ok': False, 'error': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
         adjuntos = _adjuntos_map([r.get('id_reporte') for r in rows])
-        return Response({'ok': True, 'reportes': [_serialize_reporte(r, adjuntos) for r in rows]})
+        autores = _nombres_usuarios({r.get('id_usuario') for r in rows if r.get('id_usuario')})
+        nombres = {uid: info['nombre'] for uid, info in autores.items()}
+        return Response({'ok': True, 'reportes': [_serialize_reporte(r, adjuntos, nombres) for r in rows]})
 
     def post(self, request):
         data = request.data
@@ -193,7 +195,10 @@ class MobileReporteDetalleView(APIView):
             )
         return Response({
             'ok': True,
-            'reporte': _serialize_reporte(reporte, _adjuntos_map([reporte_id]), autores),
+            'reporte': _serialize_reporte(
+                reporte, _adjuntos_map([reporte_id]),
+                {uid: info['nombre'] for uid, info in autores.items()},
+            ),
             'mensajes': chat,
         })
 

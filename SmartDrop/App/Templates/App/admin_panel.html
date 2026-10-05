@@ -8,6 +8,7 @@
     .metric { background:#fff; border-radius:12px; padding:12px; border:1px solid #efe5fb; }
     .metric .label { font-size:12px; color:#6f6f7a; font-weight:800; text-transform:uppercase }
     .metric .val { font-size:22px; font-weight:900; color:#2d1a4a }
+    .metric .val.val-alert { color:#b91c1c }
     .table-styled { width:100%; border-collapse:collapse; margin-top:12px; }
     .table-styled th, .table-styled td { padding:8px 10px; border-bottom:1px solid #f0ecf7; font-size:13px; }
     .table-styled th { text-align:left; color:#6B21A8; font-weight:800; }
@@ -26,6 +27,11 @@
     .sensor-card .status { font-size:12px; color:#6f6f7a; text-transform:capitalize }
     .btn { display:inline-block; background:#6B21A8; color:#fff; padding:6px 10px; border-radius:8px; text-decoration:none; font-size:13px }
     .btn:hover { background:#53148f }
+    /* Layout del panel: clases propias para no colisionar con la página de consumo */
+    .admin-layout { display:grid; grid-template-columns: 1fr 320px; gap:16px; align-items:start; }
+    .admin-side { display:grid; gap:12px; align-content:start; }
+    .admin-side .comparison-card, .admin-side .historial-card { min-height:0; height:auto; }
+    @media (max-width:900px){ .admin-layout { grid-template-columns:1fr; } }
     @media (max-width:600px){ .sensor-card{ flex-direction:column; align-items:stretch } .sensor-card .actions{ align-items:flex-start } }
   </style>
 {% endblock %}
@@ -48,9 +54,21 @@
     <div class="label">Lecturas recientes</div>
     <div class="val">{{ lecturas|length }}</div>
   </div>
+
+  <a href="{% url 'admin_reportes' %}" style="text-decoration:none; color:inherit;">
+    <div class="metric" style="cursor:pointer; border-color:#d8b4fe;">
+      <div class="label" style="display:flex; justify-content:space-between; align-items:center;">
+        <span>Reportes pendientes</span>
+        <i class="ti ti-alert-triangle" style="color:#6B21A8; font-size:16px;"></i>
+      </div>
+      <div class="val{% if n_reportes_pendientes > 0 %} val-alert{% endif %}">
+        {{ n_reportes_pendientes }}
+      </div>
+    </div>
+  </a>
 </div>
 
-<div class="consumo-layout">
+<div class="admin-layout">
   <div>
     <!-- Panel: cards de sensores -->
     <h3>Todos los sensores</h3>
@@ -109,7 +127,7 @@
     {% endif %}
   </div>
 
-  <aside class="consumo-side">
+  <aside class="admin-side">
     <div class="comparison-card">
       <div class="comparison-label">Resumen</div>
       <div class="comparison-val">Viviendas: <strong>{{ viviendas|length }}</strong></div>

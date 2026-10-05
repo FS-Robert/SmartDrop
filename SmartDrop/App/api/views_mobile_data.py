@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta
 
 from rest_framework import status
@@ -8,6 +9,8 @@ from .. import queries, supabase_client
 from ..queries import safe_float
 from .permissions import IsAuthenticatedUser
 
+logger = logging.getLogger(__name__)
+
 
 PARAMETER_NAMES = {
     'flujo': ('flujo', 'flow'),
@@ -16,15 +19,45 @@ PARAMETER_NAMES = {
 }
 
 
+def _readings_for_sensors(sensor_ids, since=None, limit=5000):
+    """Lecturas (más recientes primero) de los sensores dados, filtradas en Supabase.
+
+    Se usa para el admin: en vez de traer las N lecturas globales más recientes
+    (que pueden ser todas de un solo sensor), se piden las de cada sensor por id,
+    igual que hace la vista web `sensor_data`.
+    """
+    ids = [str(sid) for sid in sensor_ids if str(sid).isascii() and str(sid).isdigit()]
+    if not ids:
+        return []
+    params = {
+        'id_sensor': f"in.({','.join(ids)})",
+        'order': 'fecha_registro.desc',
+        'limit': str(limit),
+    }
+    if since:
+        params['fecha_registro'] = f"gte.{since.strftime('%Y-%m-%dT%H:%M:%S')}"
+    return supabase_client.select('lectura', 'id_sensor,fecha_registro,valor', params)
+
+
+def _matching_sensors(sensors, parameter):
+    """Todos los sensores cuyo tipo coincide con el parámetro (puede haber varios)."""
+    names = PARAMETER_NAMES[parameter]
+    return [s for s in sensors if any(name in _sensor_type(s) for name in names)]
+
+
 def _visible_data(request):
+    """Viviendas, sensores y lecturas visibles según el rol del usuario.
+
+    Admin (rol_id == 2): todas las lecturas de todos los sensores.
+    Usuario normal: solo los datos de sus viviendas.
+    """
     if getattr(request.user, 'rol_id', None) == 2:
-        viviendas, sensores, lecturas = queries.run_parallel(
+        viviendas, sensores = queries.run_parallel(
             lambda: supabase_client.select('vivienda', 'id_vivienda,nic,direccion', {'limit': '1000'}),
             queries.sensors,
-            lambda: supabase_client.select(
-                'lectura', '*', {'order': 'fecha_registro.desc', 'limit': '2000'}
-            ),
         )
+        sensor_ids = [s.get('id_sensor') for s in sensores if s.get('id_sensor')]
+        lecturas = _readings_for_sensors(sensor_ids)
         return viviendas, sensores, lecturas
 
     data = queries.owned_data(request.user)
@@ -49,6 +82,21 @@ def _matching_sensor(sensors, parameter):
     return next((sensor for sensor in sensors if any(name in _sensor_type(sensor) for name in names)), None)
 
 
+def _parse_iso(timestamp):
+    """Parsea fecha ISO de Supabase a datetime (naive, para comparar)."""
+    try:
+        return datetime.fromisoformat(str(timestamp).replace('Z', '+00:00')).replace(tzinfo=None)
+    except (ValueError, TypeError):
+        return None
+
+
+def _parse_range_param(value):
+    """Parsea un parámetro de fecha ISO enviado por la app; None si no es válido."""
+    if not value:
+        return None
+    return _parse_iso(value)
+
+
 def _reading_series(sensor, readings, since=None):
     if not sensor:
         return []
@@ -60,11 +108,10 @@ def _reading_series(sensor, readings, since=None):
         timestamp = row.get('fecha_registro')
         if not timestamp:
             continue
-        try:
-            parsed = datetime.fromisoformat(str(timestamp).replace('Z', '+00:00'))
-        except ValueError:
+        parsed = _parse_iso(timestamp)
+        if parsed is None:
             continue
-        if since and parsed.replace(tzinfo=None) < since:
+        if since and parsed < since:
             continue
         value = safe_float(row.get('valor'))
         outside = _range_status(value, sensor.get('rango_min'), sensor.get('rango_max')) != 'Normal'
@@ -189,8 +236,49 @@ class MobileGraficasView(APIView):
         if invalid:
             return Response({'error': f'Parámetros no válidos: {invalid}.'}, status=status.HTTP_400_BAD_REQUEST)
 
+        es_admin = getattr(request.user, 'rol_id', None) == 2
+
+        # Rango pedido por la app (desde/hasta). Por defecto, últimas 24 h.
+        desde = _parse_range_param(request.query_params.get('desde'))
+        hasta = _parse_range_param(request.query_params.get('hasta'))
+        if desde is None:
+            desde = datetime.utcnow() - timedelta(days=1)
+        if hasta is None:
+            hasta = datetime.utcnow()
+
+        if es_admin:
+            # Admin: todos los sensores del sistema y todas sus lecturas en el rango.
+            _, sensors, _ = _visible_data(request)
+            result = {}
+            for parameter in parameters:
+                matched = _matching_sensors(sensors, parameter)
+                sensor_ids = [s.get('id_sensor') for s in matched if s.get('id_sensor')]
+                readings = _readings_for_sensors(sensor_ids, since=desde)
+
+                # Fallback: si no hay lecturas en el rango, traer las más recientes
+                # disponibles (sin volver a filtrar por fecha abajo).
+                usar_fallback = not readings and bool(sensor_ids)
+                if usar_fallback:
+                    readings = _readings_for_sensors(sensor_ids, since=None, limit=200)
+
+                logger.info(
+                    'Graficas admin: parametro=%s sensores=%s lecturas=%s fallback=%s',
+                    parameter, len(matched), len(readings), usar_fallback,
+                )
+                sensor = matched[0] if matched else None
+                # Si usamos el fallback, no filtramos por `desde` (los datos ya son
+                # los más recientes aunque sean anteriores al rango pedido).
+                filtro_fecha = None if usar_fallback else desde
+                result[parameter] = {
+                    'unidad': '%' if parameter == 'nivel' else (sensor or {}).get('unidad_medida', ''),
+                    'rango_min': (sensor or {}).get('rango_min'),
+                    'rango_max': (sensor or {}).get('rango_max'),
+                    'datos': _reading_series(sensor, readings, filtro_fecha),
+                }
+            return Response(result)
+
+        # Usuario normal: solo los datos de su(s) vivienda(s).
         _, sensors, readings = _visible_data(request)
-        since = datetime.utcnow() - timedelta(days=1)
         result = {}
         for parameter in parameters:
             sensor = _matching_sensor(sensors, parameter)
@@ -198,7 +286,7 @@ class MobileGraficasView(APIView):
                 'unidad': '%' if parameter == 'nivel' else (sensor or {}).get('unidad_medida', ''),
                 'rango_min': (sensor or {}).get('rango_min'),
                 'rango_max': (sensor or {}).get('rango_max'),
-                'datos': _reading_series(sensor, readings, since),
+                'datos': _reading_series(sensor, readings, desde),
             }
         return Response(result)
 

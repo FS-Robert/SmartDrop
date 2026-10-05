@@ -131,46 +131,129 @@
 <script>
 (function () {
   const box = document.getElementById('chat-messages');
+  const chatForm = document.querySelector('.chat-form');
+  const chatInput = document.getElementById('chat-input');
   const reporteId = box.dataset.reporte;
   box.scrollTop = box.scrollHeight;
+
   let lastId = 0;
   box.querySelectorAll('.chat-msg').forEach((m) => {
     lastId = Math.max(lastId, parseInt(m.dataset.id || '0', 10));
   });
 
   function appendMessage(m) {
+    if (m.id_mensaje && document.querySelector(`.chat-msg[data-id="${m.id_mensaje}"]`)) {
+      return;
+    }
     const vacio = document.getElementById('chat-vacio');
     if (vacio) vacio.remove();
+
     const div = document.createElement('div');
     div.className = 'chat-msg' + (m.propio ? ' propio' : '');
-    div.dataset.id = m.id_mensaje;
+    if (m.id_mensaje) div.dataset.id = m.id_mensaje;
+
     const autor = document.createElement('div');
     autor.className = 'chat-msg-autor';
-    autor.textContent = m.autor_nombre;
+    if (m.es_admin_emisor) {
+      const shield = document.createElement('i');
+      shield.className = 'ti ti-shield-check';
+      autor.appendChild(shield);
+      autor.appendChild(document.createTextNode(' '));
+    }
+    autor.appendChild(document.createTextNode(m.autor_nombre || 'Usuario'));
+
     const texto = document.createElement('div');
     texto.className = 'chat-msg-texto';
     texto.textContent = m.mensaje;
+
     const fecha = document.createElement('div');
     fecha.className = 'chat-msg-fecha';
     fecha.textContent = (m.fecha_envio || '').slice(5, 16);
+
     div.append(autor, texto, fecha);
     box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
   }
 
+  // Live Chat vía WebSockets
+  let ws = null;
+  function connectWebSocket() {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws/chat/reporte/${reporteId}/`;
+    try {
+      ws = new WebSocket(wsUrl);
+      ws.onmessage = function (event) {
+        const data = JSON.parse(event.data);
+        if (data.type === 'chat_message') {
+          appendMessage({
+            id_mensaje: data.id_mensaje,
+            mensaje: data.mensaje,
+            fecha_envio: data.fecha_envio,
+            propio: data.id_usuario === {{ request.user.supabase_id|default:request.user.id_usuario }},
+            es_admin_emisor: data.es_admin_emisor,
+            autor_nombre: data.autor_nombre,
+          });
+          if (data.id_mensaje) lastId = Math.max(lastId, data.id_mensaje);
+        }
+      };
+      ws.onclose = function () {
+        setTimeout(connectWebSocket, 5000);
+      };
+    } catch (e) {
+      console.warn('WebSockets no disponibles, usando polling AJAX.');
+    }
+  }
+  connectWebSocket();
+
+  // Envío de mensajes asíncrono
+  if (chatForm && chatInput) {
+    chatForm.addEventListener('submit', async function (e) {
+      e.preventDefault();
+      const texto = chatInput.value.trim();
+      if (!texto) return;
+
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ mensaje: texto }));
+        chatInput.value = '';
+      } else {
+        try {
+          const formData = new FormData(chatForm);
+          chatInput.value = '';
+          const resp = await fetch(window.location.href, {
+            method: 'POST',
+            body: formData,
+            headers: {
+              'X-Requested-With': 'XMLHttpRequest',
+              'Accept': 'application/json',
+            },
+          });
+          const data = await resp.json();
+          if (data.ok && data.mensaje) {
+            appendMessage(data.mensaje);
+            if (data.mensaje.id_mensaje) lastId = Math.max(lastId, data.mensaje.id_mensaje);
+          }
+        } catch (err) {
+          console.error('Error enviando mensaje:', err);
+        }
+      }
+    });
+  }
+
+  // Polling como respaldo
   async function poll() {
+    if (ws && ws.readyState === WebSocket.OPEN) return;
     try {
       const resp = await fetch(`{% url 'reporte_mensajes_json' 0 %}`.replace('/0/', `/${reporteId}/`) + `?after=${lastId}`);
       const data = await resp.json();
       if (data.ok && data.mensajes.length) {
         data.mensajes.forEach((m) => {
           appendMessage(m);
-          lastId = Math.max(lastId, m.id_mensaje);
+          if (m.id_mensaje) lastId = Math.max(lastId, m.id_mensaje);
         });
-        box.scrollTop = box.scrollHeight;
       }
-    } catch (e) { /* reintenta en el siguiente ciclo */ }
+    } catch (e) { /* reintenta */ }
   }
-  setInterval(poll, 8000);
+  setInterval(poll, 4000);
 })();
 </script>
 {% endblock %}
