@@ -6,7 +6,7 @@
 {% block content %}
 <div class="reportes-heading reporte-detalle-heading">
   <a href="{% if es_admin %}{% url 'admin_reportes' %}{% else %}{% url 'reportes_panel' %}{% endif %}" class="reportes-link">
-    <i class="ti ti-arrow-left"></i> Volver
+    <i class="ti ti-arrow-left"></i>Volver
   </a>
   <h1 class="page-title">{{ reporte.tipo_label|upper }}</h1>
   <p class="page-subtitle">
