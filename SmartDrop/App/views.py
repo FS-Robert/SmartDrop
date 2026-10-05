@@ -305,6 +305,12 @@ def _friendly_quality_message(tds_value):
 
 
 _PRESSURE_LABELS = {'normal': 'Estable', 'baja': 'Baja', 'alta': 'Alta', 'muy_alta': 'Muy alta'}
+_KPA_PER_BAR = 100
+
+
+def _bar_to_kpa(value):
+    """Convierte una lectura de presión de bar (unidad del sensor) a kPa."""
+    return round(safe_float(value) * _KPA_PER_BAR, 1)
 
 
 def _friendly_pressure_message(pressure_value):
@@ -468,7 +474,7 @@ def dashboard(request):
             'estado': pressure_label,
             'badge': pressure_label,
             'badge_class': _status_badge_class(pressure_status),
-            'valor_exacto': f"{pressure_value} bar",
+            'valor_exacto': f"{_bar_to_kpa(pressure_value)} kPa" if pressure_value is not None else 'Sin lectura',
             'mensaje_amigable': pressure_msg,
             'estado_amigable': pressure_status,
         },
@@ -489,7 +495,7 @@ def dashboard(request):
         'valvula': valve_status,
         'stats': {
             'uptime':        'Disponible' if lecturas else 'Sin datos',
-            'presion_exacta':f"{pressure_value} bar",
+            'presion_exacta':f"{_bar_to_kpa(pressure_value)} kPa" if pressure_value is not None else 'Sin lectura',
             'ph':            f"{safe_float(ph.get('valor')) if ph else 0} pH",
             'temperatura':   f"{safe_float(temperature.get('valor')) if temperature else 0}°C",
         },
@@ -678,15 +684,15 @@ def presion(request):
             'estado':     _PRESSURE_LABELS.get(pressure_status, 'Sin datos'),
             'badge_class': _status_badge_class(pressure_status),
             'valvula':    'Sin datos',
-            'valor':       valor,
+            'valor':       _bar_to_kpa(valor),
             'gauge_dash':  gauge_dash,
             'needle_pos':  int(pct),
             'nota':       'Valor recibido desde el sensor de presión de tu vivienda.' if pressure_rows else 'No hay lecturas de presión para tu vivienda.',
             'mensaje':    pressure_message,
             'actualizado':'Actualizado ahora' if pressure_rows else 'Sin lectura',
-            'min_dia':    min((safe_float(row.get('valor')) for row in pressure_rows), default=0),
-            'max_dia':    max((safe_float(row.get('valor')) for row in pressure_rows), default=0),
-            'prom_dia':   round(sum(safe_float(row.get('valor')) for row in pressure_rows) / len(pressure_rows), 2) if pressure_rows else 0,
+            'min_dia':    _bar_to_kpa(min((safe_float(row.get('valor')) for row in pressure_rows), default=0)),
+            'max_dia':    _bar_to_kpa(max((safe_float(row.get('valor')) for row in pressure_rows), default=0)),
+            'prom_dia':   _bar_to_kpa(sum(safe_float(row.get('valor')) for row in pressure_rows) / len(pressure_rows)) if pressure_rows else 0,
         },
         'viviendas': viviendas,
         'ultima_actualizacion': 'hace unos segundos',

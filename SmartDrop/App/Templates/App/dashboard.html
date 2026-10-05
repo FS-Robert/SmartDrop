@@ -263,7 +263,7 @@
     if (!Number.isFinite(value)) return;
 
     if (type.includes('presion') || type.includes('pressure')) {
-      document.getElementById('dashboard-pressure-exact').textContent = `${value} bar`;
+      document.getElementById('dashboard-pressure-exact').textContent = `${(value * 100).toFixed(1)} kPa`;
       document.getElementById('dashboard-pressure-friendly').textContent =
         value >= 2 && value <= 3.5 ? 'Presión normal. Sistema funcionando correctamente.' : 'Presión fuera del rango normal.';
     } else if (type.includes('tds') || type.includes('calidad') || type.includes('ph')) {
