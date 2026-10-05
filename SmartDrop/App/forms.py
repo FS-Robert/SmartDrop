@@ -5,6 +5,27 @@ from . import supabase_client
 from .backends import sync_user_from_supabase
 
 
+class UsuarioProfileForm(forms.Form):
+    nombre = forms.CharField(
+        label='Nombre',
+        max_length=255,
+        widget=forms.TextInput(attrs={'autocomplete': 'given-name'}),
+    )
+    apellido = forms.CharField(
+        label='Apellido',
+        max_length=255,
+        widget=forms.TextInput(attrs={'autocomplete': 'family-name'}),
+    )
+    email = forms.EmailField(
+        label='Correo electrónico',
+        max_length=254,
+        widget=forms.EmailInput(attrs={'autocomplete': 'email'}),
+    )
+
+    def clean_email(self):
+        return self.cleaned_data['email'].strip().lower()
+
+
 class UsuarioRegisterForm(forms.Form):
     email = forms.EmailField(label='Correo')
     nombre = forms.CharField(label='Nombre', max_length=255)

@@ -574,3 +574,59 @@ class QueryCacheAndFiltersTests(TestCase):
 
 		self.assertEqual(response.json()['data'], [])
 		self.assertNotIn('lectura', [call.args[0] for call in select.call_args_list])
+
+
+class UsuarioProfileViewTests(TestCase):
+	def setUp(self):
+		self.role = Rol.objects.create(nombre_rol='user')
+		self.user = Usuario.objects.create_user(
+			email='perfil@example.com',
+			nombre='Ana',
+			apellido='Batres',
+			password='password-segura',
+			rol=self.role,
+		)
+		self.user.supabase_id = 88
+		self.user.save(update_fields=['supabase_id'])
+		self.client.force_login(self.user)
+
+	@patch('App.views.supabase_client.select')
+	def test_perfil_muestra_iniciales_direccion_real_y_telefono_no_configurado(self, select):
+		select.return_value = [{
+			'id_vivienda': 17,
+			'nic': 'NIC-17',
+			'direccion': 'Calle Principal, San Miguel',
+		}]
+
+		response = self.client.get(reverse('usuario'))
+
+		self.assertEqual(response.status_code, 200)
+		self.assertContains(response, 'AB')
+		self.assertContains(response, 'Calle Principal, San Miguel')
+		self.assertContains(response, 'No configurado')
+		self.assertContains(response, 'Información personal')
+
+	@patch('App.views.supabase_client.update')
+	def test_editar_perfil_actualiza_supabase_y_usuario_local(self, update):
+		update.return_value = {
+			'id_usuario': 88,
+			'nombre': 'Andrea',
+			'apellido': 'Batres',
+			'correo': 'perfil@example.com',
+		}
+
+		response = self.client.post(reverse('usuario'), {
+			'nombre': 'Andrea',
+			'apellido': 'Batres',
+			'email': 'perfil@example.com',
+		})
+
+		self.assertRedirects(response, reverse('usuario'))
+		update.assert_called_once_with(
+			'usuario',
+			{'nombre': 'Andrea', 'apellido': 'Batres', 'correo': 'perfil@example.com'},
+			{'id_usuario': 'eq.88'},
+			return_representation=True,
+		)
+		self.user.refresh_from_db()
+		self.assertEqual(self.user.nombre, 'Andrea')

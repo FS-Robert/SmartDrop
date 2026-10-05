@@ -156,7 +156,7 @@
 <!-- ── Interrupciones y predicciones ── -->
 <div class="dashboard-interrupciones">
   <section class="dash-card">
-    <div class="card-label"><i class="ti ti-alert-triangle"></i> Interrupciones reportadas</div>
+    <div class="card-label">Interrupciones reportadas</div>
     {% if comunidad.reportes_abiertos %}
       <ul class="mini-list">
         {% for reporte in comunidad.reportes_abiertos %}
@@ -174,7 +174,7 @@
   </section>
 
   <section class="dash-card">
-    <div class="card-label"><i class="ti ti-bell"></i> Alertas recientes</div>
+    <div class="card-label">Alertas recientes</div>
     {% if comunidad.alertas %}
       <ul class="mini-list">
         {% for alerta in comunidad.alertas %}

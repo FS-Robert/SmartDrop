@@ -3,58 +3,128 @@
 {% block nav_reco %}active{% endblock %}
 
 {% block content %}
-<h1 class="page-title">Recomendaciones</h1>
-
-<!-- Header decorativo -->
-<div class="reco-header-card">
-  <i class="ti ti-bulb reco-icon"></i>
-  <div>
-    <div class="reco-header-title">Ahorremos agua hoy, para asegurar el mañana</div>
-    <div class="reco-header-sub">{{ consumo_nota }}</div>
-  </div>
+<div class="reco-heading">
+  <h1 class="page-title">RECOMENDACIONES</h1>
+  <p class="page-subtitle">Pequeñas acciones pueden ayudarte a reducir el desperdicio de agua.</p>
 </div>
 
-<!-- Grid de tips -->
-<div class="tips-grid">
-  {% for tip in recomendaciones %}
-  <div class="tip-card" id="tip-{{ forloop.counter }}">
-    <div class="tip-check {% if tip.completado %}checked{% endif %}"
-         onclick="toggleTip(this, {{ forloop.counter }})"
-         title="Marcar como completado"></div>
-    <div class="tip-body">
-      <div class="tip-title">TIP: {{ tip.titulo }}</div>
-      <div class="tip-impact">
-        <i class="ti ti-leaf" style="font-size:12px;"></i>
-        IMPACTO: {{ tip.impacto }}
+<div class="reco-summary">
+  <section class="reco-summary-card reco-progress-card">
+    <div class="reco-summary-heading ">
+      <div class="reco-summary-label">
+        <i class="ti ti-award" aria-hidden="true"></i>
+        <span>Tus recomendaciones</span>
+      </div>
+      <div class="reco-summary-total">
+        <strong><span id="reco-completed">0</span> / <span id="reco-total">{{ recomendaciones|length }}</span></strong>
+        <small>completadas</small>
       </div>
     </div>
-  </div>
-  {% endfor %}
+    <div class="reco-progress-track" role="progressbar" aria-label="Progreso de recomendaciones"
+         aria-valuemin="0" aria-valuemax="{{ recomendaciones|length }}" aria-valuenow="0">
+      <div class="reco-progress-fill" id="reco-progress-bar"></div>
+    </div>
+    <div class="reco-progress-footer">
+      <span><strong id="reco-progress-percent">0%</strong> completado</span>
+      <span><strong id="reco-pending">{{ recomendaciones|length }}</strong> pendientes</span>
+    </div>
+  </section>
+
+  <section class="reco-summary-card reco-impact-card">
+    <div class="reco-summary-label">
+      <i class="ti ti-leaf" aria-hidden="true"></i>
+      <span>Impacto de tus hábitos</span>
+    </div>
+    <div class="reco-impact-row">
+      <span>Completadas</span>
+      <strong id="reco-impact-completed">0 / {{ recomendaciones|length }}</strong>
+    </div>
+    <div class="reco-impact-row">
+      <span>Progreso</span>
+      <strong id="reco-impact-percent">0%</strong>
+    </div>
+    <div class="reco-impact-row">
+      <span>Agua ahorrada</span>
+      <strong>—</strong>
+    </div>
+    <p class="reco-consumption-note">{{ consumo_nota }}</p>
+  </section>
 </div>
 
-<!-- Progreso -->
-<div class="progress-card card">
-  <div class="progress-header">
-    <div class="progress-title">Tu progreso</div>
-    <span class="progress-text" id="progress-text">0 / {{ recomendaciones|length }} completados</span>
-  </div>
-  <div class="progress-bar-outer">
-    <div class="progress-bar-inner" id="progress-bar" style="width:0%"></div>
-  </div>
+<div class="tips-grid">
+  {% for tip in recomendaciones %}
+  <article class="tip-card {% if tip.completado %}is-completed{% endif %}" id="tip-{{ forloop.counter }}">
+    <div class="tip-card-heading">
+      <span class="tip-icon" aria-hidden="true">
+        {% if forloop.counter == 1 %}<i class="ti ti-droplet"></i>
+        {% elif forloop.counter == 2 %}<i class="ti ti-droplets"></i>
+        {% elif forloop.counter == 3 %}<i class="ti ti-droplet-half-2"></i>
+        {% elif forloop.counter == 4 %}<i class="ti ti-bolt"></i>
+        {% elif forloop.counter == 5 %}<i class="ti ti-refresh"></i>
+        {% else %}<i class="ti ti-alert-triangle"></i>{% endif %}
+      </span>
+      <span class="tip-number">TIP #{{ forloop.counter }}</span>
+    </div>
+    <h2 class="tip-title">{{ tip.titulo }}</h2>
+    <p class="tip-description">
+      {% if forloop.counter == 1 %}Cierra la llave mientras te cepillas y ábrela solo para enjuagarte. Así evitas desperdiciar agua innecesariamente.
+      {% elif forloop.counter == 2 %}Cada minuto de ducha consume agua. Reducir el tiempo a cinco minutos ayuda a disminuir el consumo.
+      {% elif forloop.counter == 3 %}Usa un recipiente para lavar los platos y abre el grifo solo cuando necesites enjuagarlos.
+      {% elif forloop.counter == 4 %}Lava el vehículo con un balde y un trapo húmedo en lugar de usar la manguera.
+      {% elif forloop.counter == 5 %}El agua de cocción ya fría puede reutilizarse para regar plantas.
+      {% else %}Revisa periódicamente los grifos y repara las fugas para evitar que se desperdicie agua.
+      {% endif %}
+    </p>
+    <p class="tip-impact"><strong>IMPACTO:</strong> {{ tip.impacto }}</p>
+    <button class="tip-complete-button" type="button"
+            aria-pressed="{% if tip.completado %}true{% else %}false{% endif %}">
+      {% if tip.completado %}Completado{% else %}Marcar como completado{% endif %}
+    </button>
+  </article>
+  {% endfor %}
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-  const total = {{ recomendaciones|length }};
-  let completados = 0;
+  (() => {
+    const cards = [...document.querySelectorAll('.tips-grid .tip-card')];
+    const total = cards.length;
+    const progressTrack = document.querySelector('.reco-progress-track');
+    const progressBar = document.getElementById('reco-progress-bar');
+    const completedCount = document.getElementById('reco-completed');
+    const impactCompleted = document.getElementById('reco-impact-completed');
+    const pendingCount = document.getElementById('reco-pending');
+    const progressPercent = document.getElementById('reco-progress-percent');
+    const impactPercent = document.getElementById('reco-impact-percent');
 
-  function toggleTip(el, idx) {
-    el.classList.toggle('checked');
-    completados = document.querySelectorAll('.tip-check.checked').length;
-    const pct = Math.round((completados / total) * 100);
-    document.getElementById('progress-bar').style.width  = pct + '%';
-    document.getElementById('progress-text').textContent = completados + ' / ' + total + ' completados';
-  }
+    function updateProgress() {
+      const completed = cards.filter((card) => (
+        card.querySelector('.tip-complete-button').getAttribute('aria-pressed') === 'true'
+      )).length;
+      const percent = total ? Math.round((completed / total) * 100) : 0;
+
+      completedCount.textContent = completed;
+      impactCompleted.textContent = `${completed} / ${total}`;
+      pendingCount.textContent = total - completed;
+      progressPercent.textContent = `${percent}%`;
+      impactPercent.textContent = `${percent}%`;
+      progressBar.style.width = `${percent}%`;
+      progressTrack.setAttribute('aria-valuenow', completed);
+    }
+
+    cards.forEach((card) => {
+      const button = card.querySelector('.tip-complete-button');
+      button.addEventListener('click', () => {
+        const completed = button.getAttribute('aria-pressed') !== 'true';
+        button.setAttribute('aria-pressed', String(completed));
+        button.textContent = completed ? 'Completado' : 'Marcar como completado';
+        card.classList.toggle('is-completed', completed);
+        updateProgress();
+      });
+    });
+
+    updateProgress();
+  })();
 </script>
 {% endblock %}

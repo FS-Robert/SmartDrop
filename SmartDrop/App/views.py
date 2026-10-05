@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone as dt_timezone
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from django.contrib import messages
 from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
@@ -18,8 +19,9 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from .forms import LoginForm, UsuarioRegisterForm
+from .forms import LoginForm, UsuarioProfileForm, UsuarioRegisterForm
 from . import supabase_client
+from .models import Usuario
 from . import views_reportes
 from .mqtt_service import MqttError, publish_command
 from .queries import (
@@ -1373,14 +1375,87 @@ def valvula_comando(request, valvula_id):
 
 @login_required(login_url='login')
 def usuario(request):
+    profile_form = UsuarioProfileForm(
+        request.POST if request.method == 'POST' else None,
+        initial={
+            'nombre': request.user.nombre,
+            'apellido': request.user.apellido,
+            'email': request.user.email,
+        },
+    )
+    if request.method == 'POST':
+        if profile_form.is_valid():
+            nombre = profile_form.cleaned_data['nombre'].strip()
+            apellido = profile_form.cleaned_data['apellido'].strip()
+            email = profile_form.cleaned_data['email']
+            local_duplicate = Usuario.objects.filter(email=email).exclude(pk=request.user.pk).exists()
+
+            if local_duplicate:
+                profile_form.add_error('email', 'Este correo ya está asociado a otra cuenta.')
+            else:
+                try:
+                    remote_user = None
+                    if email != request.user.email:
+                        remote_user = supabase_client.get_user_by_email(email)
+                    if remote_user:
+                        profile_form.add_error('email', 'Este correo ya está registrado.')
+                    else:
+                        supabase_id = request.user.supabase_id
+                        if not supabase_id:
+                            remote_user = supabase_client.get_user_by_email(request.user.email)
+                            supabase_id = remote_user.get('id_usuario') if remote_user else None
+                        if not supabase_id:
+                            profile_form.add_error(
+                                None,
+                                'No se pudo identificar la cuenta en el servicio de usuarios. No se guardaron los cambios.',
+                            )
+                        else:
+                            updated_user = supabase_client.update(
+                                'usuario',
+                                {'nombre': nombre, 'apellido': apellido, 'correo': email},
+                                {'id_usuario': f'eq.{supabase_id}'},
+                                return_representation=True,
+                            )
+                            if not updated_user:
+                                profile_form.add_error(
+                                    None,
+                                    'No se recibió confirmación al guardar los cambios. Inténtalo de nuevo.',
+                                )
+                            else:
+                                request.user.nombre = nombre
+                                request.user.apellido = apellido
+                                request.user.email = email
+                                request.user.save(update_fields=['nombre', 'apellido', 'email'])
+                                messages.success(request, 'Tu información personal se actualizó correctamente.')
+                                return redirect('usuario')
+                except supabase_client.SupabaseError as exc:
+                    logger.error('No se pudo actualizar el perfil de usuario %s: %s', request.user.pk, exc)
+                    profile_form.add_error(
+                        None,
+                        'No se pudo guardar la información en este momento. Inténtalo de nuevo.',
+                    )
+
+    try:
+        viviendas = user_viviendas(request.user)
+    except supabase_client.SupabaseError as exc:
+        logger.error('No se pudo cargar la vivienda del usuario %s: %s', request.user.pk, exc)
+        viviendas = []
+        messages.error(request, 'No se pudo cargar la dirección de tu vivienda en este momento.')
+
+    full_name = request.user.get_full_name().strip()
+    name_parts = full_name.split()
+    initials = ''.join(part[0] for part in name_parts[:2] if part).upper()
+    if not initials:
+        initials = request.user.email[:1].upper()
+
     context = {
         'usuario': {
-            'nombre':        request.user.get_full_name() if request.user.is_authenticated else 'Invitado',
-            'direccion':     'Casa #14 · Bloque B, Colonia La Merced, San Miguel',
-            'ciudad':        'San Miguel, El Salvador',
-            'email':         request.user.email if request.user.is_authenticated else 'usuario@ejemplo.com',
-            'telefono':      '+503 7000-0000',
-            'miembro_desde': request.user.fecha_registro.strftime('%B %Y') if request.user.is_authenticated else 'Enero 2024',
+            'nombre': full_name or request.user.email,
+            'iniciales': initials,
+            'direccion': viviendas[0].get('direccion') if viviendas else '',
+            'email': request.user.email,
+            'telefono': 'No configurado',
+            'miembro_desde': request.user.fecha_registro.strftime('%B %Y'),
             'notificaciones': [
                 {'nombre': 'Alertas de nivel', 'icono': 'bell',        'activo': True},
                 {'nombre': 'Suministro',        'icono': 'droplet',     'activo': True},
@@ -1388,7 +1463,7 @@ def usuario(request):
                 {'nombre': 'Consumo elevado',   'icono': 'chart-bar',   'activo': False},
             ],
         },
-        'ultima_actualizacion': 'hace 5 min',
+        'profile_form': profile_form,
     }
     return render(request, 'App/usuario.html', context)
 
