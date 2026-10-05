@@ -195,7 +195,10 @@ class MobileReporteDetalleView(APIView):
             )
         return Response({
             'ok': True,
-            'reporte': _serialize_reporte(reporte, _adjuntos_map([reporte_id]), autores),
+            'reporte': _serialize_reporte(
+                reporte, _adjuntos_map([reporte_id]),
+                {uid: info['nombre'] for uid, info in autores.items()},
+            ),
             'mensajes': chat,
         })
 

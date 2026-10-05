@@ -252,20 +252,28 @@ class MobileGraficasView(APIView):
             result = {}
             for parameter in parameters:
                 matched = _matching_sensors(sensors, parameter)
-                readings = _readings_for_sensors(
-                    [s.get('id_sensor') for s in matched if s.get('id_sensor')],
-                    since=desde,
-                )
+                sensor_ids = [s.get('id_sensor') for s in matched if s.get('id_sensor')]
+                readings = _readings_for_sensors(sensor_ids, since=desde)
+
+                # Fallback: si no hay lecturas en el rango, traer las más recientes
+                # disponibles (sin volver a filtrar por fecha abajo).
+                usar_fallback = not readings and bool(sensor_ids)
+                if usar_fallback:
+                    readings = _readings_for_sensors(sensor_ids, since=None, limit=200)
+
                 logger.info(
-                    'Graficas admin: parametro=%s sensores=%s lecturas=%s',
-                    parameter, len(matched), len(readings),
+                    'Graficas admin: parametro=%s sensores=%s lecturas=%s fallback=%s',
+                    parameter, len(matched), len(readings), usar_fallback,
                 )
                 sensor = matched[0] if matched else None
+                # Si usamos el fallback, no filtramos por `desde` (los datos ya son
+                # los más recientes aunque sean anteriores al rango pedido).
+                filtro_fecha = None if usar_fallback else desde
                 result[parameter] = {
                     'unidad': '%' if parameter == 'nivel' else (sensor or {}).get('unidad_medida', ''),
                     'rango_min': (sensor or {}).get('rango_min'),
                     'rango_max': (sensor or {}).get('rango_max'),
-                    'datos': _reading_series(sensor, readings, desde),
+                    'datos': _reading_series(sensor, readings, filtro_fecha),
                 }
             return Response(result)
 
