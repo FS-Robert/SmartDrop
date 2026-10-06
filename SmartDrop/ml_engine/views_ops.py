@@ -15,6 +15,7 @@ from App import queries, supabase_client
 from ml_engine import jobs
 from ml_engine.leaks.alerts import ORIGIN, cooldown_hours
 from ml_engine.leaks.detect import alert_threshold
+from ml_engine.leaks.explain import ACTION, describe_causes, onset_text, plain_summary
 from ml_engine.models import Home, LeakPrediction, MonitorState, PredictionJob
 from ml_engine.monitor import MONITOR_KEY, interval_seconds
 from ml_engine.realdata.sync import data_quality
@@ -75,8 +76,11 @@ def _leak_row(home, prediction, quality):
         'porcentaje': None if prediction is None else prediction.porcentaje,
         'nivel_riesgo': 'sin_datos' if prediction is None else prediction.nivel_riesgo,
         'posible_fuga': prediction is not None and prediction.probabilidad >= alert_threshold(),
-        'causas': [] if prediction is None else prediction.drivers,
+        'causas': [] if prediction is None else (describe_causes(prediction.features) or prediction.drivers),
         'metricas': {} if prediction is None else prediction.features,
+        'resumen': None if prediction is None else plain_summary(prediction.features),
+        'inicio': None if prediction is None else onset_text(prediction.features),
+        'accion': ACTION,
         'evaluado': None if prediction is None else prediction.generated_at,
         'alerta_id': None if prediction is None else prediction.alerta_id,
     }
@@ -124,7 +128,10 @@ def _alert_payload(alerta, notificacion):
         'probabilidad': extra.get('probabilidad'),
         'nivel_riesgo': extra.get('nivel_riesgo'),
         'metricas': extra.get('metricas') or {},
-        'causas': extra.get('causas') or [],
+        'causas': describe_causes(extra.get('metricas')) or extra.get('causas') or [],
+        'resumen': plain_summary(extra.get('metricas')),
+        'inicio': onset_text(extra.get('metricas')),
+        'accion': ACTION,
         'leida': bool(notificacion) and notificacion.get('estado_visualizacion') == 'leida',
     }
 

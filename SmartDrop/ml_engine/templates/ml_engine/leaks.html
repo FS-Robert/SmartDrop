@@ -37,6 +37,15 @@
     .alert-item:target { box-shadow:0 0 0 3px rgba(124,58,237,.35); }
     .alert-msg { white-space:pre-line; font-size:13px; margin-top:8px; }
     .link-btn { border:0; background:transparent; color:#6b21a8; font-weight:700; cursor:pointer; padding:0; }
+    .leak-summary { margin-top:8px; font-size:14px; font-weight:600; }
+    .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+    .chip { background:rgba(124,58,237,.10); border-radius:999px; padding:4px 10px; font-size:12px; font-weight:700; }
+    .leak-action { margin-top:8px; font-size:13px; color:var(--muted); }
+    .leak-row details, .alert-item details { margin-top:8px; font-size:13px; }
+    .leak-row summary, .alert-item summary { cursor:pointer; color:#6b21a8; font-weight:700; }
+    .leak-compact { display:flex; justify-content:space-between; gap:10px; align-items:center; padding:8px 12px; border-bottom:1px solid var(--border); font-size:13px; }
+    .leak-compact:last-child { border-bottom:0; }
+    .leak-compact .leak-meta { margin-left:6px; }
     .banner-err { padding:10px 14px; border-radius:10px; background:#fdeaea; color:#b3261e; font-weight:600; margin-bottom:14px; }
     .banner-ok { padding:10px 14px; border-radius:10px; background:#e6f7ee; color:#1a7a4c; font-weight:600; margin-bottom:14px; }
   </style>
@@ -115,6 +124,24 @@
     }
   }
 
+  function keyChips(m, inicio) {
+    const chips = [];
+    if (m.perdida_estimada_lph != null && m.perdida_estimada_lph > 0) chips.push(`Pérdida ≈ ${fmt(m.perdida_estimada_lph, 'L/h', 1)}`);
+    if (inicio) chips.push(`Desde ${esc(inicio)}`);
+    if (m.litros_perdidos_estimados) chips.push(`Agua perdida ≈ ${fmt(m.litros_perdidos_estimados, 'L', 0)}`);
+    if (m.presion_actual != null && m.presion_normal != null) chips.push(`Presión ${fmt(m.presion_actual, '', 2)} (normal ${fmt(m.presion_normal, '', 2)})`);
+    return chips.length ? `<div class="chips">${chips.map((c) => `<span class="chip">${c}</span>`).join('')}</div>` : '';
+  }
+
+  function detailsBlock(causas, m, titular, telefono) {
+    const causes = (causas || []).map((c) => `<li>${esc(c)}</li>`).join('');
+    return `<details><summary>Ver más detalles</summary>
+      ${causes ? `<strong>Por qué se detectó</strong><ul>${causes}</ul>` : ''}
+      ${metricsGrid(m || {})}
+      <div class="leak-meta" style="margin-top:6px">Titular: ${esc(titular || 'sin dato')} · Tel.: ${esc(telefono || 'sin dato')}</div>
+    </details>`;
+  }
+
   async function loadLeaks() {
     const response = await fetch(LEAKS_URL, { credentials: 'same-origin' });
     const box = document.getElementById('leaks-box');
@@ -122,22 +149,32 @@
     const data = await response.json();
     loadMonitor(data);
     if (!data.viviendas.length) { box.innerHTML = '<p class="ml-sub">Aún no hay viviendas sincronizadas. Pulsa <strong>Analizar ahora</strong>.</p>'; return; }
-    box.innerHTML = data.viviendas.map((v) => {
-      const risk = v.posible_fuga ? 'alto' : (v.nivel_riesgo === 'medio' ? 'medio' : (v.nivel_riesgo === 'sin_datos' ? 'sin_datos' : 'bajo'));
-      const issue = DATA_LABEL[v.calidad_datos];
-      const prob = v.porcentaje == null ? '—' : `${v.porcentaje.toFixed(0)} %`;
-      const causes = (v.causas || []).map((c) => `<li>${esc(c)}</li>`).join('');
-      return `<div class="leak-row ${risk}">
+    const leaking = data.viviendas.filter((v) => v.posible_fuga);
+    const others = data.viviendas.filter((v) => !v.posible_fuga);
+    const leakCards = leaking.map((v) => `<div class="leak-row alto">
         <div class="leak-top">
-          <div><span class="leak-name">${esc(v.nic)}</span> <span class="tag ${esc(v.nivel_riesgo)}">${RISK_LABEL[v.nivel_riesgo] || esc(v.nivel_riesgo)}</span>${v.posible_fuga ? ' <span class="tag alto">Posible fuga</span>' : ''}
+          <div><span class="leak-name">${esc(v.nic)}</span> <span class="tag alto">Posible fuga</span>
             <div class="leak-meta">${esc(v.direccion)} · ${esc(v.zona)}${v.evaluado ? ' · analizada ' + new Date(v.evaluado).toLocaleString() : ''}</div></div>
-          <div class="prob">${prob}<div class="prob-bar"><i style="width:${v.porcentaje || 0}%"></i></div></div>
+          <div class="prob">${v.porcentaje == null ? '—' : v.porcentaje.toFixed(0) + ' %'}<div class="prob-bar"><i style="width:${v.porcentaje || 0}%"></i></div></div>
         </div>
-        ${issue ? `<div class="leak-detail">⚠ ${esc(issue)}${v.detalle_datos ? ' — ' + esc(v.detalle_datos) : ''}</div>` : ''}
-        ${v.posible_fuga ? `<div class="leak-detail"><strong>Causas detectadas</strong><ul>${causes}</ul>${metricsGrid(v.metricas || {})}
-          <div class="leak-meta" style="margin-top:6px">Titular: ${esc(v.titular)} · Tel.: ${esc(v.telefono)}</div></div>` : ''}
-      </div>`;
-    }).join('');
+        <div class="leak-summary">${esc(v.resumen)}</div>
+        ${keyChips(v.metricas || {}, v.inicio)}
+        <div class="leak-action"><strong>Qué hacer:</strong> ${esc(v.accion)}</div>
+        ${detailsBlock(v.causas, v.metricas, v.titular, v.telefono)}
+      </div>`).join('');
+    const status = (v) => {
+      const issue = DATA_LABEL[v.calidad_datos];
+      if (issue) return `<span class="tag">${esc(issue)}</span>`;
+      if (v.nivel_riesgo === 'medio') return '<span class="tag medio">Vigilar</span>';
+      if (v.nivel_riesgo === 'sin_datos') return '<span class="tag">Sin análisis</span>';
+      return '<span class="tag bajo">Sin fuga</span>';
+    };
+    const rows = others.map((v) => `<div class="leak-compact">
+        <div><strong>${esc(v.nic)}</strong><span class="leak-meta">${esc(v.direccion)} · ${esc(v.zona)}</span></div>
+        <div>${status(v)} <strong>${v.porcentaje == null ? '' : v.porcentaje.toFixed(0) + ' %'}</strong></div>
+      </div>`).join('');
+    box.innerHTML = (leaking.length ? leakCards : '<div class="banner-ok">Ninguna vivienda tiene una posible fuga en este momento.</div>')
+      + (others.length ? `<h4 style="margin:14px 0 6px">Otras viviendas (${others.length})</h4><div class="card" style="padding:0">${rows}</div>` : '');
   }
 
   let unreadIds = [];
@@ -151,10 +188,13 @@
     if (!data.alertas.length) { box.innerHTML = '<p class="ml-sub">Sin avisos de fuga todavía.</p>'; return; }
     box.innerHTML = data.alertas.map((a) => `
       <div class="alert-item ${a.leida ? 'leida' : ''}" id="alerta-${a.id_alerta}">
-        <div class="leak-top"><div><strong>${esc(a.nic)}</strong> <span class="tag alto">${esc(a.prioridad)}</span>
+        <div class="leak-top"><div><strong>${esc(a.nic)}</strong> ${a.leida ? '<span class="tag">Leído</span>' : '<span class="tag alto">Nuevo</span>'}
           <div class="leak-meta">${esc(a.direccion)} · ${esc(a.zona)} · ${new Date(a.fecha).toLocaleString()}</div></div>
           <div class="prob">${a.probabilidad != null ? Math.round(a.probabilidad * 100) + ' %' : ''}</div></div>
-        <div class="alert-msg">${esc(a.mensaje)}</div>
+        <div class="leak-summary">${esc(a.resumen)}</div>
+        ${keyChips(a.metricas || {}, a.inicio)}
+        <div class="leak-action"><strong>Qué hacer:</strong> ${esc(a.accion)}</div>
+        ${detailsBlock(a.causas, a.metricas, a.titular, a.telefono)}
       </div>`).join('');
     if (location.hash) { const target = document.querySelector(location.hash); if (target) target.scrollIntoView({ block: 'center' }); }
   }

@@ -5,7 +5,15 @@
 {% block extra_css %}
   <style>
     .sensor-header { display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px }
-    .chart-card { background:#fff;padding:16px;border-radius:12px;border:1px solid #efe5fb }
+    .chart-card { background:var(--panel, #fff);padding:12px 14px;border-radius:12px;border:1px solid #efe5fb; max-width:900px }
+    .chart-box { position:relative; height:260px }
+    .chart-loading { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px;
+      background:rgba(255,255,255,.85); border-radius:10px; color:#6B21A8; font-weight:700; font-size:14px }
+    .chart-loading[hidden] { display:none }
+    .chart-spinner { width:30px; height:30px; border:3px solid #e9d5ff; border-top-color:#6B21A8; border-radius:50%; animation:chart-spin .8s linear infinite }
+    @keyframes chart-spin { to { transform:rotate(360deg) } }
+    .chart-empty { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#6f6f7a; font-size:14px }
+    .chart-empty[hidden] { display:none }
     /* Range buttons styled to match site */
     .range-btn { background:transparent; border:1px solid #efe5fb; color:#6B21A8; padding:6px 10px; border-radius:8px; cursor:pointer; font-weight:700; font-size:13px }
     .range-btn:hover { background:#f6f0fb }
@@ -50,7 +58,11 @@
   </div>
 
   <div class="chart-card">
-    <canvas id="trendChart" height="240"></canvas>
+    <div class="chart-box">
+      <canvas id="trendChart"></canvas>
+      <div id="chartEmpty" class="chart-empty" hidden>Sin lecturas en este rango</div>
+      <div id="chartLoading" class="chart-loading" hidden><div class="chart-spinner"></div><span>Recopilando datos…</span></div>
+    </div>
   </div>
 
 {% endblock %}
@@ -66,14 +78,16 @@
 
       const chart = new Chart(ctx, {
         type: 'line',
-        data: { labels: [], datasets: [{ label: '{{ sensor.tipo_sensor|title }}', data: [], borderColor: '#6B21A8', backgroundColor: 'rgba(107,33,168,0.08)', fill:true, tension:0.2, pointRadius:2 }] },
+        data: { labels: [], datasets: [{ label: '{{ sensor.tipo_sensor|title }}', data: [], borderColor: '#6B21A8', backgroundColor: 'rgba(107,33,168,0.08)', fill:true, tension:0.3, pointRadius:0, pointHoverRadius:4, borderWidth:2 }] },
         options: {
           responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode:'index', intersect:false },
           scales: {
-            x: { display: true, title: { display: false }, ticks: { autoSkip:true, maxTicksLimit:12 } },
+            x: { display: true, title: { display: false }, ticks: { autoSkip:true, maxTicksLimit:6, maxRotation:0 }, grid: { display:false } },
             y: { display: true, title: { display: true, text: unitLabel } }
           },
-          plugins: { legend: { display:true, position:'top' } }
+          plugins: { legend: { display:true, position:'bottom', labels: { boxWidth:12 } } }
         }
       });
 
@@ -89,7 +103,14 @@
         });
       }
 
+      const loading = document.getElementById('chartLoading');
+      const empty = document.getElementById('chartEmpty');
+      let loadToken = 0;
+
       async function loadRange(range){
+        const token = ++loadToken;
+        // Solo se muestra la pantalla de carga si la consulta tarda (rangos largos con muchas lecturas).
+        const loadingTimer = setTimeout(() => { if (token === loadToken) loading.hidden = false; }, 300);
         try{
           currentRange = range;
           // highlight active
@@ -101,6 +122,7 @@
           if (compareSelect.value) params.set('compare_id', compareSelect.value);
           const res = await fetch(`/sensor/${sensorId}/data/?${params.toString()}`);
           const json = await res.json();
+          if (token !== loadToken) return;
           if(!json.ok){ console.error(json); return; }
           const labels = json.labels || [];
           const data = json.data || [];
@@ -115,14 +137,20 @@
               borderColor: '#0F6E56',
               backgroundColor: 'rgba(15,110,86,0.08)',
               fill: false,
-              tension: 0.2,
-              pointRadius: 2,
+              tension: 0.3,
+              pointRadius: 0,
+              borderWidth: 2,
             });
           }
           chart.update();
 
+          empty.hidden = data.length > 0;
           if(pointsInfo) pointsInfo.textContent = `Mostrando ${data.length} puntos`;
         }catch(err){ console.error(err); }
+        finally {
+          clearTimeout(loadingTimer);
+          if (token === loadToken) loading.hidden = true;
+        }
       }
 
       // attach buttons

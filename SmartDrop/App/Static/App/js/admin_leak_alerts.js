@@ -39,11 +39,10 @@
     toast.innerHTML = `
       <i class="ti ti-alert-triangle leak-toast-icon" aria-hidden="true"></i>
       <div class="leak-toast-body">
-        <strong>Posible fuga detectada${percent ? ` (${percent})` : ''}</strong>
-        <span>${escapeHtml(alert.nic || '')} · ${escapeHtml(alert.zona || '')}</span>
-        <span>${escapeHtml(alert.direccion || '')}</span>
-        ${loss ? `<span>${escapeHtml(loss)}</span>` : ''}
-        <a href="${leaksUrl}#alerta-${alert.id_alerta}">Ver todos los detalles</a>
+        <strong>Posible fuga en ${escapeHtml(alert.nic || 'una vivienda')}${percent ? ` (${percent})` : ''}</strong>
+        <span>${escapeHtml(alert.direccion || '')}${alert.zona ? ' · ' + escapeHtml(alert.zona) : ''}</span>
+        <span>${escapeHtml(alert.resumen || loss)}</span>
+        <a href="${leaksUrl}#alerta-${alert.id_alerta}">Ver detalles</a>
       </div>
       <button type="button" class="leak-toast-close" aria-label="Cerrar">&times;</button>`;
     toast.querySelector('.leak-toast-close').addEventListener('click', () => toast.remove());

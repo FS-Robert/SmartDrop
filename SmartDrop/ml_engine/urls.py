@@ -15,6 +15,7 @@ urlpatterns = [
     path('v1/ml/zones/<int:zone_id>/current-status/', views_api.ZoneCurrentStatusView.as_view(), name='zone_current_status'),
     path('v1/ml/zones/<int:zone_id>/tank-trajectory/', views_api.ZoneTankTrajectoryView.as_view(), name='zone_tank_trajectory'),
     path('v1/ml/zones/<int:zone_id>/consumption-forecast/', views_api.ZoneConsumptionForecastView.as_view(), name='zone_consumption_forecast'),
+    path('v1/ml/zones/<int:zone_id>/consumption-history/', views_api.ZoneConsumptionHistoryView.as_view(), name='zone_consumption_history'),
     path('v1/ml/zones/<int:zone_id>/shortage-prediction/', views_api.ZoneShortagePredictionView.as_view(), name='zone_shortage_prediction'),
     path('v1/ml/zones/<int:zone_id>/anomalies/', views_api.ZoneAnomaliesView.as_view(), name='zone_anomalies'),
     path('v1/ml/homes/<int:home_id>/consumption-forecast/', views_api.HomeConsumptionForecastView.as_view(), name='home_consumption_forecast'),

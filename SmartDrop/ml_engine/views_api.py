@@ -91,6 +91,35 @@ class ZoneConsumptionForecastView(AdminOnlyAPIView):
         })
 
 
+class ZoneConsumptionHistoryView(AdminOnlyAPIView):
+    """GET /v1/ml/zones/{id}/consumption-history — consumo real por hora (últimas 48 h) y pronóstico más reciente."""
+
+    HOURS = 48
+
+    def get(self, request, zone_id: int):
+        zone = get_object_or_404(Zone, id=zone_id)
+        hourly = ConsumptionAggregate.objects.filter(home__zone=zone, period=ConsumptionAggregate.Period.HOURLY)
+        last = hourly.order_by('-period_start').values_list('period_start', flat=True).first()
+        history = []
+        if last is not None:
+            rows = (
+                hourly.filter(period_start__gt=last - django_tz.timedelta(hours=self.HOURS))
+                .values('period_start').annotate(litros=Sum('litros')).order_by('period_start')
+            )
+            history = [{'ts': row['period_start'], 'litros': round(row['litros'] or 0.0, 3)} for row in rows]
+
+        target_ts = ConsumptionForecast.objects.filter(home__zone=zone).order_by('-target_ts').values_list(
+            'target_ts', flat=True,
+        ).first()
+        forecast = None
+        if target_ts is not None:
+            totals = ConsumptionForecast.objects.filter(home__zone=zone, target_ts=target_ts).aggregate(
+                p10=Sum('p10'), p50=Sum('p50'), p90=Sum('p90'),
+            )
+            forecast = {'ts': target_ts, 'p10': totals['p10'] or 0.0, 'p50': totals['p50'] or 0.0, 'p90': totals['p90'] or 0.0}
+        return Response({'zone_id': zone_id, 'historial': history, 'pronostico': forecast})
+
+
 class ZoneShortagePredictionView(AdminOnlyAPIView):
     """GET /v1/ml/zones/{id}/shortage-prediction — null si aún no se ha predicho este tanque."""
 

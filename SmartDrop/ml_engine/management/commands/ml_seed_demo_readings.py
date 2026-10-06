@@ -43,8 +43,11 @@ def _daily_profile(hour_fraction, evening_bias):
     return morning + evening + midday + 0.01
 
 
-def simulate_home(vivienda_id, tank, start, steps, scenario, rng):
-    """Devuelve arrays flujo (L/min), presion (bar), nivel (cm), tds (ppm) por paso de 10 min."""
+def simulate_home(vivienda_id, tank, start, steps, scenario, rng, initial_level_cm=None):
+    """Devuelve arrays flujo (L/min), presion (bar), nivel (cm), tds (ppm) por paso de 10 min.
+
+    `initial_level_cm` continúa la serie desde un nivel conocido (modo --extend).
+    """
     capacity = float(tank['capacidad_maxima_litros'])
     height = float(tank['altura_total'])
     critical_l = capacity * float(tank['nivel_critico_cm']) / height
@@ -55,6 +58,8 @@ def simulate_home(vivienda_id, tank, start, steps, scenario, rng):
     pump_lpm = rng.uniform(1.2, 1.8)
 
     level = capacity * rng.uniform(0.6, 0.9)
+    if initial_level_cm is not None:
+        level = float(np.clip(initial_level_cm / height * capacity, 0.0, capacity))
     pump_on = False
     tds = base_tds
     leak_start = steps - scenario['leak_steps'] if scenario['leak'] else None
@@ -114,6 +119,10 @@ class Command(BaseCommand):
         parser.add_argument('--pump-failures', type=int, default=2, help='Viviendas cuya bomba falla en las últimas horas.')
         parser.add_argument('--pump-fail-hours', type=float, default=1.5)
         parser.add_argument('--seed', type=int, default=2026)
+        parser.add_argument('--scenario-seed', type=int, default=None,
+                            help='Semilla para elegir qué viviendas tienen fuga/fallo (por defecto, --seed).')
+        parser.add_argument('--extend', action='store_true',
+                            help='No borra nada: continúa cada vivienda desde su última lectura hasta ahora.')
         parser.add_argument('--dry-run', action='store_true')
 
     def handle(self, *args, **options):
@@ -141,22 +150,37 @@ class Command(BaseCommand):
                 continue
             plan.append((vivienda, mapping, tank))
 
-        rng = np.random.default_rng(options['seed'])
+        rng = np.random.default_rng(options['scenario_seed'] if options['scenario_seed'] is not None else options['seed'])
         order = rng.permutation(len(plan))
         leak_homes = {int(i) for i in order[:options['leaks']]}
         pump_homes = {int(i) for i in order[options['leaks']:options['leaks'] + options['pump_failures']]}
 
         now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
         now -= timedelta(minutes=now.minute % STEP_MINUTES)
-        steps = options['days'] * 24 * 60 // STEP_MINUTES + 1
-        start = now - timedelta(minutes=STEP_MINUTES * (steps - 1))
+        full_steps = options['days'] * 24 * 60 // STEP_MINUTES + 1
+        full_start = now - timedelta(minutes=STEP_MINUTES * (full_steps - 1))
 
         self.stdout.write(
-            f'{len(plan)} viviendas, {steps} lecturas por sensor ({start:%Y-%m-%d %H:%M} -> {now:%Y-%m-%d %H:%M} UTC). '
-            f'Fuga en {len(leak_homes)}, fallo de bomba en {len(pump_homes)}.'
+            f"{len(plan)} viviendas, {'continuación hasta' if options['extend'] else f'{full_steps} lecturas por sensor hasta'} "
+            f'{now:%Y-%m-%d %H:%M} UTC. Fuga en {len(leak_homes)}, fallo de bomba en {len(pump_homes)}.'
         )
         all_rows = []
         for index, (vivienda, mapping, tank) in enumerate(plan):
+            start, steps, initial_level = full_start, full_steps, None
+            if options['extend']:
+                last = supabase_client.select('lectura', 'valor,fecha_registro', {
+                    'id_vivienda': f"eq.{vivienda['id_vivienda']}", 'id_sensor': f"eq.{mapping['nivel']}",
+                    'order': 'fecha_registro.desc', 'limit': '1',
+                })
+                if not last:
+                    self.stdout.write(self.style.WARNING(f"{vivienda['nic']}: sin lecturas previas, se omite (usa el modo normal)."))
+                    continue
+                last_ts = datetime.fromisoformat(last[0]['fecha_registro'].replace('Z', '+00:00'))
+                start = last_ts + timedelta(minutes=STEP_MINUTES)
+                steps = int((now - start).total_seconds() // (STEP_MINUTES * 60)) + 1
+                initial_level = float(last[0]['valor'])
+                if steps <= 0:
+                    continue
             scenario = {
                 'leak': index in leak_homes,
                 'leak_steps': options['leak_hours'] * 60 // STEP_MINUTES,
@@ -164,7 +188,13 @@ class Command(BaseCommand):
                 'pump_fail_steps': int(options['pump_fail_hours'] * 60 // STEP_MINUTES),
             }
             home_rng = np.random.default_rng(options['seed'] * 1000 + vivienda['id_vivienda'])
-            flow, pressure, level, tds, _ = simulate_home(vivienda['id_vivienda'], tank, start, steps, scenario, home_rng)
+            if options['extend']:
+                # Misma semilla que la serie original: conserva la presión, TDS y consumo base de la vivienda.
+                scenario['leak_steps'] = min(scenario['leak_steps'], steps)
+                scenario['pump_fail_steps'] = min(scenario['pump_fail_steps'], steps)
+            flow, pressure, level, tds, _ = simulate_home(
+                vivienda['id_vivienda'], tank, start, steps, scenario, home_rng, initial_level_cm=initial_level,
+            )
             tag = 'FUGA' if scenario['leak'] else ('FALLO BOMBA' if scenario['pump_fail'] else 'normal')
             self.stdout.write(f"  {vivienda['nic']} ({tag}): flujo medio {flow.mean():.3f} L/min, nivel {level.min():.1f}-{level.max():.1f} cm")
             for i in range(steps):
@@ -181,7 +211,8 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING(f'--dry-run: se escribirían {len(all_rows)} lecturas (no se borró ni insertó nada).'))
             return
 
-        self._delete_old(plan, now)
+        if not options['extend']:
+            self._delete_old(plan, now)
         self._insert(all_rows)
         self.stdout.write(self.style.SUCCESS(f'Listo: {len(all_rows)} lecturas demo insertadas.'))
 

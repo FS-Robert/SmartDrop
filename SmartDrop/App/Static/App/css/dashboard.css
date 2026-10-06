@@ -1332,6 +1332,8 @@ textarea.field-input { resize:vertical; min-height:110px; }
 .alerta-icon { font-size:1.4rem; color:#6B21A8; }
 .alerta-titulo { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
 .alerta-msg { margin:.25rem 0; font-size:.9rem; }
+.alerta-detalle { margin:.2rem 0 .3rem; }
+.alerta-detalle summary { cursor:pointer; color:#6b21a8; font-weight:700; font-size:.85rem; }
 .alerta-fecha { color:var(--muted); font-size:.78rem; }
 
 .dashboard-interrupciones { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1.1rem; margin-bottom:3rem; margin-top:2rem; align-items:stretch; }

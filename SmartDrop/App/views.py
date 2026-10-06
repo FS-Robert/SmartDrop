@@ -35,6 +35,8 @@ from .queries import (
     owner_id,
     run_parallel,
     safe_float,
+    sensor_series as _sensor_series,
+    SENSOR_BUCKETS as _SENSOR_BUCKETS,
     sensors,
     user_viviendas,
     with_flow_consumption,
@@ -1736,75 +1738,6 @@ def admin_panel(request):
 
 def _valid_sensor_ids(sensor_ids):
     return [sid for sid in sensor_ids if sid and sid.isascii() and sid.isdigit()]
-
-
-_SENSOR_RANGES = {'1h': timedelta(hours=1), '1w': timedelta(days=7), '1m': timedelta(days=30)}
-# Tamaño del intervalo en que se promedian las lecturas de todas las viviendas, por rango.
-_SENSOR_BUCKETS = {'1h': timedelta(minutes=2), '1d': timedelta(minutes=15), '1w': timedelta(hours=1), '1m': timedelta(hours=4)}
-_SENSOR_CHUNKS = {'1h': 1, '1d': 4, '1w': 28, '1m': 60}
-_SENSOR_PAGE = 1000
-_SENSOR_MAX_PAGES = 40
-_SENSOR_SERIES_CACHE_SECONDS = {'1h': 30, '1d': 60, '1w': 300, '1m': 600}
-
-
-def _fmt_utc(moment):
-    return moment.strftime('%Y-%m-%dT%H:%M:%SZ')
-
-
-def _sensor_rows_between(sensor_id, since, until):
-    """Todas las lecturas (de todas las viviendas) de un sensor en [since, until), paginando en Supabase."""
-    rows = []
-    for page in range(_SENSOR_MAX_PAGES):
-        chunk = supabase_client.select('lectura', 'fecha_registro,valor', {
-            'id_sensor': f'in.({sensor_id})',
-            'fecha_registro': f'gte.{_fmt_utc(since)}',
-            'and': f'(fecha_registro.lt.{_fmt_utc(until)})',
-            'order': 'fecha_registro.asc,id_lectura.asc',
-            'limit': str(_SENSOR_PAGE),
-            'offset': str(page * _SENSOR_PAGE),
-        })
-        rows.extend(chunk)
-        if len(chunk) < _SENSOR_PAGE:
-            break
-    return rows
-
-
-def _sensor_series(sensor_id, range_key):
-    """{inicio_intervalo: promedio} con las lecturas de todas las viviendas que comparten el sensor."""
-    cache_key = f'sensor_series:{sensor_id}:{range_key}'
-    cached = cache.get(cache_key)
-    if cached is not None:
-        return cached
-
-    window = _SENSOR_RANGES.get(range_key, timedelta(days=1))
-    bucket = _SENSOR_BUCKETS.get(range_key, _SENSOR_BUCKETS['1d'])
-    until = datetime.now(dt_timezone.utc)
-    since = until - window
-    chunks = _SENSOR_CHUNKS.get(range_key, _SENSOR_CHUNKS['1d'])
-    step = window / chunks
-    bounds = [(since + step * i, since + step * (i + 1)) for i in range(chunks)]
-    with ThreadPoolExecutor(max_workers=min(16, chunks)) as executor:
-        parts = list(executor.map(lambda b: _sensor_rows_between(sensor_id, *b), bounds))
-
-    bucket_seconds = bucket.total_seconds()
-    sums = {}
-    for row in (row for part in parts for row in part):
-        raw = row.get('fecha_registro')
-        if not raw or row.get('valor') is None:
-            continue
-        try:
-            ts = datetime.fromisoformat(str(raw).replace('Z', '+00:00'))
-        except ValueError:
-            continue
-        if ts.tzinfo is None:
-            ts = ts.replace(tzinfo=dt_timezone.utc)
-        key = int(ts.timestamp() // bucket_seconds * bucket_seconds)
-        total, count = sums.get(key, (0.0, 0))
-        sums[key] = (total + safe_float(row.get('valor')), count + 1)
-
-    series = {key: round(total / count, 3) for key, (total, count) in sums.items()}
-    cache.set(cache_key, series, _SENSOR_SERIES_CACHE_SECONDS.get(range_key, 60))
-    return series
 
 
 @login_required(login_url='login')

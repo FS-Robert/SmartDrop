@@ -8,6 +8,7 @@ from django.conf import settings
 from django.utils import timezone
 
 from App import supabase_client
+from ml_engine.leaks.explain import short_message
 from ml_engine.models import LeakPrediction
 from ml_engine.supabase_out import admin_user_ids
 
@@ -28,32 +29,8 @@ def should_alert(home, now=None):
     ).exists()
 
 
-def _fmt(value, unit='', digits=2):
-    return 'sin dato' if value is None else f'{value:.{digits}f}{(" " + unit) if unit else ""}'
-
-
 def build_message(home, prediction):
-    meta, f = home.meta or {}, prediction.features or {}
-    unit = f.get('unidad_presion') or ''
-    onset = f.get('inicio_estimado')
-    onset_text = 'no determinado'
-    if onset:
-        from datetime import datetime
-        onset_text = timezone.localtime(datetime.fromisoformat(onset)).strftime('%Y-%m-%d %H:%M')
-    lines = [
-        f"POSIBLE FUGA en {meta.get('nic', home.etiqueta)} — {meta.get('direccion', 'sin dirección')} ({meta.get('zona', 'sin zona')})",
-        f"Probabilidad estimada: {prediction.porcentaje:.0f} % (riesgo {prediction.nivel_riesgo}).",
-        f"• Flujo mínimo en las últimas 6 h: {_fmt(f.get('flujo_minimo_6h_lpm'), 'L/min', 3)} "
-        f"(normal: {_fmt(f.get('flujo_minimo_normal_lpm'), 'L/min', 3)}) → pérdida estimada ≈ {_fmt(f.get('perdida_estimada_lph'), 'L/h', 1)}.",
-        f"• Inicio estimado: {onset_text} · agua perdida estimada: {_fmt(f.get('litros_perdidos_estimados'), 'L', 1)}.",
-        f"• Presión: {_fmt(f.get('presion_actual'), unit)} (normal: {_fmt(f.get('presion_normal'), unit)}, caída: {_fmt(f.get('caida_presion'), unit)}).",
-        f"• Tanque: {_fmt(f.get('nivel_tanque_litros'), 'L', 1)} ({_fmt(f.get('nivel_tanque_pct'), '%', 0)} de {_fmt(f.get('capacidad_tanque_litros'), 'L', 1)}).",
-        f"• Titular: {meta.get('titular') or 'sin dato'} · Tel.: {meta.get('telefono') or 'sin dato'}.",
-    ]
-    if prediction.drivers:
-        lines.append('Causas detectadas: ' + ' | '.join(prediction.drivers))
-    lines.append('Acción sugerida: verificar tuberías y llaves de la vivienda; si el flujo persiste con el uso en cero, cerrar la válvula.')
-    return '\n'.join(lines)
+    return short_message(home.meta or {}, prediction.features or {}, prediction.porcentaje)
 
 
 def _already_open(sensor_flow_id, meta, since):

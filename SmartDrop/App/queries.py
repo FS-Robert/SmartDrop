@@ -3,6 +3,7 @@
 Cada consulta remota cuesta ~0,7 s, así que se agrupan en una sola ronda
 paralela y los datos casi estáticos (viviendas, sensores, tanques) se cachean.
 """
+import threading
 import time
 from collections import defaultdict, namedtuple
 from concurrent.futures import ThreadPoolExecutor
@@ -363,3 +364,150 @@ def consumption_on(rows, day):
         except (KeyError, TypeError, ValueError, OverflowError):
             continue
     return round(total, 2)
+
+
+# ── Series agregadas de un sensor (lo comparten todas las viviendas) ──────────
+#
+# Un mes de lecturas son >100 mil filas por sensor (~30 s en traerlas de Supabase), así que para los
+# rangos largos se guardan en memoria sumas por intervalos de 15 min y en cada consulta solo se piden
+# las lecturas nuevas. Cada SENSOR_REBUILD_SECONDS se reconstruye todo por si se editaron lecturas viejas.
+
+SENSOR_RANGES = {'1h': timedelta(hours=1), '1d': timedelta(days=1), '1w': timedelta(days=7), '1m': timedelta(days=30)}
+# Tamaño del intervalo en que se promedian las lecturas de todas las viviendas, por rango.
+SENSOR_BUCKETS = {'1h': timedelta(minutes=2), '1d': timedelta(minutes=15), '1w': timedelta(hours=1), '1m': timedelta(hours=4)}
+SENSOR_PAGE = 1000
+SENSOR_MAX_PAGES = 40
+SENSOR_BASE_BUCKET_SECONDS = 15 * 60
+SENSOR_BASE_DAYS = 31
+SENSOR_REBUILD_SECONDS = 6 * 3600
+SENSOR_REFRESH_SECONDS = 30
+_SHORT_CACHE_SECONDS = 30
+
+_base_state = {}
+_base_locks = defaultdict(threading.Lock)
+_base_locks_guard = threading.Lock()
+
+
+def _fmt_utc(moment):
+    return moment.strftime('%Y-%m-%dT%H:%M:%SZ')
+
+
+def _parse_reading_ts(raw):
+    try:
+        ts = datetime.fromisoformat(str(raw).replace('Z', '+00:00'))
+    except (TypeError, ValueError):
+        return None
+    return ts if ts.tzinfo else ts.replace(tzinfo=dt_timezone.utc)
+
+
+def _sensor_rows_between(sensor_id, since, until=None, columns='fecha_registro,valor'):
+    """Lecturas (de todas las viviendas) de un sensor desde `since` (inclusive) hasta `until`, paginando."""
+    params = {
+        'id_sensor': f'in.({sensor_id})',
+        'fecha_registro': f'gte.{_fmt_utc(since)}',
+        'order': 'fecha_registro.asc,id_lectura.asc',
+        'limit': str(SENSOR_PAGE),
+    }
+    if until is not None:
+        params['and'] = f'(fecha_registro.lt.{_fmt_utc(until)})'
+    rows = []
+    for page in range(SENSOR_MAX_PAGES):
+        chunk = supabase_client.select('lectura', columns, {**params, 'offset': str(page * SENSOR_PAGE)})
+        rows.extend(chunk)
+        if len(chunk) < SENSOR_PAGE:
+            break
+    return rows
+
+
+def _add_to_buckets(sums, rows, bucket_seconds):
+    for row in rows:
+        ts = _parse_reading_ts(row.get('fecha_registro'))
+        if ts is None or row.get('valor') is None:
+            continue
+        key = int(ts.timestamp() // bucket_seconds * bucket_seconds)
+        total, count = sums.get(key, (0.0, 0))
+        sums[key] = (total + safe_float(row.get('valor')), count + 1)
+
+
+def _remember_last(state, rows):
+    """Guarda la lectura más reciente vista (y los ids con esa misma hora, para no contarlos dos veces)."""
+    for row in rows:
+        ts = _parse_reading_ts(row.get('fecha_registro'))
+        if ts is None:
+            continue
+        if state['last_ts'] is None or ts > state['last_ts']:
+            state['last_ts'], state['last_ids'] = ts, {row.get('id_lectura')}
+        elif ts == state['last_ts']:
+            state['last_ids'].add(row.get('id_lectura'))
+
+
+def _base_buckets(sensor_id):
+    """Sumas por intervalos de 15 min de los últimos SENSOR_BASE_DAYS días, actualizadas de forma incremental."""
+    with _base_locks_guard:
+        lock = _base_locks[sensor_id]
+    with lock:
+        now = time.time()
+        state = _base_state.get(sensor_id)
+        columns = 'id_lectura,fecha_registro,valor'
+        if state is None or now - state['built'] > SENSOR_REBUILD_SECONDS:
+            until = datetime.now(dt_timezone.utc)
+            since = until - timedelta(days=SENSOR_BASE_DAYS)
+            bounds = [(since + timedelta(days=i), since + timedelta(days=i + 1)) for i in range(SENSOR_BASE_DAYS)]
+            bounds[-1] = (bounds[-1][0], None)
+            with ThreadPoolExecutor(max_workers=16) as executor:
+                parts = list(executor.map(lambda b: _sensor_rows_between(sensor_id, b[0], b[1], columns), bounds))
+            state = {'sums': {}, 'last_ts': None, 'last_ids': set(), 'built': now, 'checked': now}
+            for part in parts:
+                _add_to_buckets(state['sums'], part, SENSOR_BASE_BUCKET_SECONDS)
+                _remember_last(state, part)
+            _base_state[sensor_id] = state
+        elif now - state['checked'] > SENSOR_REFRESH_SECONDS and state['last_ts'] is not None:
+            rows = [
+                row for row in _sensor_rows_between(sensor_id, state['last_ts'], None, columns)
+                if not (_parse_reading_ts(row.get('fecha_registro')) == state['last_ts']
+                        and row.get('id_lectura') in state['last_ids'])
+            ]
+            _add_to_buckets(state['sums'], rows, SENSOR_BASE_BUCKET_SECONDS)
+            _remember_last(state, rows)
+            state['checked'] = now
+            oldest = now - SENSOR_BASE_DAYS * 86400
+            for key in [key for key in state['sums'] if key < oldest]:
+                del state['sums'][key]
+        return dict(state['sums'])
+
+
+def sensor_series(sensor_id, range_key):
+    """{inicio_intervalo (epoch s): promedio} con las lecturas de todas las viviendas que comparten el sensor."""
+    window = SENSOR_RANGES.get(range_key, SENSOR_RANGES['1d'])
+    bucket_seconds = SENSOR_BUCKETS.get(range_key, SENSOR_BUCKETS['1d']).total_seconds()
+    until = datetime.now(dt_timezone.utc)
+    since = until - window
+
+    if range_key == '1h':
+        # Rango corto con intervalos de 2 min: se consulta directo (pocas filas).
+        cache_key = f'sensor_series:{sensor_id}:1h'
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
+        sums = {}
+        _add_to_buckets(sums, _sensor_rows_between(sensor_id, since, until), bucket_seconds)
+        series = {key: round(total / count, 3) for key, (total, count) in sums.items()}
+        cache.set(cache_key, series, _SHORT_CACHE_SECONDS)
+        return series
+
+    cutoff = since.timestamp()
+    grouped = {}
+    for key, (total, count) in _base_buckets(sensor_id).items():
+        if key < cutoff:
+            continue
+        group = int(key // bucket_seconds * bucket_seconds)
+        group_total, group_count = grouped.get(group, (0.0, 0))
+        grouped[group] = (group_total + total, group_count + count)
+    return {key: round(total / count, 3) for key, (total, count) in grouped.items() if count}
+
+
+def warm_sensor_series():
+    """Precarga las sumas de todos los sensores (se llama en segundo plano al arrancar el servidor)."""
+    for sensor in sensors():
+        if sensor.get('id_sensor') is not None:
+            _base_buckets(str(sensor['id_sensor']))

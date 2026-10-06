@@ -9,12 +9,14 @@ import csv
 import logging
 import os
 import uuid
+from datetime import datetime
 
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
+from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from . import supabase_client
@@ -598,6 +600,33 @@ def _alerta_icon(tipo):
     return 'ti-bell'
 
 
+_TITULOS_ALERTA = {
+    'fuga': 'Posible fuga', 'consumo_elevado': 'Consumo elevado', 'presion_baja': 'Presión baja',
+    'nivel_tanque_bajo': 'Nivel de tanque bajo', 'calidad_agua': 'Calidad del agua',
+    'desabasto': 'Riesgo de desabasto',
+}
+_ESTADOS_ALERTA = {
+    'pendiente': 'Pendiente', 'no_confirmada': 'Pendiente', 'confirmada': 'Confirmada',
+    'descartada': 'Descartada', 'resuelta': 'Resuelta',
+}
+
+
+def _alerta_legible(alerta):
+    """Título, resumen corto y detalle opcional para mostrar la alerta sin un bloque largo de texto."""
+    tipo = (alerta.get('tipo_alerta') or '').lower()
+    alerta['titulo'] = _TITULOS_ALERTA.get(tipo) or tipo.replace('_', ' ').capitalize() or 'Alerta'
+    alerta['estado_texto'] = _ESTADOS_ALERTA.get(alerta.get('estado_confirmacion'), (alerta.get('estado_confirmacion') or '').title())
+    lineas = [linea.strip() for linea in (alerta.get('mensaje') or '').splitlines() if linea.strip()]
+    alerta['resumen'] = lineas[0] if lineas else ''
+    alerta['detalle'] = lineas[1:]
+    fecha = alerta.get('fecha_creacion') or ''
+    try:
+        alerta['fecha_texto'] = timezone.localtime(datetime.fromisoformat(fecha.replace('Z', '+00:00'))).strftime('%d/%m/%Y %H:%M')
+    except ValueError:
+        alerta['fecha_texto'] = fecha[:16].replace('T', ' ')
+    return alerta
+
+
 @login_required(login_url='login')
 def alertas_historial(request):
     """Historial de alertas del sistema con filtros y exportación CSV."""
@@ -616,6 +645,7 @@ def alertas_historial(request):
     alertas = _alertas_visibles(alertas, es_admin)
     for alerta in alertas:
         alerta['icon'] = _alerta_icon(alerta.get('tipo_alerta'))
+        _alerta_legible(alerta)
 
     return render(request, 'App/alertas.html', {
         'alertas': alertas,

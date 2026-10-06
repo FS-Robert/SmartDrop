@@ -24,6 +24,7 @@ from django.conf import settings
 from django.utils import timezone
 
 from ml_engine.anomaly.features import RESIDUAL_COLUMNS, build_residual_frame
+from ml_engine.leaks.explain import describe_causes
 from ml_engine.models import ConsumptionAggregate, Home, LeakPrediction, ModelArtifact, SensorReading
 
 logger = logging.getLogger(__name__)
@@ -161,8 +162,6 @@ def evaluate_home(home, detector=None, now=None):
     probability = float(np.clip(1.0 - probability, 0.0, 1.0))
 
     onset, lost_liters = _estimate_onset(flow, last_hour, floor_mean, floor_std)
-    drivers = _drivers(signals, floor_now, floor_mean, floor_excess, pressure_now, pressure_base, pressure_drop,
-                       float(recent_flow.mean()) if len(recent_flow) else None, iforest_score)
 
     zone = home.zone
     level = SensorReading.objects.filter(zone=zone, metric='nivel_tanque').order_by('-ts').first()
@@ -184,7 +183,9 @@ def evaluate_home(home, detector=None, now=None):
         'nivel_tanque_pct': None if level is None or not zone.capacidad_maxima_litros
         else round(100.0 * level.value / zone.capacidad_maxima_litros, 1),
         'capacidad_tanque_litros': zone.capacidad_maxima_litros,
+        'flujo_reciente_lpm': round(float(recent_flow.mean()), 4) if len(recent_flow) else None,
     }
+    drivers = describe_causes(features)
     return {
         'probability': probability,
         'drivers': drivers,
@@ -208,22 +209,6 @@ def _estimate_onset(flow, last_hour, floor_mean, floor_std):
         lost += max(float(value) - floor_mean, 0.0) * 60.0
         stamp -= pd.Timedelta(hours=1)
     return (onset.to_pydatetime() if onset is not None else None), lost
-
-
-def _drivers(signals, floor_now, floor_mean, floor_excess, pressure_now, pressure_base, pressure_drop, flow_now, iforest_score):
-    drivers = []
-    if signals['floor'] >= 0.3:
-        drivers.append(
-            f'Flujo mínimo de {floor_now:.3f} L/min en las últimas {FLOOR_WINDOW_HOURS} h (lo normal es {floor_mean:.3f} L/min): '
-            f'el agua no deja de correr ni cuando no hay uso (+{floor_excess * 60:.1f} L/h).'
-        )
-    if signals['pressure'] >= 0.3 and pressure_drop is not None:
-        drivers.append(f'Presión {pressure_now:.2f} frente a {pressure_base:.2f} habitual (caída de {pressure_drop:.2f}).')
-    if signals['flow'] >= 0.3 and flow_now is not None:
-        drivers.append(f'Flujo de {flow_now:.3f} L/min muy por encima de lo habitual para esta hora del día.')
-    if signals['iforest'] >= 0.5 and iforest_score is not None:
-        drivers.append(f'El detector de anomalías marca el comportamiento reciente como atípico (score {iforest_score:.2f}).')
-    return drivers
 
 
 def run_leak_analysis(homes=None, progress=None, create_alerts=True):

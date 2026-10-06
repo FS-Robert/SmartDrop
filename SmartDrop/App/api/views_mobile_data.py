@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 
 from django.utils import timezone
 from rest_framework import status
@@ -37,7 +37,7 @@ def _readings_for_sensors(sensor_ids, since=None, limit=5000):
     }
     if since:
         params['fecha_registro'] = f"gte.{since.strftime('%Y-%m-%dT%H:%M:%S')}"
-    return supabase_client.select('lectura', 'id_sensor,fecha_registro,valor', params)
+    return supabase_client.select('lectura', 'id_sensor,id_vivienda,fecha_registro,valor', params)
 
 
 def _matching_sensors(sensors, parameter):
@@ -115,8 +115,13 @@ def _reading_series(sensor, readings, since=None):
         if since and parsed < since:
             continue
         value = safe_float(row.get('valor'))
-        outside = _range_status(value, sensor.get('rango_min'), sensor.get('rango_max')) != 'Normal'
-        result.append({'fecha': timestamp, 'valor': value, 'fuera_de_rango': outside})
+        estado = _range_status(value, sensor.get('rango_min'), sensor.get('rango_max'))
+        if estado == 'Baja' and 'flujo' in _sensor_type(sensor):
+            estado = 'Normal'  # Flujo bajo o cero = no hay consumo en ese momento; no es una alerta.
+        result.append({
+            'fecha': timestamp, 'valor': value, 'fuera_de_rango': estado != 'Normal',
+            'estado': estado, 'id_vivienda': row.get('id_vivienda'),
+        })
     result.reverse()
     return result
 
@@ -227,6 +232,17 @@ class MobileEstadoAguaView(APIView):
         })
 
 
+def _range_key(window):
+    """Rango de la serie agregada ('1h','1d','1w','1m') más cercano al intervalo pedido por la app."""
+    if window <= timedelta(hours=2):
+        return '1h'
+    if window <= timedelta(days=2):
+        return '1d'
+    if window <= timedelta(days=8):
+        return '1w'
+    return '1m'
+
+
 class MobileGraficasView(APIView):
     permission_classes = [IsAuthenticatedUser]
 
@@ -247,33 +263,36 @@ class MobileGraficasView(APIView):
             hasta = datetime.utcnow()
 
         if es_admin:
-            # Admin: todos los sensores del sistema y todas sus lecturas en el rango.
-            _, sensors, _ = _visible_data(request)
+            # Admin: los sensores se comparten entre todas las viviendas; cada punto es el promedio de
+            # todas las lecturas registradas en ese intervalo (igual que la gráfica web del sensor).
+            range_key = _range_key(hasta - desde)
+            sensors = queries.sensors()
             result = {}
+            chosen = {}
             for parameter in parameters:
                 matched = _matching_sensors(sensors, parameter)
-                sensor_ids = [s.get('id_sensor') for s in matched if s.get('id_sensor')]
-                readings = _readings_for_sensors(sensor_ids, since=desde)
-
-                # Fallback: si no hay lecturas en el rango, traer las más recientes
-                # disponibles (sin volver a filtrar por fecha abajo).
-                usar_fallback = not readings and bool(sensor_ids)
-                if usar_fallback:
-                    readings = _readings_for_sensors(sensor_ids, since=None, limit=200)
-
-                logger.info(
-                    'Graficas admin: parametro=%s sensores=%s lecturas=%s fallback=%s',
-                    parameter, len(matched), len(readings), usar_fallback,
-                )
-                sensor = matched[0] if matched else None
-                # Si usamos el fallback, no filtramos por `desde` (los datos ya son
-                # los más recientes aunque sean anteriores al rango pedido).
-                filtro_fecha = None if usar_fallback else desde
+                chosen[parameter] = matched[0] if matched else None
+            all_series = queries.run_parallel(*[
+                (lambda s=sensor: queries.sensor_series(str(s['id_sensor']), range_key) if s else {})
+                for sensor in chosen.values()
+            ])
+            for parameter, series in zip(chosen, all_series):
+                sensor = chosen[parameter]
+                datos = []
+                for key in sorted(series):
+                    value = series[key]
+                    datos.append({
+                        'fecha': datetime.fromtimestamp(key, dt_timezone.utc).isoformat(),
+                        'valor': value,
+                        'fuera_de_rango': _range_status(value, None if parameter == 'flujo' else sensor.get('rango_min'),
+                                                        sensor.get('rango_max')) != 'Normal',
+                    })
+                logger.info('Graficas admin: parametro=%s rango=%s puntos=%s', parameter, range_key, len(datos))
                 result[parameter] = {
-                    'unidad': '%' if parameter == 'nivel' else (sensor or {}).get('unidad_medida', ''),
+                    'unidad': (sensor or {}).get('unidad_medida', ''),
                     'rango_min': (sensor or {}).get('rango_min'),
                     'rango_max': (sensor or {}).get('rango_max'),
-                    'datos': _reading_series(sensor, readings, filtro_fecha),
+                    'datos': datos,
                 }
             return Response(result)
 
@@ -295,17 +314,24 @@ class MobileResumenView(APIView):
     permission_classes = [IsAuthenticatedUser]
 
     def get(self, request):
-        _, sensors, readings = _visible_data(request)
+        viviendas, sensors, readings = _visible_data(request)
+        nic_by_id = {row.get('id_vivienda'): row.get('nic') for row in viviendas}
         response = {}
         for parameter in ('flujo', 'presion', 'nivel'):
             sensor = _matching_sensor(sensors, parameter)
             series = _reading_series(sensor, readings)
             if series:
+                last = series[-1]
                 response[parameter] = {
-                    'valor': series[-1]['valor'],
+                    'valor': last['valor'],
                     'unidad': '%' if parameter == 'nivel' else (sensor or {}).get('unidad_medida', ''),
-                    'fecha': series[-1]['fecha'],
-                    'fuera_de_rango': series[-1]['fuera_de_rango'],
+                    'fecha': last['fecha'],
+                    'fuera_de_rango': last['fuera_de_rango'],
+                    # Para explicar la alerta sin abrir la gráfica: alto/bajo, rango normal y vivienda.
+                    'estado': last['estado'],
+                    'rango_min': (sensor or {}).get('rango_min'),
+                    'rango_max': (sensor or {}).get('rango_max'),
+                    'nic': nic_by_id.get(last.get('id_vivienda')),
                 }
         response['total_alertas'] = sum(1 for key in ('flujo', 'presion', 'nivel') if response.get(key, {}).get('fuera_de_rango'))
         return Response(response)

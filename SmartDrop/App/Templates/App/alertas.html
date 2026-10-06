@@ -42,12 +42,18 @@
       <span class="alerta-icon"><i class="ti {{ alerta.icon }}"></i></span>
       <div class="alerta-body">
         <div class="alerta-titulo">
-          <strong>{{ alerta.tipo_alerta|title }}</strong>
+          <strong>{{ alerta.titulo }}</strong>
           <span class="badge badge-prio-{{ alerta.prioridad|default:'media' }}">{{ alerta.prioridad|default:'media'|title }}</span>
-          <span class="badge badge-estado-{{ alerta.estado_confirmacion }}">{{ alerta.estado_confirmacion|title }}</span>
+          <span class="badge badge-estado-{{ alerta.estado_confirmacion }}">{{ alerta.estado_texto }}</span>
         </div>
-        <p class="alerta-msg">{{ alerta.mensaje }}</p>
-        <span class="alerta-fecha"><i class="ti ti-clock"></i> {{ alerta.fecha_creacion|slice:':16' }}</span>
+        <p class="alerta-msg">{{ alerta.resumen }}</p>
+        {% if alerta.detalle %}
+        <details class="alerta-detalle">
+          <summary>Ver detalles</summary>
+          {% for linea in alerta.detalle %}<p class="alerta-msg">{{ linea }}</p>{% endfor %}
+        </details>
+        {% endif %}
+        <span class="alerta-fecha"><i class="ti ti-clock"></i> {{ alerta.fecha_texto }}</span>
       </div>
     </li>
     {% endfor %}
