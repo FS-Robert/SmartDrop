@@ -1734,15 +1734,77 @@ def admin_panel(request):
     return render(request, 'App/admin_panel.html', context)
 
 
-def _sensor_readings(sensor_ids, since=None, limit=1000):
-    """Lecturas (más recientes primero) de los sensores indicados, filtradas en Supabase."""
-    ids = [sid for sid in sensor_ids if sid.isascii() and sid.isdigit()]
-    if not ids:
-        return []
-    params = {'id_sensor': f"in.({','.join(ids)})", 'order': 'fecha_registro.desc', 'limit': str(limit)}
-    if since:
-        params['fecha_registro'] = f"gte.{since.strftime('%Y-%m-%dT%H:%M:%SZ')}"
-    return supabase_client.select('lectura', 'id_sensor,fecha_registro,valor', params)
+def _valid_sensor_ids(sensor_ids):
+    return [sid for sid in sensor_ids if sid and sid.isascii() and sid.isdigit()]
+
+
+_SENSOR_RANGES = {'1h': timedelta(hours=1), '1w': timedelta(days=7), '1m': timedelta(days=30)}
+# Tamaño del intervalo en que se promedian las lecturas de todas las viviendas, por rango.
+_SENSOR_BUCKETS = {'1h': timedelta(minutes=2), '1d': timedelta(minutes=15), '1w': timedelta(hours=1), '1m': timedelta(hours=4)}
+_SENSOR_CHUNKS = {'1h': 1, '1d': 4, '1w': 28, '1m': 60}
+_SENSOR_PAGE = 1000
+_SENSOR_MAX_PAGES = 40
+_SENSOR_SERIES_CACHE_SECONDS = {'1h': 30, '1d': 60, '1w': 300, '1m': 600}
+
+
+def _fmt_utc(moment):
+    return moment.strftime('%Y-%m-%dT%H:%M:%SZ')
+
+
+def _sensor_rows_between(sensor_id, since, until):
+    """Todas las lecturas (de todas las viviendas) de un sensor en [since, until), paginando en Supabase."""
+    rows = []
+    for page in range(_SENSOR_MAX_PAGES):
+        chunk = supabase_client.select('lectura', 'fecha_registro,valor', {
+            'id_sensor': f'in.({sensor_id})',
+            'fecha_registro': f'gte.{_fmt_utc(since)}',
+            'and': f'(fecha_registro.lt.{_fmt_utc(until)})',
+            'order': 'fecha_registro.asc,id_lectura.asc',
+            'limit': str(_SENSOR_PAGE),
+            'offset': str(page * _SENSOR_PAGE),
+        })
+        rows.extend(chunk)
+        if len(chunk) < _SENSOR_PAGE:
+            break
+    return rows
+
+
+def _sensor_series(sensor_id, range_key):
+    """{inicio_intervalo: promedio} con las lecturas de todas las viviendas que comparten el sensor."""
+    cache_key = f'sensor_series:{sensor_id}:{range_key}'
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    window = _SENSOR_RANGES.get(range_key, timedelta(days=1))
+    bucket = _SENSOR_BUCKETS.get(range_key, _SENSOR_BUCKETS['1d'])
+    until = datetime.now(dt_timezone.utc)
+    since = until - window
+    chunks = _SENSOR_CHUNKS.get(range_key, _SENSOR_CHUNKS['1d'])
+    step = window / chunks
+    bounds = [(since + step * i, since + step * (i + 1)) for i in range(chunks)]
+    with ThreadPoolExecutor(max_workers=min(16, chunks)) as executor:
+        parts = list(executor.map(lambda b: _sensor_rows_between(sensor_id, *b), bounds))
+
+    bucket_seconds = bucket.total_seconds()
+    sums = {}
+    for row in (row for part in parts for row in part):
+        raw = row.get('fecha_registro')
+        if not raw or row.get('valor') is None:
+            continue
+        try:
+            ts = datetime.fromisoformat(str(raw).replace('Z', '+00:00'))
+        except ValueError:
+            continue
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=dt_timezone.utc)
+        key = int(ts.timestamp() // bucket_seconds * bucket_seconds)
+        total, count = sums.get(key, (0.0, 0))
+        sums[key] = (total + safe_float(row.get('valor')), count + 1)
+
+    series = {key: round(total / count, 3) for key, (total, count) in sums.items()}
+    cache.set(cache_key, series, _SENSOR_SERIES_CACHE_SECONDS.get(range_key, 60))
+    return series
 
 
 @login_required(login_url='login')
@@ -1751,74 +1813,57 @@ def sensor_detail(request, sensor_id):
         return redirect('dashboard')
 
     try:
-        sensores, lecturas = run_parallel(sensors, lambda: _sensor_readings([sensor_id]))
+        sensores = sensors()
     except Exception:
-        sensores, lecturas = [], []
+        sensores = []
 
     sensor = next((s for s in sensores if str(s.get('id_sensor')) == str(sensor_id)), None)
-
-    # Los datos vienen ordenados desc desde Supabase; invertir para gráfica ascendente
-    rows_asc = list(reversed(lecturas))
-    labels = [row.get('fecha_registro') for row in rows_asc]
-    data = [safe_float(row.get('valor') or 0) for row in rows_asc]
-
+    # La gráfica se carga por rango desde `sensor_data` (promedio de todas las viviendas).
     context = {
         'sensor': sensor or {'id_sensor': sensor_id, 'tipo_sensor': 'Sensor', 'modelo': '', 'unidad': ''},
         'sensores_comparacion': [s for s in sensores if str(s.get('id_sensor')) != str(sensor_id)],
-        'labels': json.dumps(labels),
-        'data': json.dumps(data),
+        'labels': json.dumps([]),
+        'data': json.dumps([]),
         'ultima_actualizacion': 'hace unos segundos',
     }
     return render(request, 'App/sensor_detail.html', context)
 
 
-_SENSOR_RANGES = {'1h': timedelta(hours=1), '1w': timedelta(days=7), '1m': timedelta(days=30)}
-
-
 @login_required(login_url='login')
 def sensor_data(request, sensor_id):
-    """Return JSON labels/data for a sensor filtered by range GET param.
-    range: one of '1h','1d','1w','1m' (defaults to '1d')
+    """Serie del sensor para el rango pedido ('1h','1d','1w','1m'; por defecto '1d').
+
+    Los sensores se comparten entre todas las viviendas, así que cada punto es el promedio de
+    todas las lecturas registradas en ese intervalo.
     """
     if not _admin_only(request):
         return JsonResponse({'ok': False, 'error': 'unauthorized'}, status=403)
 
-    window = _SENSOR_RANGES.get(request.GET.get('range', '1d'), timedelta(days=1))
-    cutoff = datetime.now(dt_timezone.utc).replace(tzinfo=None) - window
+    range_key = request.GET.get('range', '1d')
+    if range_key not in _SENSOR_BUCKETS:
+        range_key = '1d'
     compare_id = request.GET.get('compare_id', '').strip()
+    valid = _valid_sensor_ids([str(sensor_id), compare_id])
+    main_valid = str(sensor_id) in valid
+    compare_valid = bool(compare_id) and compare_id in valid and compare_id != str(sensor_id)
     try:
-        sensores, lecturas = run_parallel(
-            sensors,
-            lambda: _sensor_readings([sensor_id, compare_id], since=cutoff, limit=2000),
-        )
+        tasks = [sensors]
+        if main_valid:
+            tasks.append(lambda: _sensor_series(str(sensor_id), range_key))
+        if compare_valid:
+            tasks.append(lambda: _sensor_series(compare_id, range_key))
+        sensores, *series = run_parallel(*tasks)
     except Exception:
         return JsonResponse({'ok': False, 'error': 'db_error'}, status=500)
 
+    main_series = series[0] if main_valid else {}
+    compare_series = series[-1] if compare_valid else {}
     sensor = next((s for s in sensores if str(s.get('id_sensor')) == str(sensor_id)), {})
-    comparison = next((s for s in sensores if str(s.get('id_sensor')) == compare_id), {}) if compare_id else {}
-    filtered = []
-    comparison_filtered = []
-    for row in lecturas:
-        try:
-            raw = row.get('fecha_registro')
-            if not raw:
-                continue
-            ts = datetime.fromisoformat(raw.replace('Z', '+00:00'))
-            if ts.replace(tzinfo=None) < cutoff:
-                continue
-            if str(row.get('id_sensor')) == str(sensor_id):
-                filtered.append((ts, row))
-            if comparison and str(row.get('id_sensor')) == compare_id:
-                comparison_filtered.append((ts, row))
-        except (TypeError, ValueError):
-            continue
+    comparison = next((s for s in sensores if str(s.get('id_sensor')) == compare_id), {}) if compare_valid else {}
 
-    filtered.sort(key=lambda item: item[0])
-    comparison_filtered.sort(key=lambda item: item[0])
-    labels = [item[0].isoformat() for item in filtered]
-    data = [safe_float(item[1].get('valor')) for item in filtered]
-    comparison_labels = [item[0].isoformat() for item in comparison_filtered]
-    comparison_data = [safe_float(item[1].get('valor')) for item in comparison_filtered]
+    keys = sorted(main_series)
+    labels = [datetime.fromtimestamp(key, dt_timezone.utc).isoformat() for key in keys]
+    data = [main_series[key] for key in keys]
     return JsonResponse({
         'ok': True,
         'labels': labels,
@@ -1826,8 +1871,9 @@ def sensor_data(request, sensor_id):
         'unit': sensor.get('unidad_medida') or sensor.get('unidad') or '',
         'sensor_label': sensor.get('tipo_sensor') or 'Sensor',
         'compare': {
-            'labels': comparison_labels,
-            'data': comparison_data,
+            # Alineada con los intervalos del sensor principal (null donde no hay lecturas).
+            'labels': labels,
+            'data': [compare_series.get(key) for key in keys],
             'unit': comparison.get('unidad_medida') or comparison.get('unidad') or '',
             'sensor_label': comparison.get('tipo_sensor') or 'Comparación',
         } if comparison else None,

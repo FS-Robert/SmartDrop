@@ -1,10 +1,10 @@
 """Modelos del motor de predicción (ML) de SmartDrop.
 
-Diseño clave (ver Sección 2/8 del spec): un "home" o "zone" es agnóstico a si
-su origen de datos es un dispositivo real (ESP32) o el generador sintético.
-`Home.source` / `Home.source_ref_vivienda_id` son el único punto donde se
-distingue el origen; el resto del pipeline (features, modelo, simulación,
-API) trata ambos casos de forma idéntica.
+Cada `Zone` es un tanque real de Supabase (tabla `tanque`) y cada `Home` una
+vivienda real (tabla `vivienda`); `ml_engine/realdata/sync.py` los crea y copia
+aquí sus lecturas. `source` conserva el valor 'synthetic' solo por compatibilidad
+con bases antiguas: el generador de hogares sintéticos se retiró y el pipeline
+únicamente usa los de origen 'real'.
 """
 from django.conf import settings
 from django.db import models
@@ -44,10 +44,11 @@ class Zone(models.Model):
     largo_cm = models.FloatField(null=True, blank=True)
     ancho_cm = models.FloatField(null=True, blank=True)
 
-    # Esquema de entrada de agua (inflow) simulado, ver simulation/zone.py.
+    # Sin uso desde que se retiró el generador sintético (la recarga real se estima en shortage/real_tank.py).
     inflow_schedule = models.JSONField(default=dict, blank=True)
 
     nivel_actual_litros = models.FloatField(default=8_000.0)
+    meta = models.JSONField(default=dict, blank=True, help_text='Datos del tanque real (nombre, sensor de nivel, umbrales en cm).')
     creado_en = models.DateTimeField(auto_now_add=True)
     actualizado_en = models.DateTimeField(auto_now=True)
 
@@ -61,7 +62,7 @@ class Zone(models.Model):
 
 
 class Home(models.Model):
-    """Un hogar, real o sintético. Unidad atómica del pipeline de consumo."""
+    """Una vivienda de Supabase. Unidad atómica del pipeline de consumo."""
 
     zone = models.ForeignKey(Zone, on_delete=models.CASCADE, related_name='homes')
     source = models.CharField(max_length=12, choices=SourceType.choices, default=SourceType.SYNTHETIC)
@@ -77,6 +78,7 @@ class Home(models.Model):
     )
     etiqueta = models.CharField(max_length=120, blank=True)
     activo = models.BooleanField(default=True)
+    meta = models.JSONField(default=dict, blank=True, help_text='Datos de la vivienda real (NIC, dirección, zona, titular, sensores).')
     creado_en = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -90,7 +92,7 @@ class Home(models.Model):
 
 
 class SensorReading(models.Model):
-    """Lectura cruda normalizada, sin importar el origen (real o sintético).
+    """Lectura copiada de la tabla `lectura` de Supabase (el nivel del tanque, ya convertido a litros).
 
     Esta es la tabla de series temporales de alto volumen. En Postgres se
     recomienda particionarla por rango de tiempo con pg_partman (ver
@@ -228,6 +230,7 @@ class ShortagePrediction(models.Model):
     )
     horizonte_horas = models.PositiveIntegerField(default=72)
     nivel_riesgo = models.CharField(max_length=15, default='bajo')
+    details = models.JSONField(default=dict, blank=True, help_text='Nivel actual, estado de la bomba y otros datos de la predicción.')
 
     class Meta:
         db_table = 'ml_shortage_prediction'
@@ -270,6 +273,11 @@ class LeakPrediction(models.Model):
     nivel_riesgo = models.CharField(max_length=15, default='bajo')
     method = models.CharField(max_length=20, default='heuristic')
     drivers = models.JSONField(default=list, blank=True)
+    features = models.JSONField(default=dict, blank=True, help_text='Métricas medidas que sustentan la predicción (para el aviso al admin).')
+    evaluated_until = models.DateTimeField(null=True, blank=True, help_text='Timestamp de la última lectura analizada.')
+    fuga_id = models.BigIntegerField(null=True, blank=True, help_text='id_fuga creado en Supabase si se generó alerta.')
+    alerta_id = models.BigIntegerField(null=True, blank=True, help_text='id_alerta creado en Supabase si se generó alerta.')
+    alert_sent_at = models.DateTimeField(null=True, blank=True)
     model_artifact = models.ForeignKey(ModelArtifact, null=True, blank=True, on_delete=models.SET_NULL)
 
     class Meta:
@@ -283,3 +291,49 @@ class LeakPrediction(models.Model):
     @property
     def porcentaje(self) -> float:
         return round(max(0.0, min(1.0, self.probabilidad)) * 100.0, 1)
+
+class SyncState(models.Model):
+    """Hasta qué lectura de Supabase se ha sincronizado cada hogar real (sincronización incremental)."""
+
+    home = models.OneToOneField(Home, on_delete=models.CASCADE, related_name='sync_state')
+    last_reading_ts = models.DateTimeField(null=True, blank=True)
+    synced_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'ml_sync_state'
+
+
+class PredictionJob(models.Model):
+    """Ejecución del botón 'Realizar predicciones'; la web la consulta por polling."""
+
+    class Status(models.TextChoices):
+        RUNNING = 'running', 'En curso'
+        DONE = 'done', 'Terminada'
+        ERROR = 'error', 'Con error'
+
+    id = models.CharField(max_length=32, primary_key=True)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.RUNNING)
+    step = models.CharField(max_length=120, blank=True)
+    progress = models.PositiveSmallIntegerField(default=0)
+    started_at = models.DateTimeField(auto_now_add=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    requested_by = models.BigIntegerField(null=True, blank=True)
+    result = models.JSONField(default=dict, blank=True)
+    error = models.TextField(blank=True)
+
+    class Meta:
+        db_table = 'ml_prediction_job'
+        ordering = ['-started_at']
+
+
+class MonitorState(models.Model):
+    """Estado del monitor automático de fugas; sirve además de cerrojo entre procesos."""
+
+    key = models.CharField(max_length=40, primary_key=True)
+    last_started_at = models.DateTimeField(null=True, blank=True)
+    last_finished_at = models.DateTimeField(null=True, blank=True)
+    last_status = models.CharField(max_length=20, blank=True)
+    last_summary = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        db_table = 'ml_monitor_state'

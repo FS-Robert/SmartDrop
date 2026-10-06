@@ -96,6 +96,24 @@ def insert(table: str, data: dict, return_representation: bool = True) -> dict |
     return result if isinstance(result, dict) else None
 
 
+def insert_many(table: str, rows: list[dict]) -> None:
+    """Inserta varias filas en una sola petición (sin devolver representación)."""
+    if not rows:
+        return
+    _check_config()
+    resp = _request('POST', _base_url(table), headers=_headers(), json=rows)
+    _handle_response(resp)
+
+
+def delete(table: str, params: dict) -> None:
+    """Borra las filas que cumplan los filtros; exige al menos un filtro para evitar vaciar la tabla."""
+    if not params:
+        raise ValueError('delete() requiere al menos un filtro.')
+    _check_config()
+    resp = _request('DELETE', _base_url(table), headers=_headers(), params=params)
+    _handle_response(resp)
+
+
 def select(table: str, select: str = '*', params: dict | None = None) -> list:
     """Generic select. `params` are extra query params appended to the request."""
     _check_config()

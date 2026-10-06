@@ -16,15 +16,18 @@ from rest_framework.views import APIView
 from App.api.authentication import SupabaseJWTAuthentication
 from App.api.permissions import IsAdministrator
 
+from ml_engine.leaks.detect import alert_threshold
 from ml_engine.models import (
     AnomalyEvent,
     ConsumptionAggregate,
     ConsumptionForecast,
     Home,
+    LeakPrediction,
     ShortagePrediction,
     TankTrajectory,
     Zone,
 )
+from ml_engine.realdata.sync import data_quality
 from ml_engine.serializers import (
     AnomalyEventSerializer,
     ConsumptionForecastSerializer,
@@ -89,12 +92,12 @@ class ZoneConsumptionForecastView(AdminOnlyAPIView):
 
 
 class ZoneShortagePredictionView(AdminOnlyAPIView):
-    """GET /v1/ml/zones/{id}/shortage-prediction — null si no hay predicción vigente."""
+    """GET /v1/ml/zones/{id}/shortage-prediction — null si aún no se ha predicho este tanque."""
 
     def get(self, request, zone_id: int):
         get_object_or_404(Zone, id=zone_id)
         prediction = ShortagePrediction.objects.filter(zone_id=zone_id).order_by('-generated_at').first()
-        if prediction is None or prediction.median_hours_to_shortage is None:
+        if prediction is None:
             return Response({'zone_id': zone_id, 'shortage_prediction': None})
         return Response({
             'zone_id': zone_id,
@@ -129,9 +132,8 @@ def _zone_current_status(zone: Zone) -> dict:
         ).aggregate(total=Sum('litros'))['total'] or 0.0
 
     since = django_tz.now() - django_tz.timedelta(hours=24)
-    anomalias_24h = AnomalyEvent.objects.filter(zone=zone, ts__gte=since).count() + AnomalyEvent.objects.filter(
-        home__zone=zone, ts__gte=since,
-    ).count()
+    # Posibles fugas: hogares de la zona cuya última evaluación (24 h) supera el umbral de alerta.
+    anomalias_24h = _leaking_homes(since, zone=zone)
 
     prediction = ShortagePrediction.objects.filter(zone=zone).order_by('-generated_at').first()
     alert_state = prediction.nivel_riesgo if prediction else 'sin_datos'
@@ -148,6 +150,17 @@ def _zone_current_status(zone: Zone) -> dict:
     }
 
 
+def _leaking_homes(since, zone=None) -> int:
+    """Hogares con una predicción de fuga >= umbral en su evaluación más reciente dentro de la ventana."""
+    qs = LeakPrediction.objects.filter(generated_at__gte=since)
+    if zone is not None:
+        qs = qs.filter(zone=zone)
+    latest = {}
+    for home_id, probability in qs.order_by('generated_at').values_list('home_id', 'probabilidad'):
+        latest[home_id] = probability
+    return sum(1 for probability in latest.values() if probability >= alert_threshold())
+
+
 class ZoneCurrentStatusView(AdminOnlyAPIView):
     """GET /v1/ml/zones/{id}/current-status — para uso de dashboard en vivo."""
 
@@ -157,12 +170,18 @@ class ZoneCurrentStatusView(AdminOnlyAPIView):
 
 
 class ZoneSummaryListView(AdminOnlyAPIView):
-    """GET /v1/ml/zones/summary — agregado por zona para no golpear per-home desde el frontend."""
+    """GET /v1/ml/zones/summary — un tanque (con su vivienda) por fila, para web y app móvil."""
 
     def get(self, request):
         data = []
-        for zone in Zone.objects.all():
+        latest_leak = {}
+        for home_id, probability in LeakPrediction.objects.order_by('generated_at').values_list('home_id', 'probabilidad'):
+            latest_leak[home_id] = probability
+        for zone in Zone.objects.filter(homes__activo=True).distinct().order_by('name'):
             status_data = _zone_current_status(zone)
+            home = zone.homes.filter(activo=True).first()
+            meta = (home.meta if home else {}) or {}
+            prediction = status_data['ultima_prediccion_desabasto']
             data.append({
                 'zone_id': zone.id,
                 'zone_name': zone.name,
@@ -172,5 +191,14 @@ class ZoneSummaryListView(AdminOnlyAPIView):
                 'consumo_total_lph': status_data['consumo_actual_lph'],
                 'nivel_riesgo': status_data['alert_state'],
                 'anomalias_activas_24h': status_data['anomalias_activas_24h'],
+                'nic': meta.get('nic', ''),
+                'zona': meta.get('zona', ''),
+                'direccion': meta.get('direccion', ''),
+                'calidad_datos': 'sin_tanque' if zone.source_ref_tanque_id is None
+                else (data_quality(home)['status'] if home else 'sin_datos'),
+                'probabilidad_desabasto': prediction['probabilidad_desabasto_horizonte'] if prediction else None,
+                'horas_hasta_desabasto': prediction['median_hours_to_shortage'] if prediction else None,
+                'prediccion_generada': prediction['generated_at'] if prediction else None,
+                'probabilidad_fuga': latest_leak.get(home.id) if home else None,
             })
         return Response({'zonas': ZoneSummarySerializer(data, many=True).data})

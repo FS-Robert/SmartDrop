@@ -1,28 +1,25 @@
-from django.core.management.base import BaseCommand
-from django.core.management import call_command
+import json
+
+from django.core.management.base import BaseCommand, CommandError
+
+from ml_engine.pipeline import PipelineBusy, pipeline_lock, run_full_prediction
 
 
 class Command(BaseCommand):
     help = (
-        'Corre el pipeline Fase 1 completo end-to-end: genera datos sintéticos '
-        '(si no existen), entrena ambos modelos, y produce forecasts/shortage/anomalías.'
+        'Hace desde la consola lo mismo que el botón "Realizar predicciones": sincroniza las lecturas de Supabase, '
+        'entrena los modelos si hace falta, predice el desabasto de cada tanque y analiza fugas (con avisos).'
     )
 
-    def add_arguments(self, parser):
-        parser.add_argument('--skip-generate', action='store_true', help='No regenerar datos sintéticos (usar los existentes).')
-        parser.add_argument('--zones', type=int, default=2)
-        parser.add_argument('--homes-per-zone', type=int, default=15)
-        parser.add_argument('--days', type=int, default=60)
-
     def handle(self, *args, **options):
-        if not options['skip_generate']:
-            call_command(
-                'ml_generate_synthetic_data',
-                zones=options['zones'], homes_per_zone=options['homes_per_zone'], days=options['days'],
-            )
-        call_command('ml_train_consumption_model')
-        call_command('ml_predict_consumption')
-        call_command('ml_train_anomaly_model')
-        call_command('ml_run_anomaly_detection')
-        call_command('ml_run_shortage_prediction')
-        self.stdout.write(self.style.SUCCESS('Pipeline Fase 1 completo ejecutado correctamente.'))
+        def progress(percent, text):
+            self.stdout.write(f'[{int(percent):3d} %] {text}')
+
+        try:
+            with pipeline_lock(wait_seconds=90):
+                summary = run_full_prediction(progress)
+        except PipelineBusy:
+            raise CommandError('Hay otro análisis en curso. Inténtalo de nuevo en un momento.')
+        summary['fugas'].pop('resultados', None)
+        self.stdout.write(json.dumps(summary, ensure_ascii=False, indent=2, default=str))
+        self.stdout.write(self.style.SUCCESS('Predicciones terminadas.'))

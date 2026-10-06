@@ -6,7 +6,8 @@ En su lugar:
 1. Se construye una trayectoria de consumo por hogar para el horizonte
    (perfil horario histórico escalado por la incertidumbre calibrada del
    modelo de consumo p10/p50/p90 más reciente — ver nota de diseño abajo).
-2. Se combina con el inflow conocido/programado de la zona.
+2. Se combina con la recarga del tanque real: una bomba por umbral cuyos
+   niveles de arranque/paro se estiman del historial (ver real_tank.py).
 3. Se corre el balance de masa hacia adelante vía Monte Carlo, muestreando
    el consumo de cada hogar en cada paso desde su distribución p10/p50/p90.
 4. Se calcula el "first-passage time" al umbral crítico para cada
@@ -40,8 +41,7 @@ from ml_engine.models import (
     TankTrajectory,
     Zone,
 )
-from ml_engine.simulation.zone import compute_inflow_liters_per_hour
-from ml_engine.simulation.config import InflowScheduleConfig
+from ml_engine.shortage.real_tank import estimate_pump_model, simulate_levels
 
 logger = logging.getLogger(__name__)
 
@@ -106,10 +106,13 @@ def run_shortage_prediction(
     n_paths: int = DEFAULT_N_PATHS,
     seed: int = 1234,
 ) -> ShortagePrediction:
+    from ml_engine.training import modeling_homes
+
     zone = Zone.objects.get(id=zone_id)
-    home_ids = list(zone.homes.filter(activo=True).values_list('id', flat=True))
+    usable = {home.id for home in modeling_homes()[0]}
+    home_ids = [hid for hid in zone.homes.filter(activo=True).values_list('id', flat=True) if hid in usable]
     if not home_ids:
-        raise ValueError(f'La zona {zone_id} no tiene hogares activos.')
+        raise ValueError(f'La zona {zone_id} no tiene hogares activos con datos suficientes.')
 
     # Asegura que exista una predicción de consumo reciente por hogar.
     predict_consumption_for_homes(home_ids)
@@ -130,21 +133,26 @@ def run_shortage_prediction(
             )
             zone_consumption_paths[:, h] += sampled
 
-    inflow_cfg = InflowScheduleConfig(**{
-        k: tuple(v) if isinstance(v, list) else v
-        for k, v in zone.inflow_schedule.items()
-    }) if zone.inflow_schedule else InflowScheduleConfig()
-    inflow = compute_inflow_liters_per_hour(horizon_hours, inflow_cfg, rng, pump_failure_prob_per_day=0.0)
-
     latest_level_reading = SensorReading.objects.filter(zone_id=zone_id, metric='nivel_tanque').order_by('-ts').first()
     initial_level = latest_level_reading.value if latest_level_reading else zone.nivel_actual_litros
 
-    levels = np.zeros((n_paths, horizon_hours))
-    current = np.full(n_paths, initial_level)
-    for h in range(horizon_hours):
-        current = current + inflow[h] - zone_consumption_paths[:, h]
-        current = np.clip(current, 0.0, zone.capacidad_maxima_litros)
-        levels[:, h] = current
+    pump = estimate_pump_model(zone)
+    levels = simulate_levels(
+        pump, initial_level, zone.nivel_critico_litros, zone.capacidad_maxima_litros, zone_consumption_paths, rng,
+    )
+    details = {
+        'nivel_actual_litros': round(float(initial_level), 3),
+        'umbral_arranque_bomba_l': round(pump.on_level, 3),
+        'umbral_paro_bomba_l': round(pump.off_level, 3),
+        'recargas_observadas': pump.rise_events,
+        'bomba_sin_recargar_ahora': pump.pump_failed_now,
+        'horas_desde_ultima_recarga': None if pump.last_rise_hours_ago is None else round(pump.last_rise_hours_ago, 1),
+        'vaciado_ultima_hora_lph': None if pump.drain_lph is None else round(pump.drain_lph, 3),
+    }
+
+    details['consumo_p50_lph'] = round(float(np.median(zone_consumption_paths[:, :24].mean(axis=1))), 4)
+    details['homes'] = len(home_ids)
+    already_critical = initial_level <= zone.nivel_critico_litros
 
     crossed = levels <= zone.nivel_critico_litros
     first_passage = np.where(crossed.any(axis=1), crossed.argmax(axis=1) + 1, -1)
@@ -159,7 +167,9 @@ def run_shortage_prediction(
     else:
         median_h = p10_h = p90_h = None
 
-    if probabilidad >= 0.5 and median_h is not None and median_h <= 24:
+    if already_critical:
+        riesgo, median_h, p10_h, p90_h, probabilidad = 'critico', 0.0, 0.0, 0.0, 1.0
+    elif probabilidad >= 0.5 and median_h is not None and median_h <= 24:
         riesgo = 'alto'
     elif probabilidad >= 0.2:
         riesgo = 'medio'
@@ -188,6 +198,7 @@ def run_shortage_prediction(
         probabilidad_desabasto_horizonte=probabilidad,
         horizonte_horas=horizon_hours,
         nivel_riesgo=riesgo,
+        details=details,
     )
     logger.info('Predicción de desabasto zona=%s riesgo=%s prob=%.2f mediana_h=%s', zone_id, riesgo, probabilidad, median_h)
     return prediction

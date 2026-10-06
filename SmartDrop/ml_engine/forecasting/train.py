@@ -47,7 +47,7 @@ def train_consumption_model(home_ids: list[int] | None = None) -> ModelArtifact:
     if frame.empty or len(frame) < 200:
         raise ValueError(
             'No hay suficiente historial de consumo para entrenar. '
-            'Corre primero `python manage.py ml_generate_synthetic_data`.'
+            'Sincroniza primero las lecturas reales de Supabase (botón Realizar predicciones).'
         )
 
     train_df, valid_df = _time_split(frame)

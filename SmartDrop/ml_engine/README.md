@@ -1,121 +1,107 @@
-# ml_engine — Motor de predicción SmartDrop (Fase 1: Simulación)
+# ml_engine — Motor de predicción SmartDrop
 
-Módulo Django **admin-only** (id_rol == 2, ver `App.api.permissions.IsAdministrator`
-y `ml_engine/views_web.py`) que implementa la Fase 1 del sistema de forecasting
-de consumo, simulación de tanque/predicción de desabasto, y detección de
-fugas/anomalías descrito en el spec. Corre 100% con datos sintéticos y
-entrenamiento local — sin depender de hardware real ni servicios en la nube.
+Módulo Django **solo para administradores** (`id_rol == 2`) que predice el desabasto de cada tanque y
+detecta posibles fugas a partir de las **lecturas reales guardadas en Supabase** (tabla `lectura`).
+El entrenamiento y la inferencia corren en local (LightGBM + scikit-learn, CPU).
 
-## Qué NO incluye esta fase (a propósito)
+## Cómo funciona
 
-- Ingesta real del ESP32 a este pipeline (Fase 2/3 del spec original).
-- Notificaciones push (FCM/APNs) — explícitamente fuera de alcance por decisión del usuario.
-- Entrenamiento en la nube / GPU — todo corre local con LightGBM + scikit-learn (CPU).
+1. **Sincronización** (`realdata/sync.py`). Cada tanque de Supabase es una `Zone` y cada vivienda un `Home`.
+   Un sensor pertenece a la vivienda que registró su lectura más reciente. Las lecturas se copian de forma
+   incremental a `ml_timeseries.sqlite3` y se resumen por hora; el nivel (cm) se convierte a litros con la
+   altura y la capacidad del tanque. La primera vez se traen los últimos 30 días.
+2. **Calidad de datos**. Una vivienda entra al análisis solo si su última lectura tiene menos de 6 h, sus
+   lecturas varían y acumula al menos 48 h de historial. Las demás se listan como excluidas, con el motivo.
+3. **Modelos** (`training.py`). Se entrenan con las viviendas aptas cuando no existen o tienen más de 7 días:
+   LightGBM cuantílico (consumo p10/p50/p90) e Isolation Forest (anomalías). Se guardan en `ml_models/`.
+4. **Desabasto** (`shortage/`). Monte Carlo de 72 h por tanque: consumo previsto de la vivienda y una bomba por
+   umbral cuyos niveles de arranque y paro se estiman del historial. Si el nivel ya está bajo el umbral de
+   arranque y no sube, se asume que la bomba no está recargando. El resultado se guarda también en la tabla
+   `prediccion_desabasto` de Supabase.
+5. **Fugas** (`leaks/`). Por vivienda se combinan cuatro señales: flujo mínimo sostenido en 6 h, caída de
+   presión, flujo inusual para la hora y el score del Isolation Forest. Si la probabilidad supera el umbral se
+   crea una fila en `fuga`, una `alerta` con todos los detalles y una `notificacion` para cada administrador.
+
+## Uso desde el panel (solo admin)
+
+- **Predicción Suministro** (`/admin/prediccion/`): botón **Realizar predicciones**. Lanza los cinco pasos en
+  segundo plano y muestra una pantalla de carga con el progreso solo si tarda más de 1 s.
+- **Predicción de fugas** (`/admin/prediccion/fugas/`): estado por vivienda, avisos y estado del monitor.
+- **Avisos automáticos**: la campana del encabezado muestra los avisos sin leer y cada aviso nuevo aparece
+  como tarjeta emergente en cualquier página del panel. La app Android los muestra como notificación del sistema.
+
+## Monitor automático de fugas
+
+Al arrancar el servidor (`runserver`, `daphne`, etc.) se inicia un hilo que cada 10 min sincroniza las lecturas
+nuevas, reentrena si hace falta y analiza fugas. No repite el aviso de una misma vivienda durante 12 h.
+
+El hilo solo vive mientras el servidor está encendido. Para tenerlo aparte:
+
+```bash
+python manage.py ml_run_monitor --loop   # proceso propio, repite cada ML_MONITOR_INTERVAL_MINUTES
+python manage.py ml_run_monitor          # una sola pasada (p. ej. desde el Programador de tareas de Windows)
+```
+
+Variables opcionales en `.env`:
+
+| Variable | Por defecto | Qué controla |
+|---|---|---|
+| `ML_MONITOR_ENABLED` | `1` | `0` desactiva el hilo del servidor |
+| `ML_MONITOR_INTERVAL_MINUTES` | `10` | Cada cuánto se revisan fugas (mínimo 1) |
+| `ML_MONITOR_START_DELAY_SECONDS` | `45` | Espera tras arrancar el servidor |
+| `ML_LEAK_ALERT_THRESHOLD` | `0.6` | Probabilidad a partir de la cual se avisa |
+| `ML_LEAK_ALERT_COOLDOWN_HOURS` | `12` | Horas sin repetir el aviso de una vivienda |
 
 ## Instalación
 
 ```bash
 pip install -r requirements.txt
-python manage.py migrate                      # tablas de Django (auth, sessions, etc.)
-python manage.py migrate --database=timeseries # tablas de ml_engine
+python manage.py migrate                        # tablas de Django
+python manage.py migrate --database=timeseries  # tablas de ml_engine
 ```
 
-Por defecto el alias de base de datos `timeseries` apunta al mismo SQLite que
-usa el resto del proyecto (cero infraestructura adicional para desarrollar y
-entrenar localmente). Cuando quieras moverlo a tu Supabase Postgres (con
-`pg_partman`, como mencionaste tener habilitado), define en tu `.env`:
+El alias `timeseries` es por defecto un SQLite local. Para moverlo a Postgres define `ML_TIMESERIES_DB_HOST`,
+`_PORT`, `_NAME`, `_USER` y `_PASSWORD` en `.env`, instala `psycopg2-binary`, migra ese alias y, si usas
+pg_partman, ejecuta `python manage.py ml_setup_partitioning`.
 
-```
-ML_TIMESERIES_DB_HOST=<host de tu Supabase Postgres>
-ML_TIMESERIES_DB_PORT=5432
-ML_TIMESERIES_DB_NAME=postgres
-ML_TIMESERIES_DB_USER=postgres
-ML_TIMESERIES_DB_PASSWORD=<tu password>   # nunca la pegues en el chat
-```
-
-No hace falta tocar ninguna línea de `ml_engine`: el router
-(`ml_engine/routers.py`) ya envía todos sus modelos a ese alias. Luego, con la
-conexión ya apuntando a Postgres:
-
-```bash
-pip install psycopg2-binary
-python manage.py migrate --database=timeseries
-python manage.py ml_setup_partitioning   # registra ml_sensor_reading en pg_partman (particiones mensuales)
-```
-
-`ml_setup_partitioning` detecta si el alias no es Postgres y no hace nada en
-ese caso (seguro de correr siempre).
-
-## Correr el pipeline completo (Fase 1)
-
-```bash
-python manage.py ml_run_full_pipeline
-```
-
-Esto: genera datos sintéticos (2 zonas × 15 hogares × 60 días por defecto),
-entrena el modelo de consumo (LightGBM cuantílico), genera pronósticos,
-entrena el detector de anomalías, corre la detección, y corre la simulación
-Monte Carlo de balance de masa + predicción de desabasto por zona.
-
-Comandos individuales (todos con `python manage.py <comando>`):
+## Comandos
 
 | Comando | Qué hace |
 |---|---|
-| `ml_generate_synthetic_data` | Genera hogares/zonas sintéticos + historial horario. Flags: `--zones --homes-per-zone --days --start-date --seed` |
-| `ml_train_consumption_model` | Entrena LightGBM cuantílico (p10/p50/p90), split temporal, guarda `ModelArtifact` |
-| `ml_predict_consumption` | Genera pronóstico de la próxima hora para todos los hogares activos |
-| `ml_train_anomaly_model` | Entrena Isolation Forest sobre residuales de presión/flujo/calidad |
-| `ml_run_anomaly_detection` | Corre el detector sobre los datos recientes y registra `AnomalyEvent` |
-| `ml_run_shortage_prediction` | Monte Carlo de balance de masa + first-passage-time por zona. Flags: `--zone-id --horizon-hours --n-paths` |
-| `ml_setup_partitioning` | (Opcional, solo Postgres) registra la tabla de lecturas en pg_partman |
+| `ml_run_full_pipeline` | Lo mismo que el botón Realizar predicciones, desde la consola |
+| `ml_run_monitor` | Una pasada del monitor de fugas (`--loop` para repetir) |
+| `ml_train_consumption_model` / `ml_train_anomaly_model` | Fuerzan el entrenamiento de cada modelo |
+| `ml_predict_consumption` | Pronóstico de la próxima hora por vivienda |
+| `ml_run_shortage_prediction` | Predicción de desabasto. Flags: `--zone-id --horizon-hours --n-paths` |
+| `ml_run_anomaly_detection` | Registra `AnomalyEvent` con el Isolation Forest |
+| `ml_seed_demo_readings` | Escribe en Supabase lecturas demo realistas para las viviendas de `--viviendas 9,10,...` (`--dry-run` para ver antes) |
+| `ml_purge_synthetic` | Limpia de una base antigua los hogares sintéticos y los modelos entrenados con ellos |
 
-## Dashboard (solo admin)
+## API REST (JWT de la app o sesión web, solo admin)
 
-- Web: `/admin/prediccion/` y `/admin/prediccion/zona/<id>/` (requiere sesión
-  con `rol_id == 2`; usuarios normales son redirigidos al dashboard normal).
-- API REST versionada (JWT o sesión, ambas admin-only):
-  - `GET /v1/ml/homes/{id}/consumption-forecast/`
-  - `GET /v1/ml/zones/{id}/tank-trajectory/`
-  - `GET /v1/ml/zones/{id}/shortage-prediction/` (`shortage_prediction: null` si no hay riesgo en el horizonte)
-  - `GET /v1/ml/homes/{id}/anomalies/` y `GET /v1/ml/zones/{id}/anomalies/`
-  - `GET /v1/ml/zones/{id}/current-status/`
-  - `GET /v1/ml/zones/summary/` (agregado multi-zona para dashboards)
+- `POST /v1/ml/predictions/run/` — lanza la ejecución y devuelve el job (`job_id`, `status`, `progress`, `step`)
+- `GET /v1/ml/predictions/jobs/{id}/` — progreso y, al terminar, el resultado
+- `GET /v1/ml/predictions/status/` — última ejecución manual y estado del monitor
+- `GET /v1/ml/zones/summary/` — un tanque con su vivienda por fila
+- `GET /v1/ml/zones/{id}/current-status/`, `tank-trajectory/`, `shortage-prediction/`, `consumption-forecast/`, `anomalies/`
+- `GET /v1/ml/homes/{id}/consumption-forecast/`, `anomalies/`
+- `GET /v1/ml/leaks/` — última predicción de fuga por vivienda
+- `GET /v1/ml/leaks/alerts/` — avisos de fuga (`?solo_no_leidas=1`, `?desde_id=N`)
+- `POST /v1/ml/leaks/alerts/read/` — `{"ids": [...]}` o `{"todas": true}`
 
-## Arquitectura: por qué es agnóstica a real-vs-sintético
+## Pruebas
 
-`Home` y `Zone` tienen un campo `source` (`synthetic` | `real`) y un
-`source_ref_*_id` opcional que apunta a las tablas reales (`vivienda`,
-`tanque`) del sistema principal. Todo lo demás — ingestión (`SensorReading`),
-features (`ml_engine/features/build_features.py`), el modelo, la simulación
-de tanque y la API — no distinguen el origen: leen/escriben exactamente igual
-sin importar si los datos vinieron del generador o de un ESP32 real.
+```bash
+python manage.py test ml_engine
+```
 
-### Cómo migrar un hogar sintético a un dispositivo real (Fase 2/3)
+Usan un Supabase simulado en memoria; no tocan la base real.
 
-1. Crear un `Home` con `source='real'` y `source_ref_vivienda_id=<id_vivienda real>`.
-2. Apuntar la ingesta real (hoy vía MQTT + `App/mqtt_service.py`) a insertar
-   en `ml_engine.SensorReading` con `home=<ese Home>` en vez de (o además de)
-   la tabla `lectura` de producción — un pequeño adaptador de ingesta, sin
-   tocar features/modelo/simulación/API.
-3. Marcar el `Home` sintético equivalente como `activo=False` (se conserva su
-   historial para no perder continuidad de entrenamiento) o borrarlo si ya no
-   se necesita.
-4. Repetir por hogar a medida que se despliegue hardware — nunca hace falta
-   tocar `ml_engine/features`, `ml_engine/forecasting`, `ml_engine/shortage`
-   ni `ml_engine/anomaly`.
+## Limitaciones conocidas
 
-## Limitaciones conocidas de la Fase 1 (documentadas, no ocultas)
-
-- **Horizonte del modelo de consumo**: el LightGBM predice un solo paso
-  (t+1h). La predicción de desabasto a 72h extiende ese pronóstico usando el
-  perfil histórico por hora-del-día de cada hogar, escalado por la razón
-  p10/p50/p90 calibrada del último pronóstico — es una aproximación razonable
-  para validar el pipeline end-to-end, no un modelo multi-horizonte nativo.
-  Upgrade natural: recursive forecasting real o un modelo directo
-  multi-horizonte (LSTM/TFT, ver Sección 5 "upgrade path" del spec original).
-- **Resolución temporal**: agregados horarios (no sub-hora). El simulador de
-  eventos sí modela ráfagas realistas dentro de cada hora (suma de eventos
-  discretos), pero no persiste la traza a nivel de minuto.
-- **SHAP** es opcional (`shap` puede fallar de instalar en algunos entornos);
-  si no está disponible, `explanation` queda vacío en vez de romper la API.
-- Sin notificaciones push (fuera de alcance explícito de esta fase).
+- El modelo de consumo predice una hora; el horizonte de 72 h extiende ese pronóstico con el perfil histórico
+  por hora del día de cada vivienda.
+- Los agregados son horarios: una fuga tarda varias horas de flujo sostenido en superar el umbral.
+- Con riesgo bajo no se informa de horas hasta el desabasto: saldrían de unas pocas trayectorias extremas.
+- El servidor se asume en un solo proceso (hilo del monitor y ejecución de predicciones).
+- SHAP es opcional; si falla, `explanation` queda vacío.

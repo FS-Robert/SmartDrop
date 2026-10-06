@@ -1,6 +1,6 @@
 from django.urls import path
 
-from .views_auth import MobileLoginView, MobileMeView, MobileRegisterView
+from .views_auth import MobileLoginView, MobileMeView, MobileRefreshView, MobileRegisterView
 from .views_mobile_data import (
     MobileEstadoAguaView,
     MobileGraficasView,
@@ -27,6 +27,7 @@ urlpatterns = [
     path('auth/registro/', MobileRegisterView.as_view(), name='mobile_register'),
     path('auth/login/', MobileLoginView.as_view(), name='mobile_login'),
     path('auth/me/', MobileMeView.as_view(), name='mobile_me'),
+    path('auth/refresh/', MobileRefreshView.as_view(), name='mobile_refresh'),
     path('auth/mis-viviendas/', MobileViviendasView.as_view(), name='mobile_viviendas'),
     path('auth/vincular-vivienda/', MobileVincularViviendaView.as_view(), name='mobile_vincular_vivienda'),
     path('auth/estado-agua/', MobileEstadoAguaView.as_view(), name='mobile_estado_agua'),

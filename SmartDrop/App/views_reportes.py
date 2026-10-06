@@ -55,6 +55,14 @@ def _es_admin(user):
     return getattr(user, 'rol_id', None) == 2
 
 
+def _alertas_visibles(alertas, es_admin):
+    """Los avisos de fuga del motor de predicción llevan nombre, teléfono y dirección del titular:
+    solo los ve el administrador."""
+    if es_admin:
+        return alertas
+    return [a for a in alertas if (a.get('datos_adicionales') or {}).get('origen') != 'ml_engine']
+
+
 def _supabase_id(request):
     return getattr(request.user, 'supabase_id', None) or request.user.id_usuario
 
@@ -605,6 +613,7 @@ def alertas_historial(request):
         alertas = []
         messages.error(request, 'No se pudo cargar el historial de alertas.')
 
+    alertas = _alertas_visibles(alertas, es_admin)
     for alerta in alertas:
         alerta['icon'] = _alerta_icon(alerta.get('tipo_alerta'))
 
@@ -669,8 +678,8 @@ def interrupciones_y_predicciones(user):
             reportes, alertas, predicciones = run_parallel(
                 lambda: supabase_client.select('reporte', '*', params_reportes),
                 lambda: supabase_client.select(
-                    'alerta', 'id_alerta,tipo_alerta,prioridad,mensaje,estado_confirmacion,fecha_creacion',
-                    {'order': 'fecha_creacion.desc', 'limit': '5'},
+                    'alerta', 'id_alerta,tipo_alerta,prioridad,mensaje,estado_confirmacion,fecha_creacion,datos_adicionales',
+                    {'order': 'fecha_creacion.desc', 'limit': '20'},
                 ),
                 lambda: supabase_client.select(
                     'prediccion_desabasto',
@@ -684,6 +693,7 @@ def interrupciones_y_predicciones(user):
         for reporte in reportes:
             reporte['tipo_label'] = _tipo_label(reporte.get('tipo_problema'))
             reporte['estado_label'] = ESTADO_LABEL.get(reporte.get('estado'), reporte.get('estado'))
+        alertas = _alertas_visibles(alertas, es_admin)[:5]
         for alerta in alertas:
             alerta['icon'] = _alerta_icon(alerta.get('tipo_alerta'))
 

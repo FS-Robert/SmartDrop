@@ -27,8 +27,15 @@ class ShortagePredictionSerializer(serializers.ModelSerializer):
         fields = [
             'generated_at', 'median_hours_to_shortage', 'p10_hours_to_shortage',
             'p90_hours_to_shortage', 'probabilidad_desabasto_horizonte',
-            'horizonte_horas', 'nivel_riesgo',
+            'horizonte_horas', 'nivel_riesgo', 'details',
         ]
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if instance.nivel_riesgo == 'bajo':
+            # Con riesgo bajo la mediana sale de pocas trayectorias extremas: no es una autonomía real.
+            data['median_hours_to_shortage'] = data['p10_hours_to_shortage'] = data['p90_hours_to_shortage'] = None
+        return data
 
 
 class AnomalyEventSerializer(serializers.ModelSerializer):
@@ -59,3 +66,11 @@ class ZoneSummarySerializer(serializers.Serializer):
     consumo_total_lph = serializers.FloatField()
     nivel_riesgo = serializers.CharField()
     anomalias_activas_24h = serializers.IntegerField()
+    nic = serializers.CharField(required=False, allow_blank=True)
+    zona = serializers.CharField(required=False, allow_blank=True)
+    direccion = serializers.CharField(required=False, allow_blank=True)
+    calidad_datos = serializers.CharField(required=False, allow_blank=True)
+    probabilidad_desabasto = serializers.FloatField(required=False, allow_null=True)
+    horas_hasta_desabasto = serializers.FloatField(required=False, allow_null=True)
+    prediccion_generada = serializers.DateTimeField(required=False, allow_null=True)
+    probabilidad_fuga = serializers.FloatField(required=False, allow_null=True)

@@ -9,7 +9,7 @@
    <link rel="preconnect" href="https://fonts.googleapis.com"/>
    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet"/>
-  <link rel="stylesheet" href="{% static 'App/css/dashboard.css' %}?v=20261003-reportes"/>
+  <link rel="stylesheet" href="{% static 'App/css/dashboard.css' %}?v=20261006-prediccion"/>
   {% block extra_css %}{% endblock %}
   <script>
     (function () {
@@ -41,7 +41,14 @@
           <button type="submit" title="Buscar" aria-label="Buscar"><i class="ti ti-arrow-right"></i></button>
         </form>
       {% endif %}
-      <i class="ti ti-bell" style="font-size:20px;"></i>
+      {% if user.is_authenticated and user.rol_id == 2 %}
+        <a href="{% url 'ml_engine:leaks' %}" class="leak-bell" id="leak-bell" title="Alertas de fuga" aria-label="Alertas de fuga">
+          <i class="ti ti-bell" style="font-size:20px;"></i>
+          <span class="leak-bell-badge" id="leak-bell-badge" hidden>0</span>
+        </a>
+      {% else %}
+        <i class="ti ti-bell" style="font-size:20px;"></i>
+      {% endif %}
       {% if user.is_authenticated %}
         {% if user.rol_id != 2 %}
           <a href="{% url 'usuario' %}" class="avatar" title="Mi perfil">{{ user.get_short_name|default:'U' }}</a>
@@ -71,6 +78,9 @@
         </a>
         <a href="{% url 'ml_engine:dashboard' %}" class="nav-item {% block nav_ml %}{% endblock %}">
           <i class="ti ti-brain"></i> Predicción Suministro
+        </a>
+        <a href="{% url 'ml_engine:leaks' %}" class="nav-item {% block nav_ml_fugas %}{% endblock %}">
+          <i class="ti ti-alert-triangle"></i> Predicción de fugas
         </a>
         <a href="{% url 'admin_reportes' %}" class="nav-item {% block nav_admin_reportes %}{% endblock %}">
           <i class="ti ti-alert-triangle"></i> Problemas reportados
@@ -234,6 +244,9 @@
 
   {% if user.is_authenticated %}
     <script src="{% static 'App/js/sensor_realtime.js' %}"></script>
+  {% endif %}
+  {% if user.is_authenticated and user.rol_id == 2 %}
+    <script src="{% static 'App/js/admin_leak_alerts.js' %}" data-alerts-url="{% url 'ml_engine:leak_alerts' %}" data-leaks-url="{% url 'ml_engine:leaks' %}"></script>
   {% endif %}
   {% block extra_js %}{% endblock %}
 </body>

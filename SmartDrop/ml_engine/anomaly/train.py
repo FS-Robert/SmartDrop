@@ -27,7 +27,7 @@ def train_anomaly_model(home_ids: list[int] | None = None, contamination: float 
     if frame.empty or len(frame) < 200:
         raise ValueError(
             'No hay suficiente historial para entrenar el detector de anomalías. '
-            'Corre primero `python manage.py ml_generate_synthetic_data`.'
+            'Sincroniza primero las lecturas reales de Supabase (botón Realizar predicciones).'
         )
 
     x = frame[RESIDUAL_COLUMNS]

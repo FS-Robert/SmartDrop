@@ -18,6 +18,7 @@
     <div>
       <h2 style="margin:0">{{ sensor.tipo_sensor|title }}</h2>
       <div style="color:#6f6f7a">{{ sensor.modelo|default:'—' }} · {{ sensor.unidad|default:sensor.unidad_medida|default:'' }}</div>
+      <div style="color:#6f6f7a;font-size:13px">Promedio de las lecturas de todas las viviendas</div>
     </div>
     <div style="text-align:right">
       <a href="{% url 'admin_panel' %}" class="btn" style="background:#eee;padding:8px 12px;border-radius:8px;color:#333;text-decoration:none;">Volver</a>
@@ -130,25 +131,14 @@
       });
       compareSelect.addEventListener('change', () => loadRange('1d'));
 
+      let reloadTimer = null;
       window.addEventListener('smartdrop:sensor-reading', function (event) {
         const reading = event.detail;
         if (String(reading.id_sensor) !== String(sensorId)) return;
 
-        const timestamp = reading.fecha_registro || new Date().toISOString();
-        const date = new Date(timestamp);
-        const now = Date.now();
-        const age = now - date.getTime();
-        const limits = { '1h': 3600000, '1d': 86400000, '1w': 604800000, '1m': 2592000000 };
-        if (Number.isFinite(age) && age > (limits[currentRange] || limits['1d'])) return;
-
-        chart.data.labels.push(formatShort([timestamp])[0]);
-        chart.data.datasets[0].data.push(reading.valor);
-        if (chart.data.labels.length > 200) {
-          chart.data.labels.shift();
-          chart.data.datasets[0].data.shift();
-        }
-        chart.update('none');
-        if (pointsInfo) pointsInfo.textContent = `Mostrando ${chart.data.datasets[0].data.length} puntos`;
+        // La gráfica muestra promedios por intervalo: se recarga el rango como mucho una vez por minuto.
+        if (reloadTimer) return;
+        reloadTimer = setTimeout(() => { reloadTimer = null; loadRange(currentRange); }, 60000);
       });
 
       // load default range

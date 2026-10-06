@@ -3,6 +3,7 @@ from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .. import supabase_client
@@ -76,3 +77,18 @@ class MobileMeView(APIView):
             'correo': request.user.correo,
             'id_rol': request.user.rol_id,
         })
+
+class MobileRefreshView(APIView):
+    """Renueva el token de acceso con el token de renovación (la app lo usa al recibir 401)."""
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        token = str(request.data.get('refresh', '')).strip()
+        if not token:
+            return Response({'error': 'Falta el token de renovación.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            refresh = RefreshToken(token)
+        except TokenError:
+            return Response({'error': 'Token de renovación inválido o vencido.'}, status=status.HTTP_401_UNAUTHORIZED)
+        return Response({'access': str(refresh.access_token)})

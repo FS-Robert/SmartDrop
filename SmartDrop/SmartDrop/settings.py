@@ -122,9 +122,8 @@ DATABASES = {
     }
 }
 
-# Alias de DB dedicado para ml_engine (series temporales sintéticas/reales).
-# Por defecto usa el mismo SQLite (permite generar datos y entrenar 100%
-# local, sin infraestructura extra). Para pasar a Postgres/Supabase con
+# Alias de DB dedicado para ml_engine: copia local de las lecturas de Supabase y resultados del ML.
+# Por defecto es un SQLite propio (ml_timeseries.sqlite3), sin infraestructura extra. Para pasar a Postgres/Supabase con
 # pg_partman, define ML_TIMESERIES_DB_HOST (y el resto de ML_TIMESERIES_DB_*)
 # en el .env — no hace falta tocar código, ver ml_engine/routers.py.
 _ml_db_host = os.environ.get('ML_TIMESERIES_DB_HOST', '').strip()
@@ -141,7 +140,15 @@ else:
     DATABASES['timeseries'] = {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'ml_timeseries.sqlite3',
+        'OPTIONS': {'timeout': 30},
     }
+
+# Monitor automático de fugas (ml_engine/monitor.py): revisa cada N minutos y avisa a los admins.
+ML_MONITOR_ENABLED = os.environ.get('ML_MONITOR_ENABLED', '1') not in ('0', 'false', 'False')
+ML_MONITOR_INTERVAL_MINUTES = float(os.environ.get('ML_MONITOR_INTERVAL_MINUTES', '10'))
+ML_MONITOR_START_DELAY_SECONDS = float(os.environ.get('ML_MONITOR_START_DELAY_SECONDS', '45'))
+ML_LEAK_ALERT_THRESHOLD = float(os.environ.get('ML_LEAK_ALERT_THRESHOLD', '0.6'))
+ML_LEAK_ALERT_COOLDOWN_HOURS = float(os.environ.get('ML_LEAK_ALERT_COOLDOWN_HOURS', '12'))
 
 DATABASE_ROUTERS = ['ml_engine.routers.MlEngineRouter']
 
@@ -224,5 +231,5 @@ REST_FRAMEWORK = {
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=30),
 }
