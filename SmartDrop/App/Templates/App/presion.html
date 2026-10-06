@@ -37,8 +37,8 @@
               style="transition: stroke-dasharray 1s ease;"/>
         <!-- Marcas -->
         <text x="22"  y="162" font-size="11" fill="#aaa" font-weight="700" font-family="Inter">0</text>
-        <text x="90"  y="58"  font-size="11" fill="#aaa" font-weight="700" font-family="Inter">250</text>
-        <text x="163" y="162" font-size="11" fill="#aaa" font-weight="700" font-family="Inter">500</text>
+        <text x="90"  y="58"  font-size="11" fill="#aaa" font-weight="700" font-family="Inter">2.5</text>
+        <text x="163" y="162" font-size="11" fill="#aaa" font-weight="700" font-family="Inter">5</text>
         <!-- Icono central -->
         <text x="100" y="130" text-anchor="middle" font-size="40" fill="#7c3aed">💧</text>
       </svg>
@@ -56,7 +56,7 @@
 
   <div class="presion-range-block card">
         <div class="presion-range-label">Rango de referencia</div>
-        <div class="presion-bar-labels"><span>0 kPa (Baja)</span><span>500 kPa (Alta)</span></div>
+        <div class="presion-bar-labels"><span>0 kPa (Baja)</span><span>5 kPa (Alta)</span></div>
         <div class="presion-bar-wrap">
           <div class="presion-bar"></div>
           <div id="pressure-range-needle" class="presion-bar-needle" style="left: {{ presion.needle_pos }}%;"></div>
@@ -67,12 +67,12 @@
           <div>
             <p class="pressure-details">Mínimo normal</p>
           </div>
-          <span id="pressure-status-badge" class="pressure-badge">50 kPa</span>
+          <span id="pressure-status-badge" class="pressure-badge">0.5 kPa</span>
         </div>
         
         <div class="detail-row">
           <p class="pressure-details">Máximo normal</p>
-          <span id="pressure-status-badge" class="pressure-badge">350 kPa</span>
+          <span id="pressure-status-badge" class="pressure-badge">3.5 kPa</span>
         </div>
     </div>
 
@@ -140,7 +140,7 @@
 
     <div class="pressure-info card">
       <div class="presion-card-title">Información</div>
-      <div class="presion-info-description">La presión del agua se mide en kPa (kilopascales). Una presión entre 50 y 350 kPa se considera normal para uso doméstico. 
+      <div class="presion-info-description">La presión del agua se mide en kPa (kilopascales). Una presión entre 0.5 y 3.5 kPa se considera normal para uso doméstico. 
       Valores fuera de este rango pueden indicar problemas en el suministro o en la red de distribución.</div>
     </div>
 
@@ -166,10 +166,10 @@
 
     document.getElementById('pressure-gauge-progress').setAttribute('stroke-dasharray', `${dash} 251`);
     document.getElementById('pressure-range-needle').style.left = `${percentage}%`;
-    document.getElementById('pressure-gauge-value').textContent = (value * 100).toFixed(1);
+    document.getElementById('pressure-gauge-value').textContent = value.toFixed(2);
 
     const currentBadge = document.getElementById('pressure-current-badge');
-    currentBadge.textContent = `${status}: ${(value * 100).toFixed(1)} kPa`;
+    currentBadge.textContent = `${status}: ${value.toFixed(2)} kPa`;
     currentBadge.className = `badge ${badgeClass} pressure-badge`;
 
     const statusBadge = document.getElementById('pressure-status-badge');

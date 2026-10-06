@@ -19,13 +19,17 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from .forms import LoginForm, UsuarioProfileForm, UsuarioRegisterForm
+from .forms import LoginForm, UsuarioProfileForm, UsuarioRegisterForm, VincularViviendaForm
 from . import supabase_client
 from .models import Usuario
 from . import views_reportes
 from .mqtt_service import MqttError, publish_command
 from .queries import (
     NO_DATA,
+    LinkViviendaError,
+    consumption_date,
+    consumption_on,
+    link_vivienda,
     owned_consumption,
     owned_data,
     owner_id,
@@ -33,6 +37,7 @@ from .queries import (
     safe_float,
     sensors,
     user_viviendas,
+    with_flow_consumption,
 )
 from .search_sections import matching_sections
 
@@ -274,6 +279,36 @@ def _latest_readings_by_type(lecturas):
     return latest
 
 
+RECENT_READINGS_WINDOW = 10
+
+
+def _averaged_readings_by_type(lecturas, window=RECENT_READINGS_WINDOW):
+    """Última lectura de cada tipo con `valor` reemplazado por el promedio de sus
+    `window` lecturas más recientes (mismo sensor), para que un 0 aislado no domine.
+
+    `lecturas` viene ordenada de la más reciente a la más antigua. Cada resultado
+    incluye `recientes` con los valores usados (más reciente primero).
+    """
+    averaged = {}
+    for tipo, latest in _latest_readings_by_type(lecturas).items():
+        sensor_id = str(latest.get('id_sensor'))
+        values = []
+        for lectura in lecturas:
+            if lectura.get('tipo_sensor') != tipo or str(lectura.get('id_sensor')) != sensor_id:
+                continue
+            if lectura.get('valor') is None:
+                continue
+            values.append(safe_float(lectura.get('valor')))
+            if len(values) == window:
+                break
+        reading = dict(latest)
+        if values:
+            reading['valor'] = round(sum(values) / len(values), 2)
+        reading['recientes'] = values
+        averaged[tipo] = reading
+    return averaged
+
+
 def _find_reading(latest, *names):
     for tipo, lectura in latest.items():
         if any(name in tipo for name in names):
@@ -305,12 +340,6 @@ def _friendly_quality_message(tds_value):
 
 
 _PRESSURE_LABELS = {'normal': 'Estable', 'baja': 'Baja', 'alta': 'Alta', 'muy_alta': 'Muy alta'}
-_KPA_PER_BAR = 100
-
-
-def _bar_to_kpa(value):
-    """Convierte una lectura de presión de bar (unidad del sensor) a kPa."""
-    return round(safe_float(value) * _KPA_PER_BAR, 1)
 
 
 def _friendly_pressure_message(pressure_value):
@@ -447,7 +476,7 @@ def dashboard(request):
         data = _owned_data_or_empty(request.user, consumption=True)
         valve_status = valve_future.result()
     viviendas, lecturas, consumption_rows = data.viviendas, data.lecturas, data.consumo
-    latest = _latest_readings_by_type(lecturas)
+    latest = _averaged_readings_by_type(lecturas)
     pressure = _find_reading(latest, 'presion', 'pressure')
     quality = _find_reading(latest, 'tds', 'calidad', 'ph')
     level = _find_reading(latest, 'nivel', 'level')
@@ -456,9 +485,8 @@ def dashboard(request):
     tds_value = safe_float(quality.get('valor')) if quality else None
     quality_state, quality_badge, _ = _quality_status(tds_value)
     tank_liters, level_percentage, _ = _tank_summary(level, data.sensores, data.tanques)
-    consumption = safe_float(
-        consumption_rows[0].get('consumo_total') or consumption_rows[0].get('consumo_promedio')
-    ) if consumption_rows else 0
+    today = timezone.localdate()
+    consumption = consumption_on(with_flow_consumption(viviendas, consumption_rows, today), today)
 
     # Obtener mensajes amigables
     pressure_value = safe_float(pressure.get('valor')) if pressure else None
@@ -474,7 +502,7 @@ def dashboard(request):
             'estado': pressure_label,
             'badge': pressure_label,
             'badge_class': _status_badge_class(pressure_status),
-            'valor_exacto': f"{_bar_to_kpa(pressure_value)} kPa" if pressure_value is not None else 'Sin lectura',
+            'valor_exacto': f"{pressure_value} kPa" if pressure_value is not None else 'Sin lectura',
             'mensaje_amigable': pressure_msg,
             'estado_amigable': pressure_status,
         },
@@ -495,12 +523,13 @@ def dashboard(request):
         'valvula': valve_status,
         'stats': {
             'uptime':        'Disponible' if lecturas else 'Sin datos',
-            'presion_exacta':f"{_bar_to_kpa(pressure_value)} kPa" if pressure_value is not None else 'Sin lectura',
+            'presion_exacta':f"{pressure_value} kPa" if pressure_value is not None else 'Sin lectura',
             'ph':            f"{safe_float(ph.get('valor')) if ph else 0} pH",
             'temperatura':   f"{safe_float(temperature.get('valor')) if temperature else 0}°C",
         },
         'viviendas': viviendas,
         'realtime_readings': list(latest.values()),
+        'recent_window': RECENT_READINGS_WINDOW,
         'comunidad': views_reportes.interrupciones_y_predicciones(request.user),
         'ultima_actualizacion': 'hace unos segundos',
     }
@@ -684,15 +713,15 @@ def presion(request):
             'estado':     _PRESSURE_LABELS.get(pressure_status, 'Sin datos'),
             'badge_class': _status_badge_class(pressure_status),
             'valvula':    'Sin datos',
-            'valor':       _bar_to_kpa(valor),
+            'valor':       valor,
             'gauge_dash':  gauge_dash,
             'needle_pos':  int(pct),
             'nota':       'Valor recibido desde el sensor de presión de tu vivienda.' if pressure_rows else 'No hay lecturas de presión para tu vivienda.',
             'mensaje':    pressure_message,
             'actualizado':'Actualizado ahora' if pressure_rows else 'Sin lectura',
-            'min_dia':    _bar_to_kpa(min((safe_float(row.get('valor')) for row in pressure_rows), default=0)),
-            'max_dia':    _bar_to_kpa(max((safe_float(row.get('valor')) for row in pressure_rows), default=0)),
-            'prom_dia':   _bar_to_kpa(sum(safe_float(row.get('valor')) for row in pressure_rows) / len(pressure_rows)) if pressure_rows else 0,
+            'min_dia':    min((safe_float(row.get('valor')) for row in pressure_rows), default=0),
+            'max_dia':    max((safe_float(row.get('valor')) for row in pressure_rows), default=0),
+            'prom_dia':   round(sum(safe_float(row.get('valor')) for row in pressure_rows) / len(pressure_rows), 2) if pressure_rows else 0,
         },
         'viviendas': viviendas,
         'ultima_actualizacion': 'hace unos segundos',
@@ -701,10 +730,7 @@ def presion(request):
 
 
 def _consumption_date(raw_date):
-    row_date = datetime.fromisoformat(str(raw_date).replace('Z', '+00:00'))
-    if row_date.tzinfo:
-        row_date = timezone.localtime(row_date)
-    return row_date.date()
+    return consumption_date(raw_date)
 
 
 def _record_alert_once(cache_key, destination_user_id, alert, ttl=3600):
@@ -725,12 +751,6 @@ def _record_alert_once(cache_key, destination_user_id, alert, ttl=3600):
 
 @login_required(login_url='login')
 def consumo(request):
-    try:
-        viviendas, rows = owned_consumption(request.user)
-    except Exception:
-        # No mostrar datos de otra vivienda si la consulta no está disponible.
-        viviendas, rows = [], []
-
     today = timezone.localdate()
     selected_month = today.replace(day=1)
     requested_month = request.GET.get('mes')
@@ -739,6 +759,12 @@ def consumo(request):
             selected_month = datetime.strptime(requested_month, '%Y-%m').date().replace(day=1)
         except ValueError:
             selected_month = today.replace(day=1)
+    try:
+        month_end = selected_month.replace(day=calendar.monthrange(selected_month.year, selected_month.month)[1])
+        viviendas, rows = owned_consumption(request.user, selected_month, month_end)
+    except Exception:
+        # No mostrar datos de otra vivienda si la consulta no está disponible.
+        viviendas, rows = [], []
     parsed_rows = []
     for row in rows:
         raw_date = row.get('fecha')
@@ -868,9 +894,9 @@ def retroalimentacion(request):
     viviendas = []
     retro = None
     try:
-        viviendas, consumption_rows = owned_consumption(request.user)
         current_month = timezone.localdate().replace(day=1)
         previous_month = (current_month - timedelta(days=1)).replace(day=1)
+        viviendas, consumption_rows = owned_consumption(request.user, previous_month)
         parsed_rows = []
         for row in consumption_rows:
             raw_date = row.get('fecha')
@@ -993,7 +1019,7 @@ def retroalimentacion(request):
 @login_required(login_url='login')
 def recomendaciones(request):
     try:
-        viviendas, consumption_rows = owned_consumption(request.user)
+        viviendas, consumption_rows = owned_consumption(request.user, timezone.localdate().replace(day=1))
     except Exception:
         viviendas, consumption_rows = [], []
     total_consumption = round(sum(safe_float(row.get('consumo_total') or row.get('consumo_promedio')) for row in consumption_rows), 2)
@@ -1606,7 +1632,39 @@ def api_lectura(request):
 
 
 def _home_for(user):
-    return redirect('admin_panel' if getattr(user, 'rol_id', None) == 2 else 'dashboard')
+    if getattr(user, 'rol_id', None) == 2:
+        return redirect('admin_panel')
+    try:
+        has_vivienda = bool(user_viviendas(user))
+    except Exception:
+        logger.warning('No se pudo verificar la vivienda del usuario %s', user.pk, exc_info=True)
+        has_vivienda = False
+    return redirect('dashboard' if has_vivienda else 'vincular_vivienda')
+
+
+@login_required(login_url='login')
+def vincular_vivienda(request):
+    if _admin_only(request):
+        return redirect('admin_panel')
+
+    form = VincularViviendaForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        try:
+            link_vivienda(
+                request.user,
+                form.cleaned_data['numero_cuenta'],
+                form.cleaned_data['nombre_completo_titular'],
+            )
+        except LinkViviendaError as exc:
+            form.add_error(None, exc.message)
+        except supabase_client.SupabaseError as exc:
+            logger.error('No se pudo vincular la vivienda del usuario %s: %s', request.user.pk, exc)
+            form.add_error(None, 'No se pudo vincular la vivienda en este momento. Inténtalo de nuevo.')
+        else:
+            messages.success(request, 'Vivienda vinculada exitosamente.')
+            return redirect('dashboard')
+
+    return render(request, 'App/vincular_vivienda.html', {'form': form})
 
 
 def login_view(request):

@@ -1,6 +1,7 @@
 import logging
 from datetime import datetime, timedelta
 
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -135,31 +136,30 @@ class MobileVincularViviendaView(APIView):
     permission_classes = [IsAuthenticatedUser]
 
     def post(self, request):
-        account = str(request.data.get('numero_cuenta', '')).strip()
-        holder = str(request.data.get('nombre_completo_titular', '')).strip()
-        if not account or not holder:
-            return Response({'error': 'Completa todos los campos.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        rows = supabase_client.select('vivienda', '*', {'nic': f'eq.{account}', 'limit': '1'})
-        if not rows:
-            return Response({'error': 'No encontramos ese número de cuenta.'}, status=status.HTTP_404_NOT_FOUND)
-        vivienda = rows[0]
-        if str(vivienda.get('nombre_completo_titular', '')).strip().lower() != holder.lower():
-            return Response({'error': 'El nombre no coincide con el titular.'}, status=status.HTTP_400_BAD_REQUEST)
-        if vivienda.get('id_usuario_propietario') not in (None, request.user.id_usuario):
-            return Response({'error': 'Esta vivienda ya está vinculada.'}, status=status.HTTP_409_CONFLICT)
-
-        supabase_client.update(
-            'vivienda',
-            {'id_usuario_propietario': request.user.id_usuario},
-            {'id_vivienda': f"eq.{vivienda['id_vivienda']}"},
-        )
-        queries.invalidate_user_viviendas(request.user)
+        try:
+            vivienda = queries.link_vivienda(
+                request.user,
+                request.data.get('numero_cuenta', ''),
+                request.data.get('nombre_completo_titular', ''),
+            )
+        except queries.LinkViviendaError as exc:
+            return Response({'error': exc.message}, status=exc.status)
         return Response({'mensaje': 'Vivienda vinculada exitosamente.', 'vivienda': vivienda})
 
 
 class MobileEstadoAguaView(APIView):
     permission_classes = [IsAuthenticatedUser]
+
+    @staticmethod
+    def _liters_today(request):
+        if getattr(request.user, 'rol_id', None) == 2:
+            return 0
+        today = timezone.localdate()
+        try:
+            _, rows = queries.owned_consumption(request.user, today, today)
+        except Exception:
+            return 0
+        return queries.consumption_on(rows, today)
 
     def get(self, request):
         viviendas, sensors, readings = _visible_data(request)
@@ -223,7 +223,7 @@ class MobileEstadoAguaView(APIView):
             'presion': pressure,
             'calidad': quality,
             'nivel': level,
-            'consumo': {'litros_hoy': 0},
+            'consumo': {'litros_hoy': self._liters_today(request)},
         })
 
 

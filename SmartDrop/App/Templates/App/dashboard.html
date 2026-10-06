@@ -16,6 +16,12 @@
   <h2 class="page-title">ESTADO DEL AGUA</h2>
 </div>
 
+{% if messages %}
+  {% for message in messages %}
+    <div class="profile-message msg-{{ message.tags }}" role="status">{{ message }}</div>
+  {% endfor %}
+{% endif %}
+
 <div class="dashboard-overview-cards">
   <div class="overview-card housing-overview">
     <i class="ti ti-link overview-card-icon" aria-hidden="true"></i>
@@ -25,7 +31,7 @@
       <span>{{ viviendas.0.nic }}</span>
       {% else %}
       <strong>Sin vivienda vinculada</strong>
-      <button type="button" class="overview-action">Vincular vivienda</button>
+      <a href="{% url 'vincular_vivienda' %}" class="overview-action">Vincular vivienda</a>
       {% endif %}
     </div>
   </div>
@@ -190,7 +196,7 @@
 
 <div id="dashboard-realtime-sensors" hidden>
   {% for reading in realtime_readings %}
-    <span data-sensor-id="{{ reading.id_sensor }}" data-sensor-type="{{ reading.tipo_sensor }}"></span>
+    <span data-sensor-id="{{ reading.id_sensor }}" data-sensor-type="{{ reading.tipo_sensor }}" data-recent="{{ reading.recientes|join:',' }}"></span>
   {% endfor %}
 </div>
 
@@ -251,19 +257,29 @@
 
   window.setInterval(refreshValveStatus, 10000);
 
+  const RECENT_WINDOW = {{ recent_window }};
   const realtimeSensors = {};
+  const recentValues = {};
   document.querySelectorAll('#dashboard-realtime-sensors [data-sensor-id]').forEach((element) => {
-    realtimeSensors[String(element.dataset.sensorId)] = element.dataset.sensorType || '';
+    const id = String(element.dataset.sensorId);
+    realtimeSensors[id] = element.dataset.sensorType || '';
+    recentValues[id] = (element.dataset.recent || '').split(',').filter(Boolean).map(Number);
   });
 
   window.addEventListener('smartdrop:sensor-reading', (event) => {
     const reading = event.detail;
-    const type = realtimeSensors[String(reading.id_sensor)] || '';
-    const value = Number(reading.valor);
-    if (!Number.isFinite(value)) return;
+    const sensorId = String(reading.id_sensor);
+    const type = realtimeSensors[sensorId] || '';
+    const latest = Number(reading.valor);
+    if (!Number.isFinite(latest)) return;
+
+    // Promedio de las lecturas recientes en lugar de la última lectura.
+    const recent = [latest, ...(recentValues[sensorId] || [])].slice(0, RECENT_WINDOW);
+    recentValues[sensorId] = recent;
+    const value = Math.round((recent.reduce((sum, item) => sum + item, 0) / recent.length) * 100) / 100;
 
     if (type.includes('presion') || type.includes('pressure')) {
-      document.getElementById('dashboard-pressure-exact').textContent = `${(value * 100).toFixed(1)} kPa`;
+      document.getElementById('dashboard-pressure-exact').textContent = `${value} kPa`;
       document.getElementById('dashboard-pressure-friendly').textContent =
         value >= 2 && value <= 3.5 ? 'Presión normal. Sistema funcionando correctamente.' : 'Presión fuera del rango normal.';
     } else if (type.includes('tds') || type.includes('calidad') || type.includes('ph')) {

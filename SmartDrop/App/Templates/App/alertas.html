@@ -28,9 +28,11 @@
       <option value="resuelta" {% if filtro_estado == 'resuelta' %}selected{% endif %}>Resuelta</option>
     </select>
     <button type="submit" class="btn-primary btn-filtrar"><i class="ti ti-filter"></i> Filtrar</button>
+    {% if es_admin %}
     <a class="reportes-link" href="{% url 'alertas_export' %}?estado={{ filtro_estado }}">
       <i class="ti ti-download"></i> Exportar CSV
     </a>
+    {% endif %}
   </form>
 
   {% if alertas %}

@@ -143,7 +143,8 @@ class ConsumoViewTests(TestCase):
 			response = self.client.get(reverse('consumo'))
 
 		self.assertEqual(response.status_code, 200)
-		self.assertEqual(select.call_count, 2)
+		# vivienda, consumo y la búsqueda de sensores de flujo para estimar días sin consumo registrado.
+		self.assertEqual(select.call_count, 3)
 		vivienda_call = select.call_args_list[0]
 		consumo_call = select.call_args_list[1]
 		self.assertEqual(vivienda_call.args[0], 'vivienda')
@@ -630,3 +631,176 @@ class UsuarioProfileViewTests(TestCase):
 		)
 		self.user.refresh_from_db()
 		self.assertEqual(self.user.nombre, 'Andrea')
+
+class VincularViviendaViewTests(TestCase):
+	def setUp(self):
+		self.role = Rol.objects.create(nombre_rol='user')
+		self.user = Usuario.objects.create_user(
+			email='vincular@example.com',
+			nombre='Luis',
+			apellido='Mena',
+			password='password-segura',
+			rol=self.role,
+		)
+		self.user.supabase_id = 55
+		self.user.save(update_fields=['supabase_id'])
+		self.client.force_login(self.user)
+		self.vivienda = {
+			'id_vivienda': 9,
+			'nic': 'NIC-9',
+			'nombre_completo_titular': 'Luis Mena',
+			'id_usuario_propietario': None,
+		}
+
+	def _post(self, account='NIC-9', holder='luis mena'):
+		return self.client.post(reverse('vincular_vivienda'), {
+			'numero_cuenta': account,
+			'nombre_completo_titular': holder,
+		})
+
+	@patch('App.queries.supabase_client.update')
+	@patch('App.queries.supabase_client.select')
+	def test_vincula_vivienda_con_supabase_id_del_usuario(self, select, update):
+		select.return_value = [self.vivienda]
+
+		response = self._post()
+
+		self.assertRedirects(response, reverse('dashboard'), fetch_redirect_response=False)
+		update.assert_called_once_with(
+			'vivienda',
+			{'id_usuario_propietario': 55},
+			{'id_vivienda': 'eq.9'},
+		)
+
+	@patch('App.queries.supabase_client.update')
+	@patch('App.queries.supabase_client.select')
+	def test_rechaza_cuenta_inexistente_titular_distinto_o_vivienda_ocupada(self, select, update):
+		select.return_value = []
+		self.assertContains(self._post(), 'No encontramos ese número de cuenta.')
+
+		select.return_value = [self.vivienda]
+		self.assertContains(self._post(holder='Otra Persona'), 'El nombre no coincide con el titular.')
+
+		select.return_value = [{**self.vivienda, 'id_usuario_propietario': 77}]
+		self.assertContains(self._post(), 'Esta vivienda ya está vinculada.')
+		update.assert_not_called()
+
+	def test_login_sin_vivienda_redirige_a_vincular(self):
+		with patch('App.views.user_viviendas', return_value=[]):
+			self.assertRedirects(
+				self.client.get(reverse('login')), reverse('vincular_vivienda'), fetch_redirect_response=False
+			)
+		with patch('App.views.user_viviendas', return_value=[{'id_vivienda': 9}]):
+			self.assertRedirects(
+				self.client.get(reverse('login')), reverse('dashboard'), fetch_redirect_response=False
+			)
+
+class DashboardAveragedReadingsTests(TestCase):
+	def test_promedia_las_lecturas_recientes_del_mismo_sensor(self):
+		from .views import _averaged_readings_by_type
+
+		lecturas = [
+			{'id_sensor': 1, 'tipo_sensor': 'presion', 'valor': 0},
+			{'id_sensor': 1, 'tipo_sensor': 'presion', 'valor': 0.3},
+			{'id_sensor': 2, 'tipo_sensor': 'tds', 'valor': 90},
+			{'id_sensor': 1, 'tipo_sensor': 'presion', 'valor': 0.3},
+			{'id_sensor': 1, 'tipo_sensor': 'presion', 'valor': 0.6},
+			{'id_sensor': 1, 'tipo_sensor': 'presion', 'valor': 9},
+		]
+
+		result = _averaged_readings_by_type(lecturas, window=4)
+
+		self.assertEqual(result['presion']['valor'], 0.3)
+		self.assertEqual(result['presion']['recientes'], [0, 0.3, 0.3, 0.6])
+		self.assertEqual(result['tds']['valor'], 90)
+
+class AlertasExportTests(TestCase):
+	def setUp(self):
+		user_role = Rol.objects.create(nombre_rol='user')
+		admin_role = Rol.objects.create(nombre_rol='admin')
+		self.user = Usuario.objects.create_user(
+			email='u@example.com', nombre='U', apellido='U', password='password-segura', rol=user_role,
+		)
+		self.admin = Usuario.objects.create_user(
+			email='a@example.com', nombre='A', apellido='A', password='password-segura', rol=admin_role,
+		)
+
+	@patch('App.views_reportes.supabase_client.select', return_value=[])
+	def test_exportar_csv_solo_para_admin(self, select):
+		self.client.force_login(self.user)
+		self.assertNotContains(self.client.get(reverse('alertas_historial')), 'Exportar CSV')
+		response = self.client.get(reverse('alertas_export'))
+		self.assertRedirects(response, reverse('alertas_historial'), fetch_redirect_response=False)
+
+		self.client.force_login(self.admin)
+		self.assertContains(self.client.get(reverse('alertas_historial')), 'Exportar CSV')
+		self.assertEqual(self.client.get(reverse('alertas_export'))['Content-Type'], 'text/csv; charset=utf-8')
+
+class FlowConsumptionTests(TestCase):
+	def setUp(self):
+		from . import queries
+		self.queries = queries
+		self.today = timezone.localdate()
+		self.viviendas = [{'id_vivienda': 1}]
+
+	def _row(self, seconds, value):
+		start = timezone.make_aware(timezone.datetime.combine(self.today, timezone.datetime.min.time()))
+		return {'id_vivienda': 1, 'id_sensor': 4, 'valor': value, 'fecha_registro': (start + timedelta(seconds=seconds)).isoformat()}
+
+	def test_integra_litros_por_minuto_y_limita_los_huecos(self):
+		rows = [self._row(300, 0), self._row(120, 6), self._row(60, 6), self._row(0, 6)]  # más reciente primero
+
+		liters = self.queries._liters_by_day(rows)
+
+		# 6 L/min durante 60 s + 60 s + 60 s (el hueco de 180 s hasta la última lectura se limita a 60 s).
+		self.assertEqual(liters, {self.today: 18.0})
+
+	def test_calcula_por_dia_y_guarda_en_cache_los_dias_pasados(self):
+		yesterday = self.today - timedelta(days=1)
+		calls = []
+
+		def fake_day(in_filter, sensor_ids, day):
+			calls.append(day)
+			return 10.0, False
+
+		with patch.object(self.queries, '_flow_sensor_ids', return_value=['4']), \
+				patch.object(self.queries, '_flow_liters_for_day', side_effect=fake_day):
+			first = self.queries.flow_consumption_by_day(self.viviendas, yesterday, self.today)
+			second = self.queries.flow_consumption_by_day(self.viviendas, yesterday, self.today)
+
+		self.assertEqual(first, {self.today: 10.0, yesterday: 10.0})
+		self.assertEqual(second, first)
+		# Ayer queda en caché; hoy solo se guarda 60 s pero sigue vigente en la segunda llamada.
+		self.assertEqual(calls, [self.today, yesterday])
+
+	def test_el_presupuesto_de_tiempo_corta_los_dias_pasados_pero_no_hoy(self):
+		since = self.today - timedelta(days=3)
+		calls = []
+
+		def fake_day(in_filter, sensor_ids, day):
+			calls.append(day)
+			return 5.0, False
+
+		with patch.object(self.queries, '_flow_sensor_ids', return_value=['4']), \
+				patch.object(self.queries, '_flow_liters_for_day', side_effect=fake_day), \
+				patch.object(self.queries, 'FLOW_TIME_BUDGET_SECONDS', -1):
+			result = self.queries.flow_consumption_by_day(self.viviendas, since, self.today)
+
+		self.assertEqual(calls, [self.today])
+		self.assertEqual(result, {self.today: 5.0})
+	def test_usa_flujo_solo_en_los_dias_sin_consumo_registrado(self):
+		recorded_day = self.today - timedelta(days=1)
+		rows = [{'id_vivienda': 1, 'fecha': f'{recorded_day.isoformat()}T10:00:00Z', 'consumo_total': 8}]
+		flow = {self.today: 25.5, recorded_day: 99}
+
+		with patch.object(self.queries, 'flow_consumption_by_day', return_value=flow):
+			merged = self.queries.with_flow_consumption(self.viviendas, rows, recorded_day)
+
+		self.assertEqual(self.queries.consumption_on(merged, self.today), 25.5)
+		self.assertEqual(self.queries.consumption_on(merged, recorded_day), 8)
+
+	def test_si_falla_el_flujo_devuelve_las_filas_originales(self):
+		rows = [{'fecha': f'{self.today.isoformat()}T10:00:00Z', 'consumo_total': 3}]
+
+		with patch.object(self.queries, 'flow_consumption_by_day', side_effect=RuntimeError('sin red')):
+			self.assertEqual(self.queries.with_flow_consumption(self.viviendas, rows, self.today), rows)

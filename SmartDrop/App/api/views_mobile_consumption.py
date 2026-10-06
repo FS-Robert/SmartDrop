@@ -36,7 +36,7 @@ class MobileConsumoView(APIView):
             return Response({'error': 'periodo inválido, usa dia, semana o mes.'}, status=400)
 
         try:
-            _, rows = owned_consumption(request.user)
+            _, rows = owned_consumption(request.user, timezone.localdate().replace(day=1))
         except Exception:
             rows = []
 

@@ -25,6 +25,7 @@ urlpatterns = [
     path('valvulas/',           views.valvulas,           name='valvulas'),
     path('valvula/<str:valvula_id>/comando/', views.valvula_comando, name='valvula_comando'),
     path('usuario/',            views.usuario,            name='usuario'),
+    path('vincular-vivienda/',  views.vincular_vivienda,  name='vincular_vivienda'),
 
     # ── Sistema de reportes de usuarios ──
     path('reportar/',           views_reportes.reportes_panel,      name='reportes_panel'),

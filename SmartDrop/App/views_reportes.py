@@ -617,7 +617,10 @@ def alertas_historial(request):
 
 @login_required(login_url='login')
 def alertas_export(request):
-    """Exporta el historial de alertas como CSV."""
+    """Exporta el historial de alertas como CSV (solo administradores)."""
+    if not _es_admin(request.user):
+        return redirect('alertas_historial')
+
     params = {'order': 'fecha_creacion.desc', 'limit': '5000'}
     if request.GET.get('estado'):
         params['estado_confirmacion'] = f"eq.{request.GET['estado']}"

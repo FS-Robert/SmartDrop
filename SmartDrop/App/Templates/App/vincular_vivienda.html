@@ -1,0 +1,48 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SmartDrop — Vincular vivienda</title>
+  <link rel="stylesheet" href="{% static 'App/fonts/tabler/tabler-icons-subset.css' %}?v=2.47"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'App/css/dashboard.css' %}"/>
+</head>
+
+<body>
+  <main class="auth-panel">
+    <div class="auth-bg" id="auth-bg" data-bg="{% static 'App/img/fondo1.jpg' %}"></div>
+    <div class="auth-card">
+      <h1>Vincula tu vivienda</h1>
+      <p>Para monitorear tu consumo necesitas vincular tu vivienda con tu número de cuenta y el nombre del titular.</p>
+      <form method="post" novalidate>
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+        <div class="form-error">{{ form.non_field_errors }}</div>
+        {% endif %}
+
+        <label for="id_numero_cuenta">Número de cuenta (NIC)</label>
+        {{ form.numero_cuenta }}
+        {{ form.numero_cuenta.errors }}
+
+        <label for="id_nombre_completo_titular">Nombre completo del titular</label>
+        {{ form.nombre_completo_titular }}
+        {{ form.nombre_completo_titular.errors }}
+
+        <button type="submit" class="btn-primary">Vincular vivienda</button>
+      </form>
+      <p class="auth-footer"><a href="{% url 'logout' %}">Cerrar sesión</a></p>
+    </div>
+  </main>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      var bg = document.getElementById('auth-bg');
+      bg.style.backgroundImage = "url('" + bg.dataset.bg + "')";
+    });
+  </script>
+</body>
+</html>

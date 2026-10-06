@@ -26,6 +26,19 @@ class UsuarioProfileForm(forms.Form):
         return self.cleaned_data['email'].strip().lower()
 
 
+class VincularViviendaForm(forms.Form):
+    numero_cuenta = forms.CharField(
+        label='Número de cuenta (NIC)',
+        max_length=64,
+        widget=forms.TextInput(attrs={'autocomplete': 'off', 'placeholder': 'Número de cuenta (NIC)'}),
+    )
+    nombre_completo_titular = forms.CharField(
+        label='Nombre completo del titular',
+        max_length=255,
+        widget=forms.TextInput(attrs={'autocomplete': 'off', 'placeholder': 'Nombre completo del titular'}),
+    )
+
+
 class UsuarioRegisterForm(forms.Form):
     email = forms.EmailField(label='Correo')
     nombre = forms.CharField(label='Nombre', max_length=255)

@@ -1065,7 +1065,7 @@ body.dark-mode .profile-info-field strong { color:var(--text); }
 .overview-card strong { color:#171717; font-size:0.95rem; font-weight:700; }
 .overview-card span { color:#555; font-size:0.78rem; }
 .overview-card-icon { color:#6b21a8; background:#f0e8ff; border-radius:50%; padding:0.25rem; font-size:0.85rem; }
-.overview-action { border:0; border-radius:5px; padding:0.25rem 0.55rem; color:#6b21a8; background:#eadcf8; font-size:0.6rem; cursor:default; }
+.overview-action { display:inline-block; border:0; border-radius:5px; padding:0.25rem 0.55rem; color:#6b21a8; background:#eadcf8; font-size:0.6rem; text-decoration:none; cursor:pointer; }
 .exact-overview .toggle-exact-label { border:0; padding:0; background:transparent; box-shadow:none; border-radius:0; font-size:0.78rem; }
 .exact-overview .toggle-text { font-size:0.95rem; color:#171717; }
 .exact-overview .toggle-checkbox { width:18px; height:18px; }
