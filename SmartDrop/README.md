@@ -327,6 +327,31 @@ Los permisos se aplican en el backend:
 - Administrador: sensores y funciones administrativas autorizadas.
 - Android no debe confiar únicamente en filtros del cliente.
 
+## Preferencias del perfil e idioma
+
+"Mi perfil" (web) y "Mi perfil" / "Configuración" (app) comparten las mismas preferencias, guardadas en el
+backend (`PreferenciasUsuario`, por `id_usuario` de Supabase): un cambio en un lado se ve en el otro.
+
+| Preferencia | Efecto |
+|---|---|
+| Alertas de nivel, Suministro, Calidad, Consumo elevado | Qué alertas se muestran en web y app y cuáles llegan como notificación push al teléfono |
+| Modo oscuro | Tema de la web y de la app |
+| Idioma español | Apagado = interfaz en inglés (web y app) |
+| Reportes semanales | Cada 7 días registra un resumen del consumo (aparece en el perfil, el historial y como aviso en la app) |
+
+Endpoints: `GET/POST /usuario/preferencias/` (web), `GET/PATCH auth/perfil/`, `GET/PATCH auth/preferencias/` y
+`GET api/notificaciones/` (app, JWT).
+
+La traducción usa un solo catálogo español→inglés, `App/i18n/en.json` (frases exactas y plantillas con huecos
+`{0}`, `{1}`…), que sirve el backend a la web (`/i18n/en.js`) y a la app (`/api/i18n/en/`); la app trae además una
+copia en `assets/i18n_en.json`. Al agregar textos nuevos a la interfaz, añade su traducción al catálogo y ejecuta:
+
+```bash
+python manage.py i18n_catalogo --app <ruta>/SmartDrop-App
+```
+
+El comando valida el catálogo (huecos iguales en ambos idiomas, sin traducciones encadenadas) y lo copia a la app.
+
 ## Tiempo real
 
 El flujo de lecturas es:

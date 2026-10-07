@@ -14,6 +14,7 @@ from .views_mobile_consumption import (
     MobileRecomendacionesView,
     MobileRetroalimentacionView,
 )
+from .views_mobile_profile import MobileNotificacionesView, MobilePerfilView, MobilePreferenciasView
 from .views_mobile_search import MobileBusquedaGlobalView
 from .views_mobile_reports import (
     MobileReporteAdjuntarView,
@@ -28,6 +29,9 @@ urlpatterns = [
     path('auth/login/', MobileLoginView.as_view(), name='mobile_login'),
     path('auth/me/', MobileMeView.as_view(), name='mobile_me'),
     path('auth/refresh/', MobileRefreshView.as_view(), name='mobile_refresh'),
+    path('auth/perfil/', MobilePerfilView.as_view(), name='mobile_perfil'),
+    path('auth/preferencias/', MobilePreferenciasView.as_view(), name='mobile_preferencias'),
+    path('api/notificaciones/', MobileNotificacionesView.as_view(), name='mobile_notificaciones'),
     path('auth/mis-viviendas/', MobileViviendasView.as_view(), name='mobile_viviendas'),
     path('auth/vincular-vivienda/', MobileVincularViviendaView.as_view(), name='mobile_vincular_vivienda'),
     path('auth/estado-agua/', MobileEstadoAguaView.as_view(), name='mobile_estado_agua'),

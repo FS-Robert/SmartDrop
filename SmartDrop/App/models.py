@@ -79,3 +79,33 @@ class Usuario(AbstractBaseUser, PermissionsMixin):
 
     def get_short_name(self):
         return self.nombre
+
+
+class PreferenciasUsuario(models.Model):
+    """Preferencias de notificaciones y de la interfaz, compartidas por la web y la app móvil.
+
+    Se guardan en el backend (no en Supabase) con el id_usuario de Supabase, que es el mismo
+    identificador que usan la sesión web y el JWT de la app.
+    """
+
+    IDIOMAS = (('es', 'Español'), ('en', 'English'))
+
+    id_usuario = models.BigIntegerField(unique=True)
+    alertas_nivel = models.BooleanField(default=True)
+    suministro = models.BooleanField(default=True)
+    calidad = models.BooleanField(default=True)
+    consumo_elevado = models.BooleanField(default=True)
+    modo_oscuro = models.BooleanField(default=False)
+    idioma = models.CharField(max_length=2, choices=IDIOMAS, default='es')
+    reportes_semanales = models.BooleanField(default=False)
+    ultimo_reporte_semanal = models.DateField(null=True, blank=True)
+    ultimo_reporte_datos = models.JSONField(null=True, blank=True)
+    actualizado = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'preferencias_usuario'
+        verbose_name = 'preferencias de usuario'
+        verbose_name_plural = 'preferencias de usuarios'
+
+    def __str__(self):
+        return f'Preferencias de {self.id_usuario}'

@@ -58,13 +58,23 @@ ADMIN_SEARCH_SECTIONS = (
 )
 
 
-def matching_sections(search_term, is_admin):
-    """Secciones cuyo título o contenido incluye `search_term` (ya en casefold)."""
+def _en(texto):
+    from . import i18n
+    return ((i18n.catalogo('en') or {}).get('frases') or {}).get(texto, texto)
+
+
+def matching_sections(search_term, is_admin, idioma='es'):
+    """Secciones cuyo título o contenido incluye `search_term` (ya en casefold), en español o en inglés.
+
+    El resultado se devuelve en el idioma del usuario para que el resaltado de la búsqueda coincida.
+    """
     if not search_term:
         return []
     sections = SEARCH_SECTIONS + ADMIN_SEARCH_SECTIONS if is_admin else SEARCH_SECTIONS
-    return [
-        {'titulo': section['titulo'], 'url': reverse(section['url']), 'contenido': section['contenido']}
-        for section in sections
-        if search_term in section['titulo'].casefold() or search_term in section['contenido'].casefold()
-    ]
+    results = []
+    for section in sections:
+        textos = (section['titulo'], section['contenido'], _en(section['titulo']), _en(section['contenido']))
+        if any(search_term in texto.casefold() for texto in textos):
+            titulo, contenido = (textos[2], textos[3]) if idioma == 'en' else (textos[0], textos[1])
+            results.append({'titulo': titulo, 'url': reverse(section['url']), 'contenido': contenido})
+    return results

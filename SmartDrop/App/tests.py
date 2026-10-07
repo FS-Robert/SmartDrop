@@ -830,3 +830,198 @@ class FlowConsumptionTests(TestCase):
 
 		with patch.object(self.queries, 'flow_consumption_by_day', side_effect=RuntimeError('sin red')):
 			self.assertEqual(self.queries.with_flow_consumption(self.viviendas, rows, self.today), rows)
+
+class PreferenciasTests(TestCase):
+	"""Preferencias del perfil: compartidas entre la web y la app, y aplicadas a las alertas."""
+
+	def setUp(self):
+		from .models import PreferenciasUsuario
+		self.Prefs = PreferenciasUsuario
+		user_role = Rol.objects.create(id_rol=3, nombre_rol='user')
+		self.user = Usuario.objects.create_user(
+			email='prefs@example.com', nombre='Ana', apellido='Prefs', password='password-segura', rol=user_role,
+		)
+		self.user.supabase_id = 77
+		self.user.save()
+
+	def test_valores_por_defecto(self):
+		from . import preferencias
+		prefs = preferencias.preferencias_de(self.user)
+		self.assertEqual(preferencias.como_dict(prefs), {
+			'alertas_nivel': True, 'suministro': True, 'calidad': True, 'consumo_elevado': True,
+			'modo_oscuro': False, 'reportes_semanales': False, 'idioma': 'es',
+		})
+
+	def test_la_web_guarda_y_valida_preferencias(self):
+		self.client.force_login(self.user)
+		url = reverse('usuario_preferencias')
+		response = self.client.post(url, data='{"alertas_nivel": false, "idioma": "en", "modo_oscuro": true}',
+									content_type='application/json')
+		self.assertEqual(response.status_code, 200)
+		prefs = self.Prefs.objects.get(id_usuario=77)
+		self.assertEqual((prefs.alertas_nivel, prefs.idioma, prefs.modo_oscuro), (False, 'en', True))
+
+		bad = self.client.post(url, data='{"idioma": "fr"}', content_type='application/json')
+		self.assertEqual(bad.status_code, 400)
+		self.assertEqual(self.Prefs.objects.get(id_usuario=77).idioma, 'en')
+
+	def test_el_tema_del_servidor_se_aplica_en_todas_las_paginas(self):
+		self.Prefs.objects.create(id_usuario=77, modo_oscuro=True)
+		self.client.force_login(self.user)
+		with patch('App.views.supabase_client.select', return_value=[]):
+			html = self.client.get(reverse('usuario')).content.decode()
+		self.assertIn("const theme = 'dark';", html)
+
+	def test_filtra_alertas_por_categoria_y_oculta_reportes_ajenos(self):
+		from . import preferencias
+		from .views_reportes import _alertas_visibles
+		self.Prefs.objects.create(id_usuario=77, alertas_nivel=False)
+		alertas = [
+			{'tipo_alerta': 'nivel_tanque_bajo', 'datos_adicionales': {}},
+			{'tipo_alerta': 'presion_baja', 'datos_adicionales': {}},
+			{'tipo_alerta': 'fuga', 'datos_adicionales': {'origen': 'ml_engine'}},
+			{'tipo_alerta': 'reporte_semanal', 'datos_adicionales': {'origen': 'reporte_semanal', 'id_usuario': 77}},
+			{'tipo_alerta': 'reporte_semanal', 'datos_adicionales': {'origen': 'reporte_semanal', 'id_usuario': 5}},
+		]
+		visibles = _alertas_visibles(alertas, False, self.user)
+		self.assertEqual([a['tipo_alerta'] for a in visibles], ['presion_baja', 'reporte_semanal'])
+		self.assertEqual(preferencias.categoria_alerta('calidad_agua'), 'calidad')
+
+	@patch('App.preferencias.supabase_client.insert')
+	@patch('App.preferencias.owned_consumption')
+	def test_reporte_semanal_una_vez_por_semana(self, consumption, insert):
+		from . import preferencias
+		today = timezone.localdate()
+		consumption.return_value = ([], [
+			{'fecha': f'{today.isoformat()}T10:00:00Z', 'consumo_total': 30},
+			{'fecha': f'{(today - timedelta(days=9)).isoformat()}T10:00:00Z', 'consumo_total': 20},
+		])
+		insert.side_effect = [{'id_alerta': 9}, {}]
+		prefs = self.Prefs.objects.create(id_usuario=77, reportes_semanales=True)
+
+		first = preferencias.reporte_semanal(self.user, prefs)
+		second = preferencias.reporte_semanal(self.user, prefs)
+
+		self.assertEqual(first['total_litros'], 30.0)
+		self.assertEqual(first['variacion_porcentual'], 50.0)
+		self.assertEqual(second, first)
+		self.assertEqual(insert.call_count, 2)  # alerta + notificación, solo la primera vez
+		self.assertEqual(insert.call_args_list[0].args[1]['datos_adicionales']['id_usuario'], 77)
+
+	def test_consumo_elevado_desactivado_no_registra_alerta(self):
+		self.Prefs.objects.create(id_usuario=77, consumo_elevado=False)
+		self.client.force_login(self.user)
+		rows = [
+			{'id_vivienda': 1, 'fecha': _month_day(0), 'consumo_total': 400},
+			{'id_vivienda': 1, 'fecha': _month_day(1), 'consumo_total': 100},
+		]
+		with patch('App.views.owned_consumption', return_value=([{'id_vivienda': 1}], rows)), \
+				patch('App.views.supabase_client.insert') as insert:
+			response = self.client.get(reverse('retroalimentacion'))
+		self.assertEqual(response.status_code, 200)
+		insert.assert_not_called()
+
+	@patch('App.views.supabase_client.select')
+	def test_presion_muestra_el_estado_de_la_valvula(self, select):
+		select.side_effect = select_by_table(valvula=[{'id_valvula': 1, 'nombre': 'Principal', 'estado_actual': 'abierta',
+													   'ultima_apertura': None}])
+		self.client.force_login(self.user)
+		html = self.client.get(reverse('presion')).content.decode()
+		self.assertIn('Abierta', html)
+		self.assertIn('badge-open', html)
+
+
+class MobilePerfilTests(TestCase):
+	def setUp(self):
+		from .api.authentication import MobileUser
+		self.user = MobileUser({'id_usuario': 77, 'correo': 'ana@example.com', 'id_rol': 3, 'nombre_rol': 'user'})
+		self.client = APIClient()
+		self.client.force_authenticate(user=self.user)
+
+	def test_preferencias_moviles_son_las_mismas_de_la_web(self):
+		from .models import PreferenciasUsuario
+		response = self.client.patch(reverse('mobile_preferencias'), {'calidad': False, 'idioma': 'en'}, format='json')
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.json()['preferencias']['calidad'], False)
+		prefs = PreferenciasUsuario.objects.get(id_usuario=77)
+		self.assertEqual((prefs.calidad, prefs.idioma), (False, 'en'))
+
+	@patch('App.api.views_mobile_profile.supabase_client.select')
+	def test_perfil_movil_trae_datos_y_preferencias(self, select):
+		select.side_effect = select_by_table(
+			usuario=[{'id_usuario': 77, 'nombre': 'Ana', 'apellido': 'López', 'correo': 'ana@example.com',
+					  'fecha_registro': '2026-08-31T03:00:00+00:00', 'id_rol': 3}],
+			vivienda=[{'id_vivienda': 4, 'direccion': 'Calle 1', 'telefono_titular': '7000-0004'}],
+		)
+		with patch('App.queries.supabase_client.select', side_effect=select.side_effect):
+			data = self.client.get(reverse('mobile_perfil')).json()
+		self.assertEqual((data['nombre_completo'], data['iniciales'], data['telefono']), ('Ana López', 'AL', '7000-0004'))
+		self.assertEqual(data['miembro_desde'], 'agosto 2026')
+		self.assertIn('preferencias', data)
+
+	@patch('App.api.views_mobile_profile.supabase_client')
+	def test_editar_perfil_movil_rechaza_correo_ajeno(self, client):
+		client.SupabaseError = supabase_client.SupabaseError
+		client.get_user_by_email.return_value = {'id_usuario': 5}
+		response = self.client.patch(reverse('mobile_perfil'), {'nombre': 'Ana', 'apellido': 'L', 'correo': 'otro@example.com'},
+									 format='json')
+		self.assertEqual(response.status_code, 409)
+		client.update.assert_not_called()
+
+	def test_avisos_respetan_las_categorias(self):
+		from .models import PreferenciasUsuario
+		PreferenciasUsuario.objects.create(id_usuario=77, alertas_nivel=False)
+		now = timezone.now().isoformat()
+		sensores = [
+			{'id_sensor': 1, 'tipo_sensor': 'presion', 'unidad_medida': 'kPa', 'rango_min': 1, 'rango_max': 5},
+			{'id_sensor': 2, 'tipo_sensor': 'nivel', 'unidad_medida': 'cm', 'rango_min': 10, 'rango_max': 30},
+		]
+		lecturas = [
+			{'id_sensor': 1, 'id_vivienda': 4, 'valor': 0.2, 'fecha_registro': now},
+			{'id_sensor': 2, 'id_vivienda': 4, 'valor': 2, 'fecha_registro': now},
+		]
+		from .queries import OwnedData
+		with patch('App.api.views_mobile_data.queries.owned_data', return_value=OwnedData([{'id_vivienda': 4}], sensores, lecturas, [], [])), \
+				patch('App.api.views_mobile_profile.supabase_client.select', return_value=[]):
+			avisos = self.client.get(reverse('mobile_notificaciones')).json()['avisos']
+		self.assertEqual([(a['clave'], a['estado']) for a in avisos], [('sensor:presion', 'Baja')])
+
+
+class CatalogoTraduccionTests(TestCase):
+	"""Catálogo español→inglés compartido por la web y la app."""
+
+	def test_catalogo_valido(self):
+		from .i18n import catalogo
+		from .i18n.validacion import errores_catalogo
+		data = catalogo('en')
+		self.assertGreater(len(data['frases']), 500)
+		self.assertEqual(errores_catalogo(data), [])
+
+	def test_la_validacion_detecta_huecos_y_cadenas(self):
+		from .i18n.validacion import errores_catalogo
+		errores = errores_catalogo({
+			'frases': {'Alta': 'High', 'High': 'Alta'},
+			'plantillas': {'Hay {0} alertas': 'There are alerts'},
+		})
+		self.assertEqual(len(errores), 3)
+
+	def test_catalogo_publico_para_la_app_y_la_web(self):
+		data = self.client.get(reverse('i18n_json', args=['en'])).json()
+		self.assertEqual(data['frases']['Modo oscuro'], 'Dark mode')
+		script = self.client.get(reverse('i18n_js', args=['en']))
+		self.assertTrue(script.content.decode().startswith('window.SD_I18N = '))
+		self.assertEqual(self.client.get(reverse('i18n_json', args=['fr'])).status_code, 404)
+
+	def test_la_web_carga_el_traductor_solo_en_ingles(self):
+		login = reverse('login')
+		self.assertNotIn('i18n.js', self.client.get(login).content.decode())
+		self.client.cookies['sd_idioma'] = 'en'
+		html = self.client.get(login).content.decode()
+		self.assertIn('i18n.js', html)
+		self.assertIn('<html lang="en">', html)
+
+	def test_busqueda_en_ingles(self):
+		from .search_sections import matching_sections
+		resultados = matching_sections('pressure', False, 'en')
+		self.assertIn('Water Pressure', [r['titulo'] for r in resultados])
+		self.assertTrue(matching_sections('presión', False, 'en'))

@@ -19,7 +19,7 @@ from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
-from . import supabase_client
+from . import preferencias, supabase_client
 from .queries import is_admin, owner_id, run_parallel, users_by_id as _usuarios_por_id
 
 logger = logging.getLogger(__name__)
@@ -58,12 +58,22 @@ def _es_admin(user):
     return is_admin(user)
 
 
-def _alertas_visibles(alertas, es_admin):
-    """Los avisos de fuga del motor de predicción llevan nombre, teléfono y dirección del titular:
-    solo los ve el administrador."""
-    if es_admin:
-        return alertas
-    return [a for a in alertas if (a.get('datos_adicionales') or {}).get('origen') != 'ml_engine']
+def _alertas_visibles(alertas, es_admin, user=None, prefs=None):
+    """Alertas que el usuario puede ver.
+
+    Los avisos de fuga del motor de predicción llevan nombre, teléfono y dirección del titular: solo los
+    ve el administrador. Los reportes semanales son personales, y con `user` se ocultan además las
+    categorías de notificación que desactivó en su perfil (`prefs` evita releerlas de la base).
+    """
+    if not es_admin:
+        alertas = [a for a in alertas if (a.get('datos_adicionales') or {}).get('origen') != 'ml_engine']
+    if user is not None:
+        user_id = owner_id(user)
+        alertas = preferencias.filtrar_alertas(
+            [a for a in alertas if not preferencias.es_reporte_ajeno(a, user_id)],
+            prefs or preferencias.preferencias_de(user),
+        )
+    return alertas
 
 
 def _supabase_id(request):
@@ -625,7 +635,7 @@ def alertas_historial(request):
         alertas = []
         messages.error(request, 'No se pudo cargar el historial de alertas.')
 
-    alertas = _alertas_visibles(alertas, es_admin)
+    alertas = _alertas_visibles(alertas, es_admin, request.user)
     for alerta in alertas:
         alerta['icon'] = _alerta_icon(alerta.get('tipo_alerta'))
         _alerta_legible(alerta)
@@ -670,7 +680,7 @@ def alertas_export(request):
 
 # ── Dashboard: interrupciones y predicciones ──────────────────────────────────
 
-def interrupciones_y_predicciones(user):
+def interrupciones_y_predicciones(user, prefs=None):
     """Datos para el bloque del dashboard: reportes abiertos de suministro,
     alertas recientes y predicciones de desabasto. Nunca lanza excepción."""
     resultado = {'reportes_abiertos': [], 'alertas': [], 'predicciones': []}
@@ -691,7 +701,7 @@ def interrupciones_y_predicciones(user):
                 lambda: supabase_client.select('reporte', '*', params_reportes),
                 lambda: supabase_client.select(
                     'alerta', 'id_alerta,tipo_alerta,prioridad,mensaje,estado_confirmacion,fecha_creacion,datos_adicionales',
-                    {'order': 'fecha_creacion.desc', 'limit': '20'},
+                    {'order': 'fecha_creacion.desc', 'limit': '40'},
                 ),
                 lambda: supabase_client.select(
                     'prediccion_desabasto',
@@ -705,7 +715,7 @@ def interrupciones_y_predicciones(user):
         for reporte in reportes:
             reporte['tipo_label'] = _tipo_label(reporte.get('tipo_problema'))
             reporte['estado_label'] = ESTADO_LABEL.get(reporte.get('estado'), reporte.get('estado'))
-        alertas = _alertas_visibles(alertas, es_admin)[:5]
+        alertas = _alertas_visibles(alertas, es_admin, user, prefs)[:5]
         for alerta in alertas:
             alerta['icon'] = _alerta_icon(alerta.get('tipo_alerta'))
 

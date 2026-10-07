@@ -1,6 +1,6 @@
 {% load static %}
 <!DOCTYPE html>
-<html lang="es">
+<html lang="{{ ui_idioma|default:'es' }}">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -9,17 +9,21 @@
    <link rel="preconnect" href="https://fonts.googleapis.com"/>
    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet"/>
-  <link rel="stylesheet" href="{% static 'App/css/dashboard.css' %}?v=20261006-limpieza"/>
+  <link rel="stylesheet" href="{% static 'App/css/dashboard.css' %}?v=20261006-perfil3"/>
   {% block extra_css %}{% endblock %}
   <script>
     (function () {
-      const theme = localStorage.getItem('theme');
+      // Con sesión manda la preferencia guardada en el servidor (la misma de la app); sin sesión, la del navegador.
+      {% if ui_prefs %}const theme = '{{ ui_prefs.tema }}';
+      try { localStorage.setItem('theme', theme); } catch (e) {}
+      {% else %}const theme = localStorage.getItem('theme');{% endif %}
       if (theme === 'dark') {
         document.documentElement.dataset.theme = 'dark';
         document.documentElement.classList.add('dark-mode');
       }
     }());
   </script>
+  {% include 'App/_i18n_head.html' %}
 </head>
 <body>
   <script>

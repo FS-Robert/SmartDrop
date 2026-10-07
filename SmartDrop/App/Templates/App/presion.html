@@ -21,8 +21,13 @@
     
     <div class="valve-row">
       <span class="valve-label">Válvula:</span>
-      <span class="badge {% if presion.valvula == 'ABIERTA' %}badge-open{% else %}badge-closed{% endif %} valve-badge">{{ presion.valvula }}</span>
+      <span class="badge valve-badge {% if presion.valvula == 'ABIERTA' %}badge-open{% elif presion.valvula == 'CERRADA' %}badge-closed{% else %}badge-unknown{% endif %}"
+            data-valve-badge>
+        <i class="ti {% if presion.valvula == 'ABIERTA' %}ti-lock-open{% else %}ti-lock{% endif %}" aria-hidden="true"></i>
+        <span data-valve-text>{% if presion.valvula == 'ABIERTA' %}Abierta{% elif presion.valvula == 'CERRADA' %}Cerrada{% else %}Sin datos{% endif %}</span>
+      </span>
     </div>
+    <p class="valve-updated" data-valve-updated>{% if presion.valvula == 'ABIERTA' and presion.valvula_actualizada %}Abierta {{ presion.valvula_actualizada }}{% endif %}</p>
 
     <!-- SVG Gauge -->
     <div class="gauge-wrap">
@@ -90,8 +95,9 @@
         <div>
           <p class="pressure-details">Válvula</p>
         </div>
-        <span class="pressure-badge {% if presion.valvula == 'ABIERTA' %}badge-open{% else %}badge-closed{% endif %}">
-          {{ presion.valvula }}
+        <span class="pressure-badge {% if presion.valvula == 'ABIERTA' %}badge-open{% elif presion.valvula == 'CERRADA' %}badge-closed{% else %}badge-unknown{% endif %}"
+              data-valve-badge>
+          <span data-valve-text>{% if presion.valvula == 'ABIERTA' %}Abierta{% elif presion.valvula == 'CERRADA' %}Cerrada{% else %}Sin datos{% endif %}</span>
         </span>
       </div>
 
@@ -150,6 +156,35 @@
 {% endblock %}
 
 {% block extra_js %}
+<script>
+  // Estado de la válvula en vivo: se consulta cada 15 s mientras la página está abierta.
+  (function () {
+    const URL = "{% url 'api_estado_valvula' %}";
+    const LABELS = { ABIERTA: 'Abierta', CERRADA: 'Cerrada' };
+    function paint(valve) {
+      const state = valve && valve.disponible ? valve.estado : 'SIN DATOS';
+      document.querySelectorAll('[data-valve-badge]').forEach((badge) => {
+        badge.classList.remove('badge-open', 'badge-closed', 'badge-unknown');
+        badge.classList.add(state === 'ABIERTA' ? 'badge-open' : state === 'CERRADA' ? 'badge-closed' : 'badge-unknown');
+        const icon = badge.querySelector('i.ti');
+        if (icon) icon.className = 'ti ' + (state === 'ABIERTA' ? 'ti-lock-open' : 'ti-lock');
+        badge.querySelector('[data-valve-text]').textContent = LABELS[state] || 'Sin datos';
+      });
+      const updated = document.querySelector('[data-valve-updated]');
+      if (updated) updated.textContent = state === 'ABIERTA' && valve.ultima_actualizacion ? 'Abierta ' + valve.ultima_actualizacion : '';
+    }
+    async function refresh() {
+      try {
+        const response = await fetch(URL, { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+        if (!response.ok) return;
+        const data = await response.json();
+        if (data.ok) paint(data.valvula);
+      } catch (error) { /* sin conexión: se reintenta en el siguiente ciclo */ }
+    }
+    window.setInterval(refresh, 15000);
+  }());
+</script>
+
 <script>
   window.addEventListener('smartdrop:sensor-reading', function (event) {
     const reading = event.detail || {};

@@ -80,7 +80,7 @@ def user_viviendas(user):
         VIVIENDAS_CACHE_SECONDS,
         lambda: supabase_client.select(
             'vivienda',
-            'id_vivienda,nic,direccion',
+            'id_vivienda,nic,direccion,telefono_titular',
             {'id_usuario_propietario': f'eq.{owner}', 'limit': '1000'},
         ),
     )

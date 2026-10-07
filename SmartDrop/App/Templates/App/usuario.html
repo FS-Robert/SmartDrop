@@ -94,16 +94,16 @@
 
   <section class="settings-card">
     <h2 class="card-header">Notificaciones</h2>
+    <p class="preference-help">Elige qué alertas ves en la web y en la app, y cuáles te avisan en el teléfono.</p>
     {% for notif in usuario.notificaciones %}
       <div class="toggle-row">
         <span class="toggle-label">
           <i class="ti ti-{{ notif.icono }} toggle-icon" aria-hidden="true"></i>
-          {{ notif.nombre }}
+          <span>{{ notif.nombre }}<small class="toggle-hint">{{ notif.descripcion }}</small></span>
         </span>
         <button class="toggle preference-toggle {% if not notif.activo %}off{% endif %}"
                 type="button" role="switch" aria-checked="{% if notif.activo %}true{% else %}false{% endif %}"
-                data-preference="notification-{{ forloop.counter }}"
-                aria-label="{{ notif.nombre }}"></button>
+                data-field="{{ notif.campo }}" aria-label="{{ notif.nombre }}"></button>
       </div>
     {% endfor %}
   </section>
@@ -112,19 +112,27 @@
     <h2 class="card-header">Preferencias</h2>
     <div class="toggle-row">
       <span class="toggle-label"><i class="ti ti-moon toggle-icon" aria-hidden="true"></i> Modo oscuro</span>
-      <button class="toggle" id="dark-mode-toggle" type="button" role="switch"
-              aria-label="Modo oscuro" aria-checked="false"></button>
+      <button class="toggle preference-toggle {% if not prefs.modo_oscuro %}off{% endif %}" id="dark-mode-toggle" type="button" role="switch"
+              aria-label="Modo oscuro" aria-checked="{% if prefs.modo_oscuro %}true{% else %}false{% endif %}" data-field="modo_oscuro"></button>
     </div>
     <div class="toggle-row">
-      <span class="toggle-label"><i class="ti ti-language toggle-icon" aria-hidden="true"></i> Idioma español</span>
-      <button class="toggle preference-toggle" type="button" role="switch" aria-label="Idioma español"
-              aria-checked="true" data-preference="language-es"></button>
+      <span class="toggle-label"><i class="ti ti-language toggle-icon" aria-hidden="true"></i>
+        <span>Idioma español<small class="toggle-hint">Apágalo para usar SmartDrop en inglés</small></span></span>
+      <button class="toggle preference-toggle {% if prefs.idioma != 'es' %}off{% endif %}" id="language-toggle" type="button" role="switch"
+              aria-label="Idioma español" aria-checked="{% if prefs.idioma == 'es' %}true{% else %}false{% endif %}" data-field="idioma"></button>
     </div>
     <div class="toggle-row">
-      <span class="toggle-label"><i class="ti ti-chart-bar toggle-icon" aria-hidden="true"></i> Reportes semanales</span>
-      <button class="toggle preference-toggle" type="button" role="switch" aria-label="Reportes semanales"
-              aria-checked="false" data-preference="weekly-reports"></button>
+      <span class="toggle-label"><i class="ti ti-chart-bar toggle-icon" aria-hidden="true"></i>
+        <span>Reportes semanales<small class="toggle-hint">Resumen de tu consumo cada 7 días</small></span></span>
+      <button class="toggle preference-toggle {% if not prefs.reportes_semanales %}off{% endif %}" type="button" role="switch"
+              aria-label="Reportes semanales" aria-checked="{% if prefs.reportes_semanales %}true{% else %}false{% endif %}"
+              data-field="reportes_semanales"></button>
     </div>
+    <div class="weekly-report" id="weekly-report" {% if not reporte_semanal %}hidden{% endif %}>
+      <strong>Último reporte semanal</strong>
+      <span id="weekly-report-text">{{ reporte_semanal.mensaje }}</span>
+    </div>
+    <p class="preference-status" id="preference-status" role="status" aria-live="polite"></p>
   </section>
 
   <section class="settings-card account-card">
@@ -140,33 +148,33 @@
 {% block extra_js %}
 <script>
   (function () {
-    const toggle = document.getElementById('dark-mode-toggle');
+    const PREFS_URL = "{% url 'usuario_preferencias' %}";
     const editButton = document.getElementById('edit-profile-button');
     const cancelButton = document.getElementById('cancel-profile-edit');
     const editForm = document.getElementById('edit-profile-form');
     const infoFields = document.getElementById('profile-info-fields');
+    const status = document.getElementById('preference-status');
+    const report = document.getElementById('weekly-report');
+    const reportText = document.getElementById('weekly-report-text');
     const root = document.documentElement;
     const body = document.body;
-    const preferencePrefix = `smartdrop:profile:{{ request.user.id_usuario }}:`;
-    const enabled = localStorage.getItem('theme') === 'dark';
+
+    function csrf() {
+      const match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+      return match ? decodeURIComponent(match[1]) : '';
+    }
 
     function applyTheme(dark) {
-      if (dark) {
-        root.dataset.theme = 'dark';
-        body.dataset.theme = 'dark';
-        root.classList.add('dark-mode');
-        body.classList.add('dark-mode');
-        toggle.setAttribute('aria-checked', 'true');
-        toggle.classList.remove('off');
-      } else {
-        delete root.dataset.theme;
-        delete body.dataset.theme;
-        root.classList.remove('dark-mode');
-        body.classList.remove('dark-mode');
-        toggle.setAttribute('aria-checked', 'false');
-        toggle.classList.add('off');
-      }
-      localStorage.setItem('theme', dark ? 'dark' : 'light');
+      [root, body].forEach((element) => {
+        if (dark) element.dataset.theme = 'dark'; else delete element.dataset.theme;
+        element.classList.toggle('dark-mode', dark);
+      });
+      try { localStorage.setItem('theme', dark ? 'dark' : 'light'); } catch (e) {}
+    }
+
+    function setToggle(button, on) {
+      button.setAttribute('aria-checked', String(on));
+      button.classList.toggle('off', !on);
     }
 
     function setEditMode(editing) {
@@ -179,26 +187,41 @@
     editButton.addEventListener('click', () => setEditMode(true));
     cancelButton.addEventListener('click', () => setEditMode(false));
 
-    toggle.addEventListener('click', function () {
-      applyTheme(root.dataset.theme !== 'dark');
-    });
-
-    document.querySelectorAll('.preference-toggle').forEach((preference) => {
-      const storageKey = preferencePrefix + preference.dataset.preference;
-      const savedValue = localStorage.getItem(storageKey);
-      if (savedValue !== null) {
-        preference.setAttribute('aria-checked', savedValue);
-        preference.classList.toggle('off', savedValue !== 'true');
+    async function save(field, on, button) {
+      const value = field === 'idioma' ? (on ? 'es' : 'en') : on;
+      setToggle(button, on);
+      if (field === 'modo_oscuro') applyTheme(on);
+      button.disabled = true;
+      status.textContent = 'Guardando…';
+      try {
+        const response = await fetch(PREFS_URL, {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() },
+          body: JSON.stringify({ [field]: value }),
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error('save');
+        status.textContent = 'Preferencia guardada. También se aplica en la app móvil.';
+        if (data.reporte_semanal) {
+          report.hidden = false;
+          reportText.textContent = data.reporte_semanal.mensaje;
+        } else if (field === 'reportes_semanales') {
+          report.hidden = true;
+        }
+        // El idioma cambia todos los textos: se recarga la página para mostrarla en el idioma elegido.
+        if (field === 'idioma') window.location.reload();
+      } catch (error) {
+        setToggle(button, !on);
+        if (field === 'modo_oscuro') applyTheme(!on);
+        status.textContent = 'No se pudo guardar. Revisa tu conexión e inténtalo de nuevo.';
+      } finally {
+        button.disabled = false;
       }
+    }
 
-      preference.addEventListener('click', () => {
-        const value = preference.getAttribute('aria-checked') !== 'true';
-        preference.setAttribute('aria-checked', String(value));
-        preference.classList.toggle('off', !value);
-        localStorage.setItem(storageKey, String(value));
-      });
+    document.querySelectorAll('.preference-toggle').forEach((button) => {
+      button.addEventListener('click', () => save(button.dataset.field, button.getAttribute('aria-checked') !== 'true', button));
     });
-    applyTheme(enabled);
   }());
 </script>
 {% endblock %}

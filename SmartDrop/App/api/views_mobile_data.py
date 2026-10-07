@@ -6,7 +6,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .. import queries, supabase_client
+from .. import preferencias, queries, supabase_client
 from ..queries import safe_float
 from .permissions import IsAuthenticatedUser
 
@@ -316,6 +316,7 @@ class MobileResumenView(APIView):
     def get(self, request):
         viviendas, sensors, readings = _visible_data(request)
         nic_by_id = {row.get('id_vivienda'): row.get('nic') for row in viviendas}
+        prefs = preferencias.preferencias_de(request.user)
         response = {}
         for parameter in ('flujo', 'presion', 'nivel'):
             sensor = _matching_sensor(sensors, parameter)
@@ -326,7 +327,8 @@ class MobileResumenView(APIView):
                     'valor': last['valor'],
                     'unidad': '%' if parameter == 'nivel' else (sensor or {}).get('unidad_medida', ''),
                     'fecha': last['fecha'],
-                    'fuera_de_rango': last['fuera_de_rango'],
+                    # Las categorías que el usuario desactivó en su perfil no cuentan como alerta.
+                    'fuera_de_rango': last['fuera_de_rango'] and preferencias.sensor_habilitado(prefs, parameter),
                     # Para explicar la alerta sin abrir la gráfica: alto/bajo, rango normal y vivienda.
                     'estado': last['estado'],
                     'rango_min': (sensor or {}).get('rango_min'),

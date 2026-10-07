@@ -1,0 +1,7 @@
+{% load static %}{% if ui_idioma == 'en' %}
+  <!-- Interfaz en inglés: el catálogo y el traductor se cargan antes de pintar (la página se muestra ya traducida). -->
+  <style>html.sd-i18n-pending body { visibility: hidden; }</style>
+  <script>document.documentElement.classList.add('sd-i18n-pending'); document.documentElement.lang = 'en';</script>
+  <script src="{% url 'i18n_js' 'en' %}?v={{ ui_i18n_version }}"></script>
+  <script src="{% static 'App/js/i18n.js' %}?v={{ ui_i18n_version }}"></script>
+{% endif %}

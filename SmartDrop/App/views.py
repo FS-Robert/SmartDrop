@@ -20,7 +20,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from .forms import LoginForm, UsuarioProfileForm, UsuarioRegisterForm, VincularViviendaForm
-from . import supabase_client
+from . import preferencias, supabase_client
 from .models import Usuario
 from . import views_reportes
 from .mqtt_service import MqttError, publish_command
@@ -237,7 +237,7 @@ def busqueda_global_view(request):
 
     search_term = query.casefold()
     es_admin = _admin_only(request)
-    resultados['secciones'] = matching_sections(search_term, es_admin)
+    resultados['secciones'] = matching_sections(search_term, es_admin, preferencias.preferencias_de(request.user).idioma)
     if es_admin and search_term:
         usuarios, logs, alertas = run_parallel(
             lambda: _search_rows('usuario', search_term),
@@ -478,15 +478,26 @@ def _owned_data_or_empty(user, consumption=False):
         return NO_DATA
 
 
+def _reporte_semanal_seguro(user, prefs=None):
+    try:
+        return preferencias.reporte_semanal(user, prefs)
+    except Exception:
+        logger.warning('No se pudo preparar el reporte semanal', exc_info=True)
+        return None
+
+
 @login_required(login_url='login')
 def dashboard(request):
     if _admin_only(request):
         return redirect('admin_panel')
 
+    # El reporte semanal (si está activado y toca) se registra antes de leer las alertas para que aparezca.
+    prefs = preferencias.preferencias_de(request.user)
+    _reporte_semanal_seguro(request.user, prefs)
     # Válvula, bloque de comunidad y datos de la vivienda son independientes: se piden a la vez.
     valve_status, comunidad, data = run_parallel(
         _valve_status_or_unavailable,
-        lambda: views_reportes.interrupciones_y_predicciones(request.user),
+        lambda: views_reportes.interrupciones_y_predicciones(request.user, prefs),
         lambda: _owned_data_or_empty(request.user, consumption=True),
     )
     viviendas, lecturas, consumption_rows = data.viviendas, data.lecturas, data.consumo
@@ -700,7 +711,7 @@ def calidad(request):
 
 @login_required(login_url='login')
 def presion(request):
-    data = _owned_data_or_empty(request.user)
+    data, valvula = run_parallel(lambda: _owned_data_or_empty(request.user), _valve_status_or_unavailable)
     viviendas, sensores, lecturas = data.viviendas, data.sensores, data.lecturas
     pressure_rows = [row for row in lecturas if 'presion' in row.get('tipo_sensor', '') or 'pressure' in row.get('tipo_sensor', '')]
     latest_pressure = max(
@@ -726,7 +737,8 @@ def presion(request):
         'presion': {
             'estado':     _PRESSURE_LABELS.get(pressure_status, 'Sin datos'),
             'badge_class': _status_badge_class(pressure_status),
-            'valvula':    'Sin datos',
+            'valvula':    valvula['estado'],
+            'valvula_actualizada': valvula.get('ultima_actualizacion'),
             'valor':       valor,
             'gauge_dash':  gauge_dash,
             'needle_pos':  int(pct),
@@ -976,7 +988,7 @@ def retroalimentacion(request):
                 'motivacion':    motivational_message,
                 'recomendaciones': recommendations,
             }
-            if alert_message:
+            if alert_message and preferencias.preferencias_de(request.user).consumo_elevado:
                 try:
                     _record_alert_once(
                         f'alerta-consumo:{owner_id(request.user)}:{current_month}',
@@ -1491,24 +1503,69 @@ def usuario(request):
     if not initials:
         initials = request.user.email[:1].upper()
 
+    prefs = preferencias.preferencias_de(request.user)
+    telefono = next((v.get('telefono_titular') for v in viviendas if v.get('telefono_titular')), None)
     context = {
         'usuario': {
             'nombre': full_name or request.user.email,
             'iniciales': initials,
             'direccion': viviendas[0].get('direccion') if viviendas else '',
             'email': request.user.email,
-            'telefono': 'No configurado',
-            'miembro_desde': request.user.fecha_registro.strftime('%B %Y'),
+            'telefono': telefono or 'No configurado',
+            'miembro_desde': _mes_anio(request.user.fecha_registro, prefs.idioma),
             'notificaciones': [
-                {'nombre': 'Alertas de nivel', 'icono': 'bell',        'activo': True},
-                {'nombre': 'Suministro',        'icono': 'droplet',     'activo': True},
-                {'nombre': 'Calidad',           'icono': 'shield-check','activo': True},
-                {'nombre': 'Consumo elevado',   'icono': 'chart-bar',   'activo': False},
+                {'campo': campo, 'nombre': nombre, 'descripcion': descripcion, 'icono': icono, 'activo': getattr(prefs, campo)}
+                for campo, nombre, descripcion, icono in _NOTIFICACIONES_PERFIL
             ],
         },
+        'prefs': prefs,
+        'reporte_semanal': _reporte_semanal_seguro(request.user, prefs),
         'profile_form': profile_form,
     }
     return render(request, 'App/usuario.html', context)
+
+
+_NOTIFICACIONES_PERFIL = (
+    ('alertas_nivel', 'Alertas de nivel', 'Tanque bajo o fuera de rango', 'bell'),
+    ('suministro', 'Suministro', 'Presión y flujo fuera de rango', 'droplet'),
+    ('calidad', 'Calidad', 'Calidad del agua (TDS)', 'shield-check'),
+    ('consumo_elevado', 'Consumo elevado', 'Consumo mayor que el mes anterior', 'chart-bar'),
+)
+_MESES = {
+    'es': ('enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'),
+    'en': ('January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'),
+}
+
+
+def _mes_anio(fecha, idioma='es'):
+    meses = _MESES.get(idioma, _MESES['es'])
+    return f'{meses[fecha.month - 1]} {fecha.year}'
+
+
+@login_required(login_url='login')
+@require_http_methods(['GET', 'POST'])
+def usuario_preferencias(request):
+    """GET: preferencias actuales. POST (JSON): cambia uno o varios campos y devuelve todas."""
+    if request.method == 'GET':
+        prefs = preferencias.preferencias_de(request.user)
+    else:
+        try:
+            data = json.loads(request.body.decode('utf-8') or '{}')
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return JsonResponse({'ok': False, 'error': 'JSON inválido'}, status=400)
+        if not isinstance(data, dict):
+            return JsonResponse({'ok': False, 'error': 'JSON inválido'}, status=400)
+        prefs, errores = preferencias.actualizar(request.user, data)
+        if errores:
+            return JsonResponse({'ok': False, 'errores': errores, 'preferencias': preferencias.como_dict(prefs)}, status=400)
+    response = JsonResponse({
+        'ok': True,
+        'preferencias': preferencias.como_dict(prefs),
+        'reporte_semanal': _reporte_semanal_seguro(request.user, prefs),
+    })
+    # El idioma también se recuerda en el navegador para las páginas sin sesión (login, registro).
+    response.set_cookie('sd_idioma', prefs.idioma, max_age=365 * 24 * 3600, samesite='Lax')
+    return response
 
 
 def register(request):

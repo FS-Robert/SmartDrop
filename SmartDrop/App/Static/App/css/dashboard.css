@@ -1482,3 +1482,25 @@ textarea.field-input { resize:vertical; min-height:110px; }
 .ml-drops span:nth-child(3) { animation-delay:.4s; background:#c4a8f0; }
 @keyframes ml-drop { 0%,100% { transform:translateY(0) rotate(-45deg); opacity:.6; } 50% { transform:translateY(16px) rotate(-45deg); opacity:1; } }
 @media (prefers-reduced-motion: reduce) { .ml-drops span { animation:none; } .ml-progress-bar { transition:none; } }
+
+/* Perfil: ayudas de los interruptores y reporte semanal */
+.preference-help { color:var(--muted); font-size:13px; margin:-4px 0 6px; }
+.toggle-label > span { display:flex; flex-direction:column; }
+.toggle-hint { color:var(--muted); font-size:12px; font-weight:500; margin-top:2px; }
+.toggle:disabled { opacity:.6; cursor:wait; }
+.weekly-report { margin-top:12px; padding:10px 12px; border-radius:10px; background:rgba(124,58,237,.08); font-size:13px; display:flex; flex-direction:column; gap:4px; }
+.weekly-report[hidden] { display:none; }
+.weekly-report strong { color:#6B21A8; }
+.preference-status { min-height:18px; margin-top:8px; font-size:12px; color:var(--muted); }
+
+/* Estado de la válvula (panel de presión) */
+.valve-badge { display:inline-flex; align-items:center; gap:6px; padding:5px 12px; border-radius:999px; font-weight:800; font-size:13px; }
+.badge-open { background:#e6f7ee; color:#1a7a4c; }
+.badge-closed { background:#fdeaea; color:#b3261e; }
+.badge-unknown { background:#f0ecf7; color:var(--muted); }
+.pressure-badge.badge-open, .pressure-badge.badge-closed, .pressure-badge.badge-unknown { padding:3px 10px; border-radius:999px; }
+.valve-updated { margin:4px 0 0; font-size:12px; color:var(--muted); min-height:14px; }
+body[data-theme="dark"] .valve-label,
+body.dark-mode .valve-label { color: var(--text, #e0e0e0); }
+body[data-theme="dark"] .badge-unknown,
+body.dark-mode .badge-unknown { background: rgba(255,255,255,.08); }

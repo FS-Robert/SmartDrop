@@ -1,8 +1,10 @@
 from django.urls import path
 from . import views
-from . import views_reportes
+from . import i18n, views_reportes
 
 urlpatterns = [
+    path('i18n/<str:idioma>.js', i18n.catalogo_js, name='i18n_js'),
+    path('api/i18n/<str:idioma>/', i18n.catalogo_json, name='i18n_json'),
     path('admin-panel/',        views.admin_panel,        name='admin_panel'),
     path('sensor/<str:sensor_id>/', views.sensor_detail,    name='sensor_detail'),
     path('sensor/<str:sensor_id>/data/', views.sensor_data, name='sensor_data'),
@@ -25,6 +27,7 @@ urlpatterns = [
     path('valvulas/',           views.valvulas,           name='valvulas'),
     path('valvula/<str:valvula_id>/comando/', views.valvula_comando, name='valvula_comando'),
     path('usuario/',            views.usuario,            name='usuario'),
+    path('usuario/preferencias/', views.usuario_preferencias, name='usuario_preferencias'),
     path('vincular-vivienda/',  views.vincular_vivienda,  name='vincular_vivienda'),
 
     # ── Sistema de reportes de usuarios ──
