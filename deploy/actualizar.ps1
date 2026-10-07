@@ -12,6 +12,9 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $Llave = (Resolve-Path $Llave).Path
+$sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+icacls $Llave /reset | Out-Null
+icacls $Llave /inheritance:r /grant:r "*${sid}:(R)" | Out-Null   # OpenSSH exige que solo tú puedas leer la llave
 
 & ssh -i $Llave -o StrictHostKeyChecking=accept-new "$Usuario@$Ip" 'bash ~/SmartDrop/deploy/actualizar.sh'
 if ($LASTEXITCODE -ne 0) { throw 'La actualización falló; revisa el mensaje de arriba.' }

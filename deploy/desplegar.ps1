@@ -41,8 +41,11 @@ if ($pendiente -or [int]$sinSubir -gt 0) {
     throw "Tienes cambios sin commit o sin push. Haz 'git commit' y 'git push' antes de desplegar."
 }
 
-# OpenSSH de Windows rechaza llaves privadas que otros usuarios pueden leer.
-icacls $Llave /inheritance:r /grant:r "$($env:USERNAME):(R)" | Out-Null
+# OpenSSH de Windows rechaza llaves privadas que otros usuarios pueden leer. Se usa el SID del usuario
+# (no su nombre) porque si el equipo se llama igual que el usuario, "rober" apunta al equipo.
+$sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+icacls $Llave /reset | Out-Null
+icacls $Llave /inheritance:r /grant:r "*${sid}:(R)" | Out-Null
 
 $SshOpts = @('-i', $Llave, '-o', 'StrictHostKeyChecking=accept-new', '-o', 'ServerAliveInterval=30')
 function Remoto([string]$comando) {
