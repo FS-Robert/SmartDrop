@@ -23,7 +23,7 @@ fi
 
 paso "Paquetes del sistema (nginx, certbot)"
 sudo apt-get update -y
-sudo DEBIAN_FRONTEND=noninteractive apt-get install -y nginx certbot python3-certbot-nginx git sqlite3 curl iptables-persistent
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y nginx certbot python3-certbot-nginx git sqlite3 curl iptables-persistent libgomp1  # libgomp1: OpenMP que exige LightGBM
 
 paso "Abrir puertos 80 y 443 en el firewall interno de Ubuntu (Oracle lo trae cerrado)"
 for puerto in 80 443; do
