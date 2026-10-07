@@ -61,10 +61,12 @@ def _broadcast_sensor_reading(reading):
         if sensor_id is None:
             return
 
+        vivienda_id = reading.get('id_vivienda')
         payload = {
             'event': 'sensor_reading',
             'id_lectura': reading.get('id_lectura'),
             'id_sensor': sensor_id,
+            'id_vivienda': vivienda_id,
             'fecha_registro': reading.get('fecha_registro'),
             'valor': reading.get('valor'),
         }
@@ -72,6 +74,12 @@ def _broadcast_sensor_reading(reading):
             f'sensor-reading-{sensor_id}',
             {'type': 'sensor.reading', 'payload': payload},
         )
+        # Los sensores se comparten entre viviendas: el residente escucha el grupo de SU vivienda.
+        if vivienda_id is not None:
+            async_to_sync(channel_layer.group_send)(
+                f'sensor-vivienda-{vivienda_id}',
+                {'type': 'sensor.reading', 'payload': payload},
+            )
         async_to_sync(channel_layer.group_send)(
             'sensor-readings-admin',
             {'type': 'sensor.reading', 'payload': payload},
@@ -1645,7 +1653,9 @@ def api_lectura(request):
         return JsonResponse({'ok': False, 'error': 'JSON inválido'}, status=400)
 
     required_fields = {'id_sensor', 'fecha_registro', 'valor'}
-    if not isinstance(data, dict) or set(data) != required_fields:
+    # id_vivienda es opcional en el JSON, pero la tabla `lectura` lo exige: sin él Supabase rechaza la fila.
+    optional_fields = {'id_vivienda'}
+    if not isinstance(data, dict) or not required_fields <= set(data) <= required_fields | optional_fields:
         logger.warning(
             'Intento de lectura IoT con formato no permitido desde %s. Campos recibidos: %s',
             request.META.get('REMOTE_ADDR', 'desconocida'),
@@ -1654,7 +1664,7 @@ def api_lectura(request):
         return JsonResponse(
             {
                 'ok': False,
-                'error': 'El JSON debe contener únicamente id_sensor, fecha_registro y valor',
+                'error': 'El JSON debe contener id_sensor, fecha_registro y valor (e id_vivienda opcional)',
             },
             status=400,
         )
@@ -1662,6 +1672,7 @@ def api_lectura(request):
     sensor_id = data['id_sensor']
     value = data['valor']
     timestamp = data['fecha_registro']
+    vivienda_id = data.get('id_vivienda')
     if (
         not isinstance(sensor_id, int)
         or isinstance(sensor_id, bool)
@@ -1670,6 +1681,7 @@ def api_lectura(request):
         or isinstance(value, bool)
         or not math.isfinite(value)
         or not isinstance(timestamp, str)
+        or (vivienda_id is not None and (not isinstance(vivienda_id, int) or isinstance(vivienda_id, bool) or vivienda_id <= 0))
     ):
         return JsonResponse({'ok': False, 'error': 'Tipos de datos inválidos'}, status=400)
 
@@ -1686,6 +1698,8 @@ def api_lectura(request):
         'fecha_registro': timestamp,
         'valor': value,
     }
+    if vivienda_id is not None:
+        payload['id_vivienda'] = vivienda_id
     try:
         row = supabase_client.insert('lectura', payload)
         _broadcast_sensor_reading(row or payload)

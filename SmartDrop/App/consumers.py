@@ -12,30 +12,18 @@ logger = logging.getLogger(__name__)
 
 
 @sync_to_async
-def _owned_sensor_ids(user):
+def _owned_vivienda_ids(user):
+    """Viviendas del usuario. Los sensores se comparten entre viviendas, así que se escucha por vivienda."""
     propietario_id = getattr(user, 'supabase_id', None) or user.id_usuario
     viviendas = supabase_client.select(
         'vivienda',
         'id_vivienda',
         {'id_usuario_propietario': f'eq.{propietario_id}', 'limit': '1000'},
     )
-    vivienda_ids = [
+    return [
         str(row['id_vivienda'])
         for row in viviendas
         if row.get('id_vivienda') is not None
-    ]
-    if not vivienda_ids:
-        return []
-
-    sensores = supabase_client.select(
-        'sensor',
-        'id_sensor',
-        {'id_vivienda': f"in.({','.join(vivienda_ids)})", 'limit': '1000'},
-    )
-    return [
-        str(row['id_sensor'])
-        for row in sensores
-        if row.get('id_sensor') is not None
     ]
 
 
@@ -59,11 +47,11 @@ class SensorRealtimeConsumer(AsyncJsonWebsocketConsumer):
             self.groups.append('sensor-readings-admin')
         else:
             try:
-                sensor_ids = await _owned_sensor_ids(user)
+                vivienda_ids = await _owned_vivienda_ids(user)
             except Exception:
                 await self.close(code=4500)
                 return
-            self.groups.extend(f'sensor-reading-{sensor_id}' for sensor_id in sensor_ids)
+            self.groups.extend(f'sensor-vivienda-{vivienda_id}' for vivienda_id in vivienda_ids)
 
         for group in self.groups:
             await self.channel_layer.group_add(group, self.channel_name)

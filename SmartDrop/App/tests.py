@@ -71,6 +71,29 @@ class ConsumoViewTests(TestCase):
 			'valor': 21.5,
 		})
 
+	@patch('App.views._broadcast_sensor_reading')
+	@patch('App.views.supabase_client.insert')
+	def test_api_lectura_con_vivienda_la_guarda_y_la_emite(self, insert, broadcast):
+		insert.return_value = {'id_lectura': 7, 'id_sensor': 4, 'id_vivienda': 19, 'valor': 0.2, 'fecha_registro': '2026-09-07T10:00:00Z'}
+		response = self.client.post(
+			reverse('api_lectura'),
+			data={'id_sensor': 4, 'id_vivienda': 19, 'fecha_registro': '2026-09-07T10:00:00Z', 'valor': 0.2},
+			content_type='application/json',
+		)
+
+		self.assertEqual(response.status_code, 201)
+		self.assertEqual(insert.call_args.args[1]['id_vivienda'], 19)
+		broadcast.assert_called_once_with(insert.return_value)
+
+	def test_api_lectura_rechaza_vivienda_invalida(self):
+		response = self.client.post(
+			reverse('api_lectura'),
+			data={'id_sensor': 4, 'id_vivienda': 'diecinueve', 'fecha_registro': '2026-09-07T10:00:00Z', 'valor': 0.2},
+			content_type='application/json',
+		)
+
+		self.assertEqual(response.status_code, 400)
+
 	def test_api_lectura_rechaza_campos_adicionales(self):
 		with self.assertLogs('App.views', level='WARNING'):
 			response = self.client.post(
