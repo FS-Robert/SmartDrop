@@ -90,10 +90,10 @@ def prune_model_files():
     for kind, subdir in MODEL_SUBDIRS.items():
         inactive = ModelArtifact.objects.filter(kind=kind, is_active=False).order_by('-trained_at')
         for artifact in inactive[KEEP_INACTIVE_VERSIONS:]:
-            shutil.rmtree(artifact.file_path, ignore_errors=True)
+            shutil.rmtree(artifact.directory, ignore_errors=True)
             artifact.delete()
             removed += 1
-        referenced = {Path(path).resolve() for path in ModelArtifact.objects.filter(kind=kind).values_list('file_path', flat=True)}
+        referenced = {artifact.directory.resolve() for artifact in ModelArtifact.objects.filter(kind=kind)}
         folder = Path(settings.ML_MODELS_DIR) / subdir
         if folder.is_dir():
             for version_dir in folder.iterdir():

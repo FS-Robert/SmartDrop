@@ -4,7 +4,6 @@ pipeline de forecasting multi-día (Sección 7 del spec).
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
 import joblib
 
@@ -41,7 +40,7 @@ def run_anomaly_detection(home_ids: list[int] | None = None, lookback_rows_per_h
     if artifact is None:
         raise ValueError('No hay un detector de anomalías entrenado. Corre `ml_train_anomaly_model`.')
 
-    model = joblib.load(Path(artifact.file_path) / 'isolation_forest.joblib')
+    model = joblib.load(artifact.directory / 'isolation_forest.joblib')
     frame = build_residual_frame(home_ids)
     if frame.empty:
         return []

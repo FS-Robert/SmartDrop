@@ -45,6 +45,19 @@ ALLOWED_HOSTS = [
     if host.strip()
 ]
 
+# Formularios POST detrás de HTTPS: por defecto se confía en https://<cada host de ALLOWED_HOSTS>.
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get('CSRF_TRUSTED_ORIGINS', '').split(',')
+    if origin.strip()
+] or [f'https://{host}' for host in ALLOWED_HOSTS if not host.startswith('.')]
+
+if not DEBUG:
+    # Nginx termina HTTPS y avisa del protocolo original con esta cabecera.
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+
 
 # Application definition
 
@@ -77,7 +90,9 @@ ROOT_URLCONF = 'SmartDrop.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        # La carpeta se llama "Templates" (con mayúscula): APP_DIRS solo busca "templates",
+        # y en Linux (servidor) las mayúsculas sí importan.
+        'DIRS': [BASE_DIR / 'App' / 'Templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -204,6 +219,14 @@ STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_DIRS = [BASE_DIR / 'App' / 'Static']
 
+if not DEBUG:
+    # collectstatic agrega un hash al nombre (dashboard.3f2a1c.css): Nginx los cachea un año
+    # y cada despliegue cambia el nombre, así nadie ve CSS/JS viejo.
+    STORAGES = {
+        'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+        'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.ManifestStaticFilesStorage'},
+    }
+
 # Evidencia fotográfica/video de reportes de usuarios
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
@@ -216,6 +239,16 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Con DEBUG=False Django no imprime los errores 500; así quedan en `journalctl -u smartdrop`.
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {'simple': {'format': '{asctime} {levelname} {name}: {message}', 'style': '{'}},
+    'handlers': {'console': {'class': 'logging.StreamHandler', 'formatter': 'simple'}},
+    'root': {'handlers': ['console'], 'level': os.environ.get('LOG_LEVEL', 'INFO')},
+    'loggers': {'django': {'handlers': ['console'], 'level': 'INFO', 'propagate': False}},
+}
 
 # Supabase REST API settings (usadas por helpers que llaman a la API REST de Supabase)
 # Configure estas variables en el entorno: SUPABASE_URL y SUPABASE_KEY

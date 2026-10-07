@@ -6,6 +6,9 @@ aquí sus lecturas. `source` conserva el valor 'synthetic' solo por compatibilid
 con bases antiguas: el generador de hogares sintéticos se retiró y el pipeline
 únicamente usa los de origen 'real'.
 """
+from pathlib import Path, PureWindowsPath
+
+from django.conf import settings
 from django.db import models
 
 
@@ -178,6 +181,18 @@ class ModelArtifact(models.Model):
 
     def __str__(self):
         return f'{self.kind} v{self.version}'
+
+    @property
+    def directory(self) -> Path:
+        """Carpeta con los binarios del modelo.
+
+        Si `file_path` se guardó en otra máquina (p. ej. una ruta de Windows y la base se copió al
+        servidor Linux), se reconstruye como ML_MODELS_DIR/<tipo>/<versión> con sus dos últimas partes.
+        """
+        stored = Path(self.file_path)
+        if stored.is_dir():
+            return stored
+        return Path(settings.ML_MODELS_DIR).joinpath(*PureWindowsPath(self.file_path).parts[-2:])
 
 
 class ConsumptionForecast(models.Model):

@@ -15,7 +15,6 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import timedelta
-from pathlib import Path
 
 import joblib
 import numpy as np
@@ -69,7 +68,7 @@ def load_detector():
     ).order_by('-trained_at').first()
     if artifact is None:
         return None
-    model = joblib.load(Path(artifact.file_path) / 'isolation_forest.joblib')
+    model = joblib.load(artifact.directory / 'isolation_forest.joblib')
     metrics = artifact.metrics or {}
     return DetectorModel(model, artifact, float(metrics.get('score_mean', -0.45)), float(metrics.get('score_p01', -0.65)))
 

@@ -1,0 +1,18 @@
+[Unit]
+Description=SmartDrop (Django + Channels con Daphne)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=__USUARIO__
+Group=__USUARIO__
+WorkingDirectory=__REPO_DIR__/SmartDrop
+Environment=PYTHONUNBUFFERED=1
+# Un solo proceso a propósito: el canal de WebSockets en memoria, la caché local y el
+# monitor de fugas viven dentro de él. Solo escucha en localhost; Nginx da la cara a Internet.
+ExecStart=__REPO_DIR__/.venv/bin/daphne -b 127.0.0.1 -p 8000 --proxy-headers SmartDrop.asgi:application
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

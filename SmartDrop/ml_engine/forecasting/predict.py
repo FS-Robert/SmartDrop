@@ -4,7 +4,6 @@ p10/p50/p90 para el siguiente periodo, con explicabilidad opcional (SHAP).
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
 import joblib
 import numpy as np
@@ -32,7 +31,7 @@ def _load_active_artifact() -> ModelArtifact:
 
 
 def _load_boosters(artifact: ModelArtifact) -> dict:
-    out_dir = Path(artifact.file_path)
+    out_dir = artifact.directory
     return {
         0.1: joblib.load(out_dir / 'lgbm_q10.joblib'),
         0.5: joblib.load(out_dir / 'lgbm_q50.joblib'),
