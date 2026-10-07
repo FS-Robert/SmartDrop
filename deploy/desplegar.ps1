@@ -3,7 +3,7 @@ Despliega SmartDrop en el servidor de Oracle Cloud desde tu PC con Windows (prim
 
   powershell -ExecutionPolicy Bypass -File deploy\desplegar.ps1 `
       -Ip 129.146.10.20 -Llave C:\Users\rober\Downloads\ssh-key.key `
-      -Dominio smartdrop-ugb.duckdns.org -Correo tu@correo.com
+      -Dominio smartdrop-ugb.duckdns.org [-Correo tu@correo.com]
 
 Qué hace:
   1. Clona (o actualiza) el repositorio de GitHub en el servidor.
@@ -15,7 +15,7 @@ param(
     [Parameter(Mandatory = $true)] [string]$Ip,
     [Parameter(Mandatory = $true)] [string]$Llave,
     [Parameter(Mandatory = $true)] [string]$Dominio,
-    [Parameter(Mandatory = $true)] [string]$Correo,
+    [string]$Correo = '',   # opcional: avisos de vencimiento del certificado HTTPS
     [string]$Usuario = 'ubuntu',
     [switch]$ReemplazarDatos
 )

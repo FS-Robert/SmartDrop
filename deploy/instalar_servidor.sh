@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Instala SmartDrop en un servidor Ubuntu (Oracle Cloud Always Free, ARM).
-# Uso (en el servidor):  bash ~/SmartDrop/deploy/instalar_servidor.sh <dominio> <correo>
+# Uso (en el servidor):  bash ~/SmartDrop/deploy/instalar_servidor.sh <dominio> [correo]
 # Se puede volver a ejecutar sin romper nada: cada paso revisa si ya está hecho.
 set -euo pipefail
 
 DOMINIO="${1:?Falta el dominio. Ejemplo: bash instalar_servidor.sh smartdrop-ugb.duckdns.org tu@correo.com}"
-CORREO="${2:?Falta el correo para Let's Encrypt (avisos de vencimiento del certificado).}"
+CORREO="${2:-}"                           # opcional: Let's Encrypt avisa ahí si el certificado no se renueva
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_DIR="$REPO_DIR/SmartDrop"            # donde está manage.py
@@ -90,7 +90,8 @@ if [[ -n "$IP_PUBLICA" && "$IP_PUBLICA" != "$IP_DOMINIO" ]]; then
     echo "Corrige la IP en DuckDNS (o en tu DNS), espera 1-2 minutos y vuelve a ejecutar este script."
     exit 1
 fi
-sudo certbot --nginx -d "$DOMINIO" -m "$CORREO" --agree-tos --no-eff-email --redirect --non-interactive
+if [[ -n "$CORREO" ]]; then CUENTA=(-m "$CORREO" --no-eff-email); else CUENTA=(--register-unsafely-without-email); fi
+sudo certbot --nginx -d "$DOMINIO" "${CUENTA[@]}" --agree-tos --redirect --non-interactive
 # HTTP/2: varias peticiones en una sola conexión (carga más rápida de CSS/JS/imágenes).
 sudo sed -i -E 's/listen (\S*443) ssl( ipv6only=on)?;/listen \1 ssl http2\2;/' /etc/nginx/sites-available/smartdrop
 sudo nginx -t
