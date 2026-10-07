@@ -770,24 +770,50 @@ class FlowConsumptionTests(TestCase):
 
 		self.assertEqual(first, {self.today: 10.0, yesterday: 10.0})
 		self.assertEqual(second, first)
-		# Ayer queda en caché; hoy solo se guarda 60 s pero sigue vigente en la segunda llamada.
-		self.assertEqual(calls, [self.today, yesterday])
+		# Los días se calculan en paralelo (sin orden fijo); en la segunda llamada salen de la caché.
+		self.assertEqual(sorted(calls), [yesterday, self.today])
 
 	def test_el_presupuesto_de_tiempo_corta_los_dias_pasados_pero_no_hoy(self):
+		import threading
+
 		since = self.today - timedelta(days=3)
-		calls = []
+		release = threading.Event()
 
 		def fake_day(in_filter, sensor_ids, day):
-			calls.append(day)
+			if day != self.today:
+				release.wait(5)  # Día pasado lento: no alcanza el presupuesto.
 			return 5.0, False
 
 		with patch.object(self.queries, '_flow_sensor_ids', return_value=['4']), \
 				patch.object(self.queries, '_flow_liters_for_day', side_effect=fake_day), \
-				patch.object(self.queries, 'FLOW_TIME_BUDGET_SECONDS', -1):
+				patch.object(self.queries, 'FLOW_TIME_BUDGET_SECONDS', 0.05):
 			result = self.queries.flow_consumption_by_day(self.viviendas, since, self.today)
+			self.assertEqual(result, {self.today: 5.0})
+
+			# Los días pendientes terminan en segundo plano y quedan en caché para la siguiente carga.
+			release.set()
+			self.queries._flow_executor.submit(lambda: None).result()
+			for _ in range(50):
+				later = self.queries.flow_consumption_by_day(self.viviendas, since, self.today)
+				if len(later) == 4:
+					break
+				release.wait(0.05)
+		self.assertEqual(len(later), 4)
+
+	def test_no_calcula_el_flujo_de_los_dias_con_consumo_registrado(self):
+		recorded_day = self.today - timedelta(days=1)
+		rows = [{'id_vivienda': 1, 'fecha': f'{recorded_day.isoformat()}T10:00:00Z', 'consumo_total': 8}]
+		calls = []
+
+		def fake_day(in_filter, sensor_ids, day):
+			calls.append(day)
+			return 3.0, False
+
+		with patch.object(self.queries, '_flow_sensor_ids', return_value=['4']), \
+				patch.object(self.queries, '_flow_liters_for_day', side_effect=fake_day):
+			self.queries.with_flow_consumption(self.viviendas, rows, recorded_day)
 
 		self.assertEqual(calls, [self.today])
-		self.assertEqual(result, {self.today: 5.0})
 	def test_usa_flujo_solo_en_los_dias_sin_consumo_registrado(self):
 		recorded_day = self.today - timedelta(days=1)
 		rows = [{'id_vivienda': 1, 'fecha': f'{recorded_day.isoformat()}T10:00:00Z', 'consumo_total': 8}]

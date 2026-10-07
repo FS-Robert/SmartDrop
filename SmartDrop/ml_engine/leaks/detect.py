@@ -25,7 +25,7 @@ from django.utils import timezone
 
 from ml_engine.anomaly.features import RESIDUAL_COLUMNS, build_residual_frame
 from ml_engine.leaks.explain import describe_causes
-from ml_engine.models import ConsumptionAggregate, Home, LeakPrediction, ModelArtifact, SensorReading
+from ml_engine.models import ConsumptionAggregate, LeakPrediction, ModelArtifact, SensorReading
 
 logger = logging.getLogger(__name__)
 

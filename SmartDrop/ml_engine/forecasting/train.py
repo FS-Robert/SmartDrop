@@ -23,7 +23,11 @@ from ml_engine.models import ModelArtifact
 logger = logging.getLogger(__name__)
 
 QUANTILES = (0.1, 0.5, 0.9)
-MODEL_DIR = Path(getattr(settings, 'BASE_DIR', Path('.'))) / 'ml_models' / 'consumption'
+
+
+def model_dir() -> Path:
+    """Carpeta de los modelos de este tipo (se lee en cada uso para que los tests puedan redirigirla)."""
+    return Path(settings.ML_MODELS_DIR) / 'consumption'
 
 
 def _time_split(df: pd.DataFrame, valid_fraction: float = 0.15):
@@ -90,7 +94,7 @@ def train_consumption_model(home_ids: list[int] | None = None) -> ModelArtifact:
     metrics['n_valid'] = len(valid_df)
 
     version = datetime.utcnow().strftime('%Y%m%d%H%M%S')
-    out_dir = MODEL_DIR / version
+    out_dir = model_dir() / version
     out_dir.mkdir(parents=True, exist_ok=True)
     for q, booster in boosters.items():
         joblib.dump(booster, out_dir / f'lgbm_q{int(q * 100)}.joblib')

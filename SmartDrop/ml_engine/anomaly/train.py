@@ -19,7 +19,11 @@ from ml_engine.anomaly.features import RESIDUAL_COLUMNS, build_residual_frame
 from ml_engine.models import ModelArtifact
 logger = logging.getLogger(__name__)
 
-MODEL_DIR = Path(getattr(settings, 'BASE_DIR', Path('.'))) / 'ml_models' / 'anomaly'
+
+
+def model_dir() -> Path:
+    """Carpeta de los modelos de este tipo (se lee en cada uso para que los tests puedan redirigirla)."""
+    return Path(settings.ML_MODELS_DIR) / 'anomaly'
 
 
 def train_anomaly_model(home_ids: list[int] | None = None, contamination: float = 0.02) -> ModelArtifact:
@@ -39,7 +43,7 @@ def train_anomaly_model(home_ids: list[int] | None = None, contamination: float 
     scores = model.score_samples(x)
     sorted_scores = sorted(scores)
     version = datetime.utcnow().strftime('%Y%m%d%H%M%S')
-    out_dir = MODEL_DIR / version
+    out_dir = model_dir() / version
     out_dir.mkdir(parents=True, exist_ok=True)
     joblib.dump(model, out_dir / 'isolation_forest.joblib')
 

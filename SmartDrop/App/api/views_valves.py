@@ -6,6 +6,7 @@ from rest_framework.views import APIView
 
 from .. import supabase_client
 from ..mqtt_service import MqttError, publish_command
+from ..queries import users_by_id
 from .permissions import IsAdministrator, IsAuthenticatedUser
 
 
@@ -49,15 +50,9 @@ class MobileValvulaLogsView(APIView):
                     'limit': '50',
                 },
             )
-            user_ids = list({
-                str(row['id_usuario'])
-                for row in movements
-                if row.get('id_usuario') is not None
-            })
-            users = supabase_client.select(
-                'usuario', 'id_usuario,nombre,apellido,correo',
-                {'id_usuario': f"in.({','.join(user_ids)})", 'limit': '1000'},
-            ) if user_ids else []
+            users = users_by_id(
+                (row.get('id_usuario') for row in movements), 'id_usuario,nombre,apellido,correo',
+            ).values()
         except Exception:
             logger.exception('No se pudo cargar el historial móvil de la válvula %s', id_valvula)
             return Response(

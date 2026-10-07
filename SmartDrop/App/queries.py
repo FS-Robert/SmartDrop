@@ -6,7 +6,7 @@ paralela y los datos casi estáticos (viviendas, sensores, tanques) se cachean.
 import threading
 import time
 from collections import defaultdict, namedtuple
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 from datetime import datetime, timedelta, timezone as dt_timezone
 from datetime import time as dt_time
 
@@ -36,8 +36,33 @@ def run_parallel(*tasks):
         return [future.result() for future in futures]
 
 
+ADMIN_ROLE_ID = 2
+
+
 def owner_id(user):
-    return getattr(user, 'supabase_id', None) or user.id_usuario
+    """id_usuario de Supabase del usuario (web o JWT de la app)."""
+    return getattr(user, 'supabase_id', None) or getattr(user, 'id_usuario', None)
+
+
+def is_admin(user):
+    return getattr(user, 'rol_id', None) == ADMIN_ROLE_ID
+
+
+def users_by_id(ids, columns):
+    """{id_usuario: fila} de los usuarios indicados, en una sola consulta IN y sin repetir ids.
+
+    Devuelve {} si no hay ids o si Supabase falla (los nombres son decorativos en todas las vistas).
+    """
+    ids = sorted({str(i) for i in ids if i is not None and str(i).strip()})
+    if not ids:
+        return {}
+    try:
+        rows = supabase_client.select(
+            'usuario', columns, {'id_usuario': f"in.({','.join(ids)})", 'limit': str(len(ids))},
+        )
+    except supabase_client.SupabaseError:
+        return {}
+    return {row['id_usuario']: row for row in rows}
 
 
 def _cached(key, seconds, loader):
@@ -190,9 +215,13 @@ FLOW_MAX_GAP_SECONDS = 60
 FLOW_TODAY_CACHE_SECONDS = 60
 FLOW_PAST_DAY_CACHE_SECONDS = 24 * 3600
 FLOW_PARTIAL_DAY_CACHE_SECONDS = 600
-# Tiempo máximo (en segundos) que una petición dedica a calcular días pasados; lo que
-# no alcance queda en caché para la siguiente carga, así un mes largo se completa por tandas.
+FLOW_WORKERS = 8
+# Tiempo máximo (en segundos) que una petición espera los días pasados; los que no terminen a
+# tiempo se siguen calculando en segundo plano y quedan en caché para la siguiente carga.
 FLOW_TIME_BUDGET_SECONDS = 4
+
+# Pool compartido: los días se consultan en paralelo y un cálculo puede terminar después de la respuesta.
+_flow_executor = ThreadPoolExecutor(max_workers=FLOW_WORKERS, thread_name_prefix='flowday')
 
 
 def consumption_date(raw_date):
@@ -214,7 +243,8 @@ def _flow_sensor_ids():
 def _fetch_flow_readings(in_filter, sensor_ids, since, until):
     """Lecturas de flujo entre `since` y `until` (más recientes primero).
 
-    Devuelve (filas, truncado): truncado es True si se alcanzó el tope de páginas.
+    Devuelve (filas, truncado): truncado es True si se alcanzó el tope de páginas. La primera
+    página va sola (casi siempre basta); si viene llena, el resto se pide en tandas paralelas.
     """
     base = {
         'id_vivienda': in_filter,
@@ -230,8 +260,10 @@ def _fetch_flow_readings(in_filter, sensor_ids, since, until):
             {**base, 'offset': str(page * FLOW_PAGE_SIZE)},
         )
 
-    rows = []
-    page = 0
+    rows = page_loader(0)()
+    if len(rows) < FLOW_PAGE_SIZE:
+        return rows, False
+    page = 1
     while page < FLOW_MAX_PAGES_PER_DAY:
         pages = range(page, min(page + FLOW_PAGES_PER_BATCH, FLOW_MAX_PAGES_PER_DAY))
         results = run_parallel(*[page_loader(number) for number in pages])
@@ -282,11 +314,22 @@ def _flow_liters_for_day(in_filter, sensor_ids, day):
     return _liters_by_day(rows).get(day, 0.0), truncated
 
 
-def flow_consumption_by_day(viviendas, since_date, until_date=None):
+def _flow_day_cached(in_filter, sensor_ids, day, today):
+    liters, truncated = _flow_liters_for_day(in_filter, sensor_ids, day)
+    if day >= today:
+        ttl = FLOW_TODAY_CACHE_SECONDS
+    else:
+        ttl = FLOW_PARTIAL_DAY_CACHE_SECONDS if truncated else FLOW_PAST_DAY_CACHE_SECONDS
+    cache.set(f'flowday:{in_filter}:{day}', liters, ttl)
+    return liters
+
+
+def flow_consumption_by_day(viviendas, since_date, until_date=None, skip_days=()):
     """{fecha: litros} estimados desde el sensor de flujo entre ambas fechas (inclusive).
 
-    Cada día se calcula y se guarda en caché por separado (los pasados un día entero), de
-    modo que solo se consultan los días que faltan, de los más recientes a los más antiguos.
+    Cada día se calcula en paralelo y se guarda en caché por separado (los pasados un día entero),
+    así que solo se consultan los días que faltan. Los días de `skip_days` (p. ej. con consumo
+    registrado) no se calculan.
     """
     in_filter = _in_filter(viviendas)
     today = timezone.localdate()
@@ -294,10 +337,13 @@ def flow_consumption_by_day(viviendas, since_date, until_date=None):
     if not in_filter or until_date < since_date:
         return {}
 
+    skip = set(skip_days)
     result = {}
     missing = []
     for offset in range((until_date - since_date).days, -1, -1):
         day = since_date + timedelta(days=offset)
+        if day in skip:
+            continue
         cached = cache.get(f'flowday:{in_filter}:{day}')
         if cached is None:
             missing.append(day)
@@ -309,17 +355,15 @@ def flow_consumption_by_day(viviendas, since_date, until_date=None):
     sensor_ids = _flow_sensor_ids()
     if not sensor_ids:
         return result
+    futures = {day: _flow_executor.submit(_flow_day_cached, in_filter, sensor_ids, day, today) for day in missing}
     deadline = time.monotonic() + FLOW_TIME_BUDGET_SECONDS
-    for day in missing:
-        if day != today and time.monotonic() > deadline:
-            break
-        liters, truncated = _flow_liters_for_day(in_filter, sensor_ids, day)
-        result[day] = liters
-        if day >= today:
-            ttl = FLOW_TODAY_CACHE_SECONDS
-        else:
-            ttl = FLOW_PARTIAL_DAY_CACHE_SECONDS if truncated else FLOW_PAST_DAY_CACHE_SECONDS
-        cache.set(f'flowday:{in_filter}:{day}', liters, ttl)
+    for day, future in futures.items():
+        # Hoy siempre se espera; los días pasados solo hasta agotar el presupuesto.
+        timeout = None if day >= today else max(deadline - time.monotonic(), 0)
+        try:
+            result[day] = future.result(timeout=timeout)
+        except FuturesTimeout:
+            continue
     return result
 
 
@@ -328,17 +372,19 @@ def with_flow_consumption(viviendas, rows, since_date, until_date=None):
 
     Si el flujo no está disponible devuelve `rows` sin cambios.
     """
-    try:
-        flow_by_day = flow_consumption_by_day(viviendas, since_date, until_date)
-    except Exception:
-        return rows
-
     recorded = defaultdict(float)
     for row in rows:
         try:
             recorded[consumption_date(row['fecha'])] += float(row.get('consumo_total') or 0)
         except (KeyError, TypeError, ValueError, OverflowError):
             continue
+
+    try:
+        flow_by_day = flow_consumption_by_day(
+            viviendas, since_date, until_date, skip_days=[day for day, total in recorded.items() if total > 0],
+        )
+    except Exception:
+        return rows
 
     estimated = [
         {
@@ -412,7 +458,13 @@ def _sensor_rows_between(sensor_id, since, until=None, columns='fecha_registro,v
         params['and'] = f'(fecha_registro.lt.{_fmt_utc(until)})'
     rows = []
     for page in range(SENSOR_MAX_PAGES):
-        chunk = supabase_client.select('lectura', columns, {**params, 'offset': str(page * SENSOR_PAGE)})
+        page_params = {**params, 'offset': str(page * SENSOR_PAGE)}
+        try:
+            chunk = supabase_client.select('lectura', columns, page_params)
+        except supabase_client.SupabaseError:
+            # Un corte momentáneo (timeout) no debe tirar toda la serie: se reintenta una vez.
+            time.sleep(1)
+            chunk = supabase_client.select('lectura', columns, page_params)
         rows.extend(chunk)
         if len(chunk) < SENSOR_PAGE:
             break
@@ -454,7 +506,8 @@ def _base_buckets(sensor_id):
             since = until - timedelta(days=SENSOR_BASE_DAYS)
             bounds = [(since + timedelta(days=i), since + timedelta(days=i + 1)) for i in range(SENSOR_BASE_DAYS)]
             bounds[-1] = (bounds[-1][0], None)
-            with ThreadPoolExecutor(max_workers=16) as executor:
+            # 8 hilos: deja conexiones libres del pool para las páginas que se estén sirviendo a la vez.
+            with ThreadPoolExecutor(max_workers=8) as executor:
                 parts = list(executor.map(lambda b: _sensor_rows_between(sensor_id, b[0], b[1], columns), bounds))
             state = {'sums': {}, 'last_ts': None, 'last_ids': set(), 'built': now, 'checked': now}
             for part in parts:
@@ -476,6 +529,13 @@ def _base_buckets(sensor_id):
         return dict(state['sums'])
 
 
+def _build_base_in_background(sensor_id):
+    with _base_locks_guard:
+        lock = _base_locks[sensor_id]
+    if not lock.locked():
+        threading.Thread(target=_base_buckets, args=(sensor_id,), daemon=True, name=f'sensor-base-{sensor_id}').start()
+
+
 def sensor_series(sensor_id, range_key):
     """{inicio_intervalo (epoch s): promedio} con las lecturas de todas las viviendas que comparten el sensor."""
     window = SENSOR_RANGES.get(range_key, SENSOR_RANGES['1d'])
@@ -483,14 +543,21 @@ def sensor_series(sensor_id, range_key):
     until = datetime.now(dt_timezone.utc)
     since = until - window
 
-    if range_key == '1h':
-        # Rango corto con intervalos de 2 min: se consulta directo (pocas filas).
-        cache_key = f'sensor_series:{sensor_id}:1h'
+    if range_key == '1h' or (range_key == '1d' and sensor_id not in _base_state):
+        # Rangos cortos: se consultan directo (pocas filas). Si aún no existen las sumas del mes,
+        # se arman en segundo plano para que semana/mes respondan rápido después.
+        if range_key == '1d':
+            _build_base_in_background(sensor_id)
+        cache_key = f'sensor_series:{sensor_id}:{range_key}'
         cached = cache.get(cache_key)
         if cached is not None:
             return cached
+        chunks = 1 if range_key == '1h' else 6
+        step = window / chunks
+        bounds = [(since + step * i, since + step * (i + 1)) for i in range(chunks)]
         sums = {}
-        _add_to_buckets(sums, _sensor_rows_between(sensor_id, since, until), bucket_seconds)
+        for rows in run_parallel(*[(lambda b=b: _sensor_rows_between(sensor_id, *b)) for b in bounds]):
+            _add_to_buckets(sums, rows, bucket_seconds)
         series = {key: round(total / count, 3) for key, (total, count) in sums.items()}
         cache.set(cache_key, series, _SHORT_CACHE_SECONDS)
         return series

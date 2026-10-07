@@ -20,6 +20,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from . import supabase_client
+from .queries import is_admin, owner_id, run_parallel, users_by_id as _usuarios_por_id
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +55,7 @@ def _tipo_label(key):
 
 
 def _es_admin(user):
-    return getattr(user, 'rol_id', None) == 2
+    return is_admin(user)
 
 
 def _alertas_visibles(alertas, es_admin):
@@ -66,7 +67,7 @@ def _alertas_visibles(alertas, es_admin):
 
 
 def _supabase_id(request):
-    return getattr(request.user, 'supabase_id', None) or request.user.id_usuario
+    return owner_id(request.user)
 
 
 def _adjuntos_por_reporte(reporte_ids):
@@ -235,21 +236,22 @@ def _cargar_reporte_o_404(request, reporte_id, solo_propietario=True):
     return rows[0] if rows else None
 
 
+def _hay_sin_leer(mensajes, lector_id):
+    return any(m.get('id_usuario') != lector_id and not m.get('leido') for m in mensajes)
+
+
 def _marcar_leidos(reporte_id, lector_id):
-    """Marca como leídos los mensajes del reporte que NO envió el lector."""
+    """Marca como leídos los mensajes del reporte que NO envió el lector (una sola actualización)."""
     try:
-        mensajes = supabase_client.select(
-            'reporte_mensaje', 'id_mensaje,id_usuario',
-            {'id_reporte': f'eq.{reporte_id}', 'leido': 'eq.false', 'limit': '500'},
-        )
-    except supabase_client.SupabaseError:
-        return
-    ids = [m['id_mensaje'] for m in mensajes if m.get('id_usuario') != lector_id]
-    if ids:
         supabase_client.update(
             'reporte_mensaje', {'leido': True},
-            {'id_mensaje': f"in.({','.join(str(i) for i in ids)})"},
+            {
+                'id_reporte': f'eq.{reporte_id}', 'leido': 'eq.false',
+                'or': f'(id_usuario.neq.{lector_id},id_usuario.is.null)',
+            },
         )
+    except supabase_client.SupabaseError:
+        logger.warning('No se pudieron marcar como leídos los mensajes del reporte %s', reporte_id)
 
 
 @login_required(login_url='login')
@@ -295,15 +297,17 @@ def reporte_detalle(request, reporte_id):
             return JsonResponse({'ok': False, 'error': 'mensaje_vacio'}, status=400)
         return redirect('reporte_detalle', reporte_id=reporte_id)
 
+    adjuntos, mensajes_rows = [], []
     try:
-        adjuntos, mensajes_rows = [], []
-        adjuntos = supabase_client.select(
-            'reporte_adjunto', '*',
-            {'id_reporte': f'eq.{reporte_id}', 'order': 'id_adjunto.asc', 'limit': '100'},
-        )
-        mensajes_rows = supabase_client.select(
-            'reporte_mensaje', '*',
-            {'id_reporte': f'eq.{reporte_id}', 'order': 'id_mensaje.asc', 'limit': '500'},
+        adjuntos, mensajes_rows = run_parallel(
+            lambda: supabase_client.select(
+                'reporte_adjunto', '*',
+                {'id_reporte': f'eq.{reporte_id}', 'order': 'id_adjunto.asc', 'limit': '100'},
+            ),
+            lambda: supabase_client.select(
+                'reporte_mensaje', '*',
+                {'id_reporte': f'eq.{reporte_id}', 'order': 'id_mensaje.asc', 'limit': '500'},
+            ),
         )
     except supabase_client.SupabaseError:
         messages.error(request, 'No se pudo cargar la conversación.')
@@ -311,18 +315,7 @@ def reporte_detalle(request, reporte_id):
     # Nombres de los participantes (autor del reporte + admins que escriben)
     participantes = {reporte.get('id_usuario'), _supabase_id(request)}
     participantes.update(m.get('id_usuario') for m in mensajes_rows)
-    participantes.discard(None)
-    nombres = {}
-    if participantes:
-        ids = ','.join(str(i) for i in participantes)
-        try:
-            for row in supabase_client.select(
-                'usuario', 'id_usuario,nombre,apellido,id_rol',
-                {'id_usuario': f'in.({ids})', 'limit': '100'},
-            ):
-                nombres[row['id_usuario']] = row
-        except supabase_client.SupabaseError:
-            pass
+    nombres = _usuarios_por_id(participantes, 'id_usuario,nombre,apellido,id_rol')
 
     lector_id = _supabase_id(request)
     mensajes_chat = []
@@ -334,7 +327,8 @@ def reporte_detalle(request, reporte_id):
             'es_admin_emisor': emisor.get('id_rol') == 2,
             'autor_nombre': f"{emisor.get('nombre', '')} {emisor.get('apellido', '')}".strip() or 'Usuario',
         })
-    _marcar_leidos(reporte_id, lector_id)
+    if _hay_sin_leer(mensajes_rows, lector_id):
+        _marcar_leidos(reporte_id, lector_id)
 
     autor = nombres.get(reporte.get('id_usuario'), {})
     reporte['tipo_label'] = _tipo_label(reporte.get('tipo_problema'))
@@ -394,19 +388,15 @@ def reportes_comunidad(request):
         reportes = []
         messages.error(request, 'No se pudieron cargar los reportes de la comunidad.')
 
-    adjuntos_map = _adjuntos_por_reporte([r.get('id_reporte') for r in reportes])
-
-    autores = {}
-    ids_autor = {r.get('id_usuario') for r in reportes if r.get('id_usuario')}
-    if ids_autor:
-        try:
-            for row in supabase_client.select(
-                'usuario', 'id_usuario,nombre,apellido',
-                {'id_usuario': f"in.({','.join(str(i) for i in ids_autor)})", 'limit': '200'},
-            ):
-                autores[row['id_usuario']] = f"{row.get('nombre', '')} {row.get('apellido', '')[:1]}.".strip()
-        except supabase_client.SupabaseError:
-            pass
+    # Adjuntos y autores no dependen entre sí: se piden a la vez.
+    adjuntos_map, usuarios = run_parallel(
+        lambda: _adjuntos_por_reporte([r.get('id_reporte') for r in reportes]),
+        lambda: _usuarios_por_id((r.get('id_usuario') for r in reportes), 'id_usuario,nombre,apellido'),
+    )
+    autores = {
+        user_id: f"{row.get('nombre', '')} {(row.get('apellido') or '')[:1]}.".strip()
+        for user_id, row in usuarios.items()
+    }
 
     feed = []
     for reporte in reportes:
@@ -454,21 +444,14 @@ def admin_reportes(request):
         reportes = []
         messages.error(request, 'No se pudieron cargar los reportes.')
 
-    autores = {}
-    ids_autor = {r.get('id_usuario') for r in reportes if r.get('id_usuario')}
-    if ids_autor:
-        try:
-            for row in supabase_client.select(
-                'usuario', 'id_usuario,nombre,apellido,correo',
-                {'id_usuario': f"in.({','.join(str(i) for i in ids_autor)})", 'limit': '500'},
-            ):
-                autores[row['id_usuario']] = row
-        except supabase_client.SupabaseError:
-            pass
-
-    adjuntos_map = _adjuntos_por_reporte([r.get('id_reporte') for r in reportes])
+    reporte_ids = [r.get('id_reporte') for r in reportes]
     admin_id = _supabase_id(request)
-    sin_leer = _contadores_chat([r.get('id_reporte') for r in reportes], True, admin_id)
+    # Autores, adjuntos y mensajes sin leer son consultas independientes: se piden a la vez.
+    autores, adjuntos_map, sin_leer = run_parallel(
+        lambda: _usuarios_por_id((r.get('id_usuario') for r in reportes), 'id_usuario,nombre,apellido,correo'),
+        lambda: _adjuntos_por_reporte(reporte_ids),
+        lambda: _contadores_chat(reporte_ids, True, admin_id),
+    )
 
     lista = []
     for reporte in reportes:
@@ -691,8 +674,8 @@ def interrupciones_y_predicciones(user):
     """Datos para el bloque del dashboard: reportes abiertos de suministro,
     alertas recientes y predicciones de desabasto. Nunca lanza excepción."""
     resultado = {'reportes_abiertos': [], 'alertas': [], 'predicciones': []}
-    user_id = getattr(user, 'supabase_id', None) or getattr(user, 'id_usuario', None)
-    es_admin = getattr(user, 'rol_id', None) == 2
+    user_id = owner_id(user)
+    es_admin = is_admin(user)
 
     try:
         if es_admin:
@@ -704,7 +687,6 @@ def interrupciones_y_predicciones(user):
             }
         reportes, alertas, predicciones = [], [], []
         try:
-            from .queries import run_parallel
             reportes, alertas, predicciones = run_parallel(
                 lambda: supabase_client.select('reporte', '*', params_reportes),
                 lambda: supabase_client.select(
@@ -753,17 +735,7 @@ def reporte_mensajes_json(request, reporte_id):
         return JsonResponse({'ok': False, 'error': 'db_error'}, status=502)
 
     lector_id = _supabase_id(request)
-    nombres = {}
-    ids = {m.get('id_usuario') for m in filas if m.get('id_usuario')}
-    if ids:
-        try:
-            for row in supabase_client.select(
-                'usuario', 'id_usuario,nombre,apellido,id_rol',
-                {'id_usuario': f"in.({','.join(str(i) for i in ids)})", 'limit': '100'},
-            ):
-                nombres[row['id_usuario']] = row
-        except supabase_client.SupabaseError:
-            pass
+    nombres = _usuarios_por_id((m.get('id_usuario') for m in filas), 'id_usuario,nombre,apellido,id_rol')
 
     mensajes_chat = []
     for m in filas:
@@ -776,5 +748,6 @@ def reporte_mensajes_json(request, reporte_id):
             'es_admin_emisor': emisor.get('id_rol') == 2,
             'autor_nombre': f"{emisor.get('nombre', '')} {emisor.get('apellido', '')}".strip() or 'Usuario',
         })
-    _marcar_leidos(reporte_id, lector_id)
+    if _hay_sin_leer(filas, lector_id):
+        _marcar_leidos(reporte_id, lector_id)
     return JsonResponse({'ok': True, 'mensajes': mensajes_chat})

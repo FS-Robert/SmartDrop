@@ -143,6 +143,9 @@ else:
         'OPTIONS': {'timeout': 30},
     }
 
+# Carpeta de los modelos entrenados (joblib). Se conservan los activos y la versión anterior.
+ML_MODELS_DIR = Path(os.environ.get('ML_MODELS_DIR', '').strip() or BASE_DIR / 'ml_models')
+
 # Monitor automático de fugas (ml_engine/monitor.py): revisa cada N minutos y avisa a los admins.
 ML_MONITOR_ENABLED = os.environ.get('ML_MONITOR_ENABLED', '1') not in ('0', 'false', 'False')
 ML_MONITOR_INTERVAL_MINUTES = float(os.environ.get('ML_MONITOR_INTERVAL_MINUTES', '10'))

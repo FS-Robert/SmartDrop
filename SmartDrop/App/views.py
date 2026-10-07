@@ -29,6 +29,7 @@ from .queries import (
     LinkViviendaError,
     consumption_date,
     consumption_on,
+    is_admin,
     link_vivienda,
     owned_consumption,
     owned_data,
@@ -39,6 +40,7 @@ from .queries import (
     SENSOR_BUCKETS as _SENSOR_BUCKETS,
     sensors,
     user_viviendas,
+    users_by_id,
     with_flow_consumption,
 )
 from .search_sections import matching_sections
@@ -201,9 +203,17 @@ def _start_timer_for_valvula(valvula_id, duracion_seg):
     }
 
 
+# Solo las columnas que se muestran o en las que se busca (nunca `*`: la tabla usuario guarda el hash de la clave).
+_SEARCH_COLUMNS = {
+    'usuario': 'nombre,apellido,correo',
+    'log_valvula': 'accion,razon,fecha_hora,origen_accion',
+    'alerta': 'tipo_alerta,mensaje,prioridad,estado_confirmacion',
+}
+
+
 def _search_rows(table, search_term):
     try:
-        rows = supabase_client.select(table, '*', {'limit': '1000'})
+        rows = supabase_client.select(table, _SEARCH_COLUMNS[table], {'limit': '1000'})
     except Exception:
         logger.exception('No se pudo consultar %s para la búsqueda global', table)
         return []
@@ -226,9 +236,9 @@ def busqueda_global_view(request):
     }
 
     search_term = query.casefold()
-    is_admin = _admin_only(request)
-    resultados['secciones'] = matching_sections(search_term, is_admin)
-    if is_admin and search_term:
+    es_admin = _admin_only(request)
+    resultados['secciones'] = matching_sections(search_term, es_admin)
+    if es_admin and search_term:
         usuarios, logs, alertas = run_parallel(
             lambda: _search_rows('usuario', search_term),
             lambda: _search_rows('log_valvula', search_term),
@@ -473,10 +483,12 @@ def dashboard(request):
     if _admin_only(request):
         return redirect('admin_panel')
 
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        valve_future = executor.submit(_valve_status_or_unavailable)
-        data = _owned_data_or_empty(request.user, consumption=True)
-        valve_status = valve_future.result()
+    # Válvula, bloque de comunidad y datos de la vivienda son independientes: se piden a la vez.
+    valve_status, comunidad, data = run_parallel(
+        _valve_status_or_unavailable,
+        lambda: views_reportes.interrupciones_y_predicciones(request.user),
+        lambda: _owned_data_or_empty(request.user, consumption=True),
+    )
     viviendas, lecturas, consumption_rows = data.viviendas, data.lecturas, data.consumo
     latest = _averaged_readings_by_type(lecturas)
     pressure = _find_reading(latest, 'presion', 'pressure')
@@ -532,7 +544,7 @@ def dashboard(request):
         'viviendas': viviendas,
         'realtime_readings': list(latest.values()),
         'recent_window': RECENT_READINGS_WINDOW,
-        'comunidad': views_reportes.interrupciones_y_predicciones(request.user),
+        'comunidad': comunidad,
         'ultima_actualizacion': 'hace unos segundos',
     }
     return render(request, 'App/dashboard.html', context)
@@ -1067,7 +1079,7 @@ def recomendaciones(request):
 
 
 def _admin_only(request):
-    return getattr(request.user, 'rol_id', None) == 2
+    return is_admin(request.user)
 
 
 def _supabase_user_id(user):
@@ -1177,12 +1189,9 @@ def valvulas(request):
     movimientos_filtrados = []
     try:
         movimientos = movements_future.result()
-        user_ids = [str(row['id_usuario']) for row in movimientos if row.get('id_usuario')]
-        usuarios = supabase_client.select(
-            'usuario',
-            'id_usuario,nombre,apellido,correo',
-            {'id_usuario': f"in.({','.join(user_ids)})", 'limit': '1000'},
-        ) if user_ids else []
+        usuarios = users_by_id(
+            (row.get('id_usuario') for row in movimientos), 'id_usuario,nombre,apellido,correo',
+        ).values()
         nombres_usuarios = {
             str(usuario['id_usuario']): (
                 f"{usuario.get('nombre', '')} {usuario.get('apellido', '')}".strip()

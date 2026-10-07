@@ -2,8 +2,11 @@
 from __future__ import annotations
 
 import logging
+import shutil
 from datetime import timedelta
+from pathlib import Path
 
+from django.conf import settings
 from django.utils import timezone
 
 from ml_engine.anomaly.train import train_anomaly_model
@@ -14,6 +17,12 @@ from ml_engine.realdata.sync import data_quality
 logger = logging.getLogger(__name__)
 
 MODEL_MAX_AGE_DAYS = 7
+# Versiones inactivas que se conservan por tipo (para poder volver atrás); el resto se borra del disco.
+KEEP_INACTIVE_VERSIONS = 1
+MODEL_SUBDIRS = {
+    ModelArtifact.Kind.CONSUMPTION_QUANTILE: 'consumption',
+    ModelArtifact.Kind.ANOMALY_DETECTOR: 'anomaly',
+}
 
 
 class ModelsUnavailable(Exception):
@@ -69,4 +78,26 @@ def ensure_models(force=False, progress=None):
             raise ModelsUnavailable(str(exc)) from exc
         trained.append('anomalías')
 
+    if trained:
+        prune_model_files()
     return {'trained': bool(trained), 'models': trained, 'homes_used': len(home_ids)}
+
+
+def prune_model_files():
+    """Borra las versiones de modelos que ya no se usan: deja la activa y KEEP_INACTIVE_VERSIONS anteriores,
+    y elimina las carpetas que ningún ModelArtifact referencia (p. ej. entrenamientos interrumpidos)."""
+    removed = 0
+    for kind, subdir in MODEL_SUBDIRS.items():
+        inactive = ModelArtifact.objects.filter(kind=kind, is_active=False).order_by('-trained_at')
+        for artifact in inactive[KEEP_INACTIVE_VERSIONS:]:
+            shutil.rmtree(artifact.file_path, ignore_errors=True)
+            artifact.delete()
+            removed += 1
+        referenced = {Path(path).resolve() for path in ModelArtifact.objects.filter(kind=kind).values_list('file_path', flat=True)}
+        folder = Path(settings.ML_MODELS_DIR) / subdir
+        if folder.is_dir():
+            for version_dir in folder.iterdir():
+                if version_dir.is_dir() and version_dir.resolve() not in referenced:
+                    shutil.rmtree(version_dir, ignore_errors=True)
+                    removed += 1
+    return removed

@@ -14,7 +14,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from ml_engine.models import ConsumptionAggregate, Home
+from ml_engine.models import ConsumptionAggregate
 
 LAGS_HOURS = (1, 24, 168)  # 1h, mismo-hora-ayer, mismo-hora-semana-pasada
 ROLLING_WINDOWS_HOURS = {'7d': 24 * 7, '30d': 24 * 30}

@@ -8,7 +8,7 @@ from unittest import mock
 
 import numpy as np
 from django.core.cache import cache
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -34,6 +34,23 @@ def _comparable(value, other):
         except (TypeError, ValueError):
             continue
     return str(value), str(other)
+
+
+_MODELS_DIR = None
+_models_override = None
+
+
+def setUpModule():
+    """Todos los modelos que entrenan estas pruebas van a una carpeta temporal, nunca a ml_models/."""
+    global _MODELS_DIR, _models_override
+    _MODELS_DIR = Path(tempfile.mkdtemp(prefix='smartdrop-ml-'))
+    _models_override = override_settings(ML_MODELS_DIR=_MODELS_DIR)
+    _models_override.enable()
+
+
+def tearDownModule():
+    _models_override.disable()
+    shutil.rmtree(_MODELS_DIR, ignore_errors=True)
 
 
 class FakeSupabase:
@@ -142,14 +159,6 @@ def build_supabase(scenarios):
 
 class MlTestCase(TestCase):
     databases = {'default', 'timeseries'}
-
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        model_dir = Path(tempfile.mkdtemp(prefix='smartdrop-ml-'))
-        cls.addClassCleanup(shutil.rmtree, model_dir, ignore_errors=True)
-        cls.enterClassContext(mock.patch('ml_engine.forecasting.train.MODEL_DIR', model_dir / 'consumption'))
-        cls.enterClassContext(mock.patch('ml_engine.anomaly.train.MODEL_DIR', model_dir / 'anomaly'))
 
     def setUp(self):
         cache.clear()

@@ -75,7 +75,6 @@ pg_partman, ejecuta `python manage.py ml_setup_partitioning`.
 | `ml_run_shortage_prediction` | Predicción de desabasto. Flags: `--zone-id --horizon-hours --n-paths` |
 | `ml_run_anomaly_detection` | Registra `AnomalyEvent` con el Isolation Forest |
 | `ml_seed_demo_readings` | Escribe en Supabase lecturas demo realistas para las viviendas de `--viviendas 9,10,...` (`--dry-run` para ver antes) |
-| `ml_purge_synthetic` | Limpia de una base antigua los hogares sintéticos y los modelos entrenados con ellos |
 
 ## API REST (JWT de la app o sesión web, solo admin)
 
@@ -83,7 +82,8 @@ pg_partman, ejecuta `python manage.py ml_setup_partitioning`.
 - `GET /v1/ml/predictions/jobs/{id}/` — progreso y, al terminar, el resultado
 - `GET /v1/ml/predictions/status/` — última ejecución manual y estado del monitor
 - `GET /v1/ml/zones/summary/` — un tanque con su vivienda por fila
-- `GET /v1/ml/zones/{id}/current-status/`, `tank-trajectory/`, `shortage-prediction/`, `consumption-forecast/`, `anomalies/`
+- `GET /v1/ml/zones/{id}/current-status/`, `tank-trajectory/`, `shortage-prediction/`, `consumption-forecast/`,
+  `consumption-history/` (consumo por hora de las últimas 48 h), `anomalies/`
 - `GET /v1/ml/homes/{id}/consumption-forecast/`, `anomalies/`
 - `GET /v1/ml/leaks/` — última predicción de fuga por vivienda
 - `GET /v1/ml/leaks/alerts/` — avisos de fuga (`?solo_no_leidas=1`, `?desde_id=N`)
@@ -105,3 +105,10 @@ Usan un Supabase simulado en memoria; no tocan la base real.
 - Con riesgo bajo no se informa de horas hasta el desabasto: saldrían de unas pocas trayectorias extremas.
 - El servidor se asume en un solo proceso (hilo del monitor y ejecución de predicciones).
 - SHAP es opcional; si falla, `explanation` queda vacío.
+
+## Limpieza automática
+
+En cada ciclo del monitor se borran las predicciones de más de 7 días (salvo las que generaron un aviso),
+las lecturas locales de más de 35 días, los agregados horarios de más de 90 días y los trabajos de predicción
+más allá de los últimos 50. Al entrenar se conserva solo el modelo activo y la versión anterior en
+`ML_MODELS_DIR` (por defecto `ml_models/`).

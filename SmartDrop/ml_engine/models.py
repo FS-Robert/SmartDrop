@@ -6,7 +6,6 @@ aquí sus lecturas. `source` conserva el valor 'synthetic' solo por compatibilid
 con bases antiguas: el generador de hogares sintéticos se retiró y el pipeline
 únicamente usa los de origen 'real'.
 """
-from django.conf import settings
 from django.db import models
 
 
@@ -120,6 +119,8 @@ class SensorReading(models.Model):
         indexes = [
             models.Index(fields=['home', 'metric', 'ts']),
             models.Index(fields=['zone', 'metric', 'ts']),
+            # Última lectura de un hogar sin importar la métrica (data_quality, sincronización).
+            models.Index(fields=['home', 'ts']),
         ]
 
     def __str__(self):

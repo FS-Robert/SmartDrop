@@ -12,6 +12,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone as dt_timezone
 
 import pandas as pd
+from django.db.models import Count
 from django.utils import timezone
 
 from App import queries, supabase_client
@@ -314,9 +315,12 @@ def data_quality(home):
         return {**result, 'status': 'sin_lecturas_recientes',
                 'detail': f'La última lectura tiene {age_hours:.0f} h; el sensor no está reportando.'}
 
-    week = SensorReading.objects.filter(home=home, ts__gte=now - timedelta(days=7), metric__in=['flujo', 'presion', 'nivel_tanque'])
-    frame = pd.DataFrame.from_records(week.values('metric', 'value'))
-    if not frame.empty and (frame.groupby('metric')['value'].nunique() <= 1).all():
+    # Valores distintos por métrica en la última semana, contados en la base (sin cargar las lecturas).
+    distinct = SensorReading.objects.filter(
+        home=home, ts__gte=now - timedelta(days=7), metric__in=['flujo', 'presion', 'nivel_tanque'],
+    ).values('metric').annotate(n=Count('value', distinct=True)).values_list('n', flat=True)
+    distinct = list(distinct)
+    if distinct and all(n <= 1 for n in distinct):
         return {**result, 'status': 'plana',
                 'detail': 'Las lecturas de la última semana no varían (valor constante): no hay patrón que analizar.'}
 

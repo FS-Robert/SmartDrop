@@ -7,7 +7,6 @@ import logging
 from pathlib import Path
 
 import joblib
-import numpy as np
 
 from ml_engine.anomaly.features import RESIDUAL_COLUMNS, build_residual_frame
 from ml_engine.models import AnomalyEvent, Home, ModelArtifact

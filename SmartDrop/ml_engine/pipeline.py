@@ -10,7 +10,17 @@ from django.db.models import F, Q
 from django.utils import timezone
 
 from ml_engine.leaks.detect import run_leak_analysis
-from ml_engine.models import ConsumptionForecast, Home, LeakPrediction, MonitorState, ShortagePrediction, Zone
+from ml_engine.models import (
+    ConsumptionAggregate,
+    ConsumptionForecast,
+    Home,
+    LeakPrediction,
+    MonitorState,
+    PredictionJob,
+    SensorReading,
+    ShortagePrediction,
+    Zone,
+)
 from ml_engine.realdata import sync
 from ml_engine.shortage.tank_simulation import run_shortage_prediction
 from ml_engine.supabase_out import save_shortage_prediction
@@ -122,14 +132,26 @@ def run_full_prediction(progress=None):
 
 
 RETENTION_DAYS = 7
+# La copia local de lecturas solo necesita la ventana de sincronización (30 días) más un margen;
+# los agregados por hora (mucho más livianos) se guardan más tiempo para entrenar los modelos.
+READINGS_RETENTION_DAYS = sync.HISTORY_DAYS + 5
+AGGREGATES_RETENTION_DAYS = 90
+JOBS_TO_KEEP = 50
 
 
 def prune_old_results():
-    """El monitor evalúa cada pocos minutos: se conservan 7 días de predicciones (y las que generaron alerta)."""
-    limit = timezone.now() - timedelta(days=RETENTION_DAYS)
+    """El monitor evalúa cada pocos minutos: se conservan 7 días de predicciones (y las que generaron alerta)
+    y se recorta la copia local de lecturas para que la base no crezca sin límite."""
+    now = timezone.now()
+    limit = now - timedelta(days=RETENTION_DAYS)
     LeakPrediction.objects.filter(generated_at__lt=limit, alerta_id__isnull=True).delete()
     ConsumptionForecast.objects.filter(generated_at__lt=limit).delete()
     ShortagePrediction.objects.filter(generated_at__lt=limit).delete()
+    SensorReading.objects.filter(ts__lt=now - timedelta(days=READINGS_RETENTION_DAYS)).delete()
+    ConsumptionAggregate.objects.filter(period_start__lt=now - timedelta(days=AGGREGATES_RETENTION_DAYS)).delete()
+    old_jobs = list(PredictionJob.objects.order_by('-started_at').values_list('id', flat=True)[JOBS_TO_KEEP:])
+    if old_jobs:
+        PredictionJob.objects.filter(id__in=old_jobs).delete()
 
 
 def run_monitor_cycle():

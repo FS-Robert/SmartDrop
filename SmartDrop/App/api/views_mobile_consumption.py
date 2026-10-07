@@ -141,8 +141,15 @@ class MobileRecomendacionesView(APIView):
     def get(self, request):
         return Response({
             'saludo': 'Basado en tu consumo reciente, tenemos estas sugerencias para ti.',
+            # `icono_drawable` es el nombre de la imagen incluida en la app Android (res/drawable).
             'tips': [
-                {'id': 'cerrar_llave', 'titulo': 'Cierra la llave mientras te cepillas', 'impacto': 'Ahorra agua diariamente'},
-                {'id': 'reducir_ducha', 'titulo': 'Reduce el tiempo de ducha', 'impacto': 'Disminuye tu consumo'},
+                {'id': 'cerrar_llave', 'titulo': 'Cierra la llave mientras te cepillas', 'impacto': 'Ahorra hasta 10 L al día',
+                 'icono_drawable': 'tip_cerrar_llave'},
+                {'id': 'reducir_ducha', 'titulo': 'Reduce el tiempo de ducha a 5 minutos', 'impacto': 'Disminuye tu consumo',
+                 'icono_drawable': 'tip_reducir_ducha'},
+                {'id': 'grifo_platos', 'titulo': 'Lava los platos con el grifo cerrado', 'impacto': 'Usa un recipiente con agua',
+                 'icono_drawable': 'tip_grifo_platos'},
+                {'id': 'lavado_vehiculos', 'titulo': 'Lava el vehículo con cubeta, no con manguera', 'impacto': 'Ahorra decenas de litros',
+                 'icono_drawable': 'tip_lavado_vehiculos'},
             ],
         })

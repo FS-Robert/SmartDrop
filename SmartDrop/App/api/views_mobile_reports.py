@@ -10,23 +10,20 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .. import supabase_client
+from ..queries import is_admin as _es_admin, owner_id as _user_id, run_parallel
 from ..views_reportes import (
     ESTADO_LABEL,
     MAX_ADJUNTOS,
+    _adjuntos_por_reporte as _adjuntos_map,
     _guardar_adjuntos,
+    _hay_sin_leer,
+    _marcar_leidos,
     _tipo_meta,
+    _usuarios_por_id,
 )
 from .permissions import IsAuthenticatedUser
 
 logger = logging.getLogger(__name__)
-
-
-def _user_id(user):
-    return getattr(user, 'supabase_id', None) or getattr(user, 'id_usuario', None)
-
-
-def _es_admin(user):
-    return getattr(user, 'rol_id', None) == 2
 
 
 def _serialize_reporte(row, adjuntos_map=None, autores=None):
@@ -51,40 +48,24 @@ def _serialize_reporte(row, adjuntos_map=None, autores=None):
     }
 
 
-def _adjuntos_map(reporte_ids):
-    if not reporte_ids:
-        return {}
-    ids = ','.join(str(i) for i in reporte_ids)
-    try:
-        rows = supabase_client.select(
-            'reporte_adjunto', '*',
-            {'id_reporte': f'in.({ids})', 'order': 'id_adjunto.asc', 'limit': '500'},
-        )
-    except supabase_client.SupabaseError:
-        return {}
-    agrupados = {}
-    for row in rows:
-        agrupados.setdefault(row.get('id_reporte'), []).append(row)
-    return agrupados
-
-
 def _nombres_usuarios(ids):
-    if not ids:
-        return {}
-    try:
-        rows = supabase_client.select(
-            'usuario', 'id_usuario,nombre,apellido,id_rol',
-            {'id_usuario': f"in.({','.join(str(i) for i in ids)})", 'limit': '500'},
-        )
-    except supabase_client.SupabaseError:
-        return {}
     return {
-        row['id_usuario']: {
+        user_id: {
             'nombre': f"{row.get('nombre', '')} {row.get('apellido', '')}".strip(),
             'es_admin': row.get('id_rol') == 2,
         }
-        for row in rows
+        for user_id, row in _usuarios_por_id(ids, 'id_usuario,nombre,apellido,id_rol').items()
     }
+
+
+def _feed(rows):
+    """Reportes serializados con sus adjuntos y autores (ambas consultas a la vez)."""
+    adjuntos, autores = run_parallel(
+        lambda: _adjuntos_map([r.get('id_reporte') for r in rows]),
+        lambda: _nombres_usuarios({r.get('id_usuario') for r in rows}),
+    )
+    nombres = {uid: info['nombre'] for uid, info in autores.items()}
+    return [_serialize_reporte(r, adjuntos, nombres) for r in rows]
 
 
 class MobileReportesView(APIView):
@@ -100,10 +81,7 @@ class MobileReportesView(APIView):
             rows = supabase_client.select('reporte', '*', params)
         except supabase_client.SupabaseError as exc:
             return Response({'ok': False, 'error': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
-        adjuntos = _adjuntos_map([r.get('id_reporte') for r in rows])
-        autores = _nombres_usuarios({r.get('id_usuario') for r in rows if r.get('id_usuario')})
-        nombres = {uid: info['nombre'] for uid, info in autores.items()}
-        return Response({'ok': True, 'reportes': [_serialize_reporte(r, adjuntos, nombres) for r in rows]})
+        return Response({'ok': True, 'reportes': _feed(rows)})
 
     def post(self, request):
         data = request.data
@@ -166,9 +144,12 @@ class MobileReporteDetalleView(APIView):
             reporte = self._get_reporte(request, reporte_id)
             if not reporte:
                 return Response({'ok': False, 'error': 'no_encontrado'}, status=status.HTTP_404_NOT_FOUND)
-            mensajes = supabase_client.select(
-                'reporte_mensaje', '*',
-                {'id_reporte': f'eq.{reporte_id}', 'order': 'id_mensaje.asc', 'limit': '500'},
+            mensajes, adjuntos = run_parallel(
+                lambda: supabase_client.select(
+                    'reporte_mensaje', '*',
+                    {'id_reporte': f'eq.{reporte_id}', 'order': 'id_mensaje.asc', 'limit': '500'},
+                ),
+                lambda: _adjuntos_map([reporte_id]),
             )
         except supabase_client.SupabaseError as exc:
             return Response({'ok': False, 'error': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
@@ -186,17 +167,12 @@ class MobileReporteDetalleView(APIView):
             }
             for m in mensajes
         ]
-        # Marcar como leídos los mensajes ajenos
-        no_leidos = [m['id_mensaje'] for m in mensajes if m.get('id_usuario') != lector and not m.get('leido')]
-        if no_leidos:
-            supabase_client.update(
-                'reporte_mensaje', {'leido': True},
-                {'id_mensaje': f"in.({','.join(str(i) for i in no_leidos)})"},
-            )
+        if _hay_sin_leer(mensajes, lector):
+            _marcar_leidos(reporte_id, lector)
         return Response({
             'ok': True,
             'reporte': _serialize_reporte(
-                reporte, _adjuntos_map([reporte_id]),
+                reporte, adjuntos,
                 {uid: info['nombre'] for uid, info in autores.items()},
             ),
             'mensajes': chat,
@@ -252,10 +228,7 @@ class MobileReportesComunidadView(APIView):
             )
         except supabase_client.SupabaseError as exc:
             return Response({'ok': False, 'error': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
-        adjuntos = _adjuntos_map([r.get('id_reporte') for r in rows])
-        autores = _nombres_usuarios({r.get('id_usuario') for r in rows})
-        nombres = {uid: info['nombre'] for uid, info in autores.items()}
-        return Response({'ok': True, 'reportes': [_serialize_reporte(r, adjuntos, nombres) for r in rows]})
+        return Response({'ok': True, 'reportes': _feed(rows)})
 
 
 class MobileReportesCatalogoView(APIView):

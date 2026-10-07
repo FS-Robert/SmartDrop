@@ -35,7 +35,6 @@ from ml_engine.forecasting.predict import predict_consumption_for_homes
 from ml_engine.models import (
     ConsumptionAggregate,
     ConsumptionForecast,
-    Home,
     SensorReading,
     ShortagePrediction,
     TankTrajectory,

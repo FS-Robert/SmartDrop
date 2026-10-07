@@ -5,7 +5,6 @@ from ml_engine.models import (
     ConsumptionForecast,
     ShortagePrediction,
     TankTrajectory,
-    Zone,
 )
 
 

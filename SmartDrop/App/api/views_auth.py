@@ -7,7 +7,6 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .. import supabase_client
-from ..models import Usuario
 from .permissions import IsAuthenticatedUser
 
 
