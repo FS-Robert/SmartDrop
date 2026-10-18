@@ -2,7 +2,7 @@
 {% load static sd_ui %}
 {% block title %}Inicio{% endblock %}
 {% block nav_dashboard %}active{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/dashboard.css' %}?v=20261011-zona1">{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/dashboard.css' %}?v=20261018-agua1">{% endblock %}
 
 {% block content %}
 {% resumen_hogar presion.estado_amigable calidad.estado tanque.estado_amigable as resumen %}
@@ -19,18 +19,19 @@
 {% endif %}
 
 <!-- ── Resumen del agua de tu zona ── -->
-<section class="home-hero" aria-labelledby="hero-resumen">
+<section class="home-hero agua-escena" aria-labelledby="hero-resumen">
+  {% include 'App/_agua_fondo.html' with foto=True %}
   <div class="home-hero-text">
     <p class="home-hero-saludo" id="hero-saludo" data-nombre="{{ user.nombre|default:user.get_short_name|default:'' }}">Hola{% if user.nombre %}, {{ user.nombre }}{% endif %}</p>
     <h1 class="home-hero-title" id="hero-resumen">{{ resumen.texto }}</h1>
 
     <dl class="home-hero-facts">
       <div>
-        <dt>Tanque de tu zona</dt>
+        <dt><i class="ti ti-database" aria-hidden="true"></i>Tanque de tu zona</dt>
         <dd class="num"><span class="friendly-view" data-countup>{{ tanque.litros }} L disponibles</span><span class="exact-view" style="display: none;">{{ tanque.porcentaje }} %</span></dd>
       </div>
       <div>
-        <dt>Vivienda</dt>
+        <dt><i class="ti ti-home" aria-hidden="true"></i>Vivienda</dt>
         <dd class="housing-overview">
           {% if viviendas %}
             <span class="num">{{ viviendas.0.nic }}</span>
@@ -40,7 +41,7 @@
         </dd>
       </div>
       <div>
-        <dt>Última lectura</dt>
+        <dt><i class="ti ti-clock" aria-hidden="true"></i>Última lectura</dt>
         <dd class="update-overview">{{ ultima_actualizacion|default:"Sin lecturas todavía" }}</dd>
       </div>
     </dl>
@@ -55,7 +56,7 @@
     </div>
   </div>
 
-  <div class="home-hero-zona">
+  <div class="home-hero-zona agua-cristal agua-flota">
     {% include 'App/_zona_ilustracion.html' with nivel=tanque.porcentaje uid='hero' clase='home-hero-svg' %}
   </div>
 </section>
@@ -77,6 +78,9 @@
       <span class="status status--{{ presion.estado_amigable|estado_css }}"><span class="status-dot" aria-hidden="true"></span>{{ presion.badge }}</span>
       <p id="dashboard-pressure-friendly" class="vital-msg friendly-view friendly-message" style="display: block;">{{ presion.mensaje_amigable }}</p>
       <p id="dashboard-pressure-exact" class="tile-value exact-view exact-value" style="display: none;">{{ presion.valor_exacto }}</p>
+      <div class="vital-visual vital-visual--medidor">
+        {% include 'App/_medidor_presion.html' with pct=presion.pct uid='dash-presion' %}
+      </div>
     </a>
 
     <a href="{% url 'calidad' %}" class="tile vital quality-card">
@@ -88,6 +92,9 @@
       <span class="status status--{{ calidad.estado|estado_css }}"><span class="status-dot" aria-hidden="true"></span>{{ calidad.badge }}</span>
       <p id="dashboard-quality-friendly" class="vital-msg friendly-view friendly-message" style="display: block;">{{ calidad.mensaje_amigable }}</p>
       <p id="dashboard-quality-exact" class="tile-value exact-view exact-value" style="display: none;">{{ calidad.tds|floatformat:0 }} <span class="tile-unit">ppm TDS</span></p>
+      <div class="vital-visual vital-visual--gota">
+        {% include 'App/_gota_calidad.html' with estado=calidad.estado|estado_css uid='dash-gota' %}
+      </div>
     </a>
 
     <a href="{% url 'tanque' %}" class="tile vital tank-card">
@@ -112,6 +119,9 @@
       </div>
       <p class="tile-value consumption-value" data-countup>{{ consumo.hoy }} <span class="tile-unit">litros</span></p>
       <p class="tile-note">Desde la medianoche hasta ahora.</p>
+      <div class="vital-visual vital-visual--goteo">
+        {% include 'App/_goteo.html' %}
+      </div>
     </a>
   </div>
 </section>
@@ -131,6 +141,17 @@
         <span class="status {% if valvula.clase == 'open' %}status--ok{% elif valvula.clase == 'closed' %}status--warn{% else %}status--none{% endif %}" id="dashboard-valve-badge"><span class="status-dot" aria-hidden="true"></span>{{ valvula.estado|sentence }}</span>
       </div>
     </div>
+    <div class="dash-tuberia" id="dashboard-valve-pipe" data-estado="{{ valvula.clase|default:'unknown' }}" aria-hidden="true">
+      <svg class="tuberia" viewBox="0 0 320 64" focusable="false">
+        <path class="tuberia-tubo" d="M12 40H308"/>
+        <path class="tuberia-flujo tuberia-flujo--entrada" d="M12 40H138"/>
+        <path class="tuberia-flujo tuberia-flujo--salida" d="M182 40H308"/>
+        <rect class="tuberia-valvula" x="138" y="24" width="44" height="32" rx="9"/>
+        <path class="tuberia-volante" d="M160 24V12M146 12H174"/>
+      </svg>
+      <span class="dash-tuberia-label dash-tuberia-label--desde">Tanque</span>
+      <span class="dash-tuberia-label dash-tuberia-label--hasta">Tu zona</span>
+    </div>
     <p class="updated valve-last-update">Actualizado: <span id="dashboard-valve-updated">{{ valvula.ultima_actualizacion }}</span></p>
   </section>
 
@@ -140,19 +161,19 @@
     </div>
     <dl class="kv kv--inline stats-row">
       <div>
-        <dt>Sistema</dt>
+        <dt><i class="ti ti-activity-heartbeat" aria-hidden="true"></i>Sistema</dt>
         <dd>{{ stats.uptime }}</dd>
       </div>
       <div>
-        <dt>Temperatura del agua</dt>
+        <dt><i class="ti ti-temperature" aria-hidden="true"></i>Temperatura del agua</dt>
         <dd id="dashboard-temperature" class="num">{{ stats.temperatura }}</dd>
       </div>
       <div>
-        <dt>Presión</dt>
+        <dt><i class="ti ti-gauge" aria-hidden="true"></i>Presión</dt>
         <dd><span class="friendly-view">{{ presion.badge }}</span><span class="exact-view num" style="display: none;">{{ stats.presion_exacta }}</span></dd>
       </div>
       <div>
-        <dt>Sólidos disueltos (TDS)</dt>
+        <dt><i class="ti ti-flask" aria-hidden="true"></i>Sólidos disueltos (TDS)</dt>
         <dd><span class="friendly-view">{{ calidad.badge }}</span><span class="exact-view num" style="display: none;">{{ calidad.tds|floatformat:0 }} ppm</span></dd>
       </div>
     </dl>
@@ -189,8 +210,8 @@
           {% endfor %}
         </ul>
       {% else %}
-        <div class="empty dash-empty mini-empty">
-          <span class="icon-chip icon-chip--ok"><i class="ti ti-check" aria-hidden="true"></i></span>
+        <div class="empty empty--ilus dash-empty mini-empty">
+          {% include 'App/_ilustracion.html' with tipo='ok' %}
           <p>No hay interrupciones abiertas en tu zona.</p>
         </div>
       {% endif %}
@@ -213,8 +234,8 @@
           {% endfor %}
         </ul>
       {% else %}
-        <div class="empty dash-empty mini-empty">
-          <span class="icon-chip icon-chip--ok"><i class="ti ti-bell" aria-hidden="true"></i></span>
+        <div class="empty empty--ilus dash-empty mini-empty">
+          {% include 'App/_ilustracion.html' with tipo='alertas' %}
           <p>Sin alertas recientes. Te avisaremos si algo cambia.</p>
         </div>
       {% endif %}
@@ -289,6 +310,7 @@
   const valveBadge = document.getElementById('dashboard-valve-badge');
   const valveUpdated = document.getElementById('dashboard-valve-updated');
   const valveIcon = document.getElementById('valve-status-icon');
+  const valvePipe = document.getElementById('dashboard-valve-pipe');
 
   function sentence(text) {
     const value = String(text || '').trim();
@@ -313,6 +335,7 @@
       valveBadge.append(sentence(valve.estado));
       valveIcon.className = `icon-chip icon-chip--lg icon-chip--${mod}`;
       valveIcon.innerHTML = `<i class="ti ${isOpen ? 'ti-lock-open' : 'ti-lock'}" aria-hidden="true"></i>`;
+      valvePipe.dataset.estado = isOpen ? 'open' : (isClosed ? 'closed' : 'unknown');
       valveUpdated.textContent = valve.ultima_actualizacion;
     } catch (error) {
       // El estado inicial permanece visible si una actualización temporal falla.
@@ -344,6 +367,7 @@
 
     if (type.includes('presion') || type.includes('pressure')) {
       document.getElementById('dashboard-pressure-exact').textContent = `${value} kPa`;
+      document.getElementById('dash-presion-aguja').style.setProperty('--pct', Math.min(Math.max(value / 5 * 100, 0), 100));
       document.getElementById('dashboard-pressure-friendly').textContent =
         value >= 2 && value <= 3.5 ? 'Presión normal. Sistema funcionando correctamente.' : 'Presión fuera del rango normal.';
     } else if (type.includes('tds') || type.includes('calidad') || type.includes('ph')) {

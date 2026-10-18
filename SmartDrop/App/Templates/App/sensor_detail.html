@@ -2,7 +2,7 @@
 {% load static %}
 {% block title %}Sensor: {{ sensor.tipo_sensor|title }}{% endblock %}
 {% block nav_admin %}active{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/sensores.css' %}?v=20261011-zona1">{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/sensores.css' %}?v=20261018-agua1">{% endblock %}
 
 {% block content %}
 <nav class="breadcrumb" aria-label="Ruta">
@@ -63,7 +63,7 @@
 
 {% block extra_js %}
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <script src="{% static 'App/js/sd_charts.js' %}?v=20261011-zona1"></script>
+  <script src="{% static 'App/js/sd_charts.js' %}?v=20261018-agua1"></script>
   <script>
     (function(){
       const sensorId = '{{ sensor.id_sensor }}';

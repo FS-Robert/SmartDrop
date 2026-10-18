@@ -1,5 +1,5 @@
 /* ==========================================================================
-   SmartDrop — sistema de diseño "Agua de la zona"
+   SmartDrop — sistema de diseño "Agua de la zona" (tema agua: azules claros, Inter y Montserrat)
    Hoja base: tokens, reset, tipografía, estructura de la app y componentes.
    Las páginas agregan sus estilos en css/pages/<pagina>.css usando SOLO tokens.
    Especificidad plana: una clase por regla y :where() para los elementos.
@@ -10,27 +10,39 @@
   color-scheme: light;
 
   /* Superficies */
-  --c-page: #F3F4F7;
+  --c-page: #F1F8FD;
   --c-surface: #FFFFFF;
-  --c-surface-2: #F7F8FB;
-  --c-surface-tint: #E9EDF8;
-  --c-line: #DDE1EC;
-  --c-line-strong: #BFC6D9;
+  --c-surface-2: #F5FAFE;
+  --c-surface-tint: #E3F2FB;
+  --c-line: #D6E7F2;
+  --c-line-strong: #AECDE2;
 
   /* Texto */
-  --c-ink: #1B2546;
-  --c-ink-2: #4A5573;
-  --c-ink-3: #5F6985;
+  --c-ink: #0B2A42;
+  --c-ink-2: #3A5870;
+  --c-ink-3: #52708A;
 
-  /* Marca: añil */
-  --c-anil: #2B3F8F;
-  --c-anil-strong: #1F2F70;
-  --c-anil-soft: #E6EAF7;
+  /* Marca: azul océano (el nombre "añil" se conserva para no tocar las páginas) */
+  --c-anil: #0369A1;
+  --c-anil-strong: #075985;
+  --c-anil-soft: #E0F2FE;
   --c-on-anil: #FFFFFF;
 
   /* Agua y luz cálida (sol: solo ilustración y fondos cálidos, nunca texto ni estado) */
-  --c-agua: #1D8FB8;
-  --c-agua-soft: #DDF1F8;
+  --c-agua: #0891D1;
+  --c-agua-soft: #DDF2FC;
+  --c-agua-claro: #7DD3FC;
+
+  /* Tema agua: degradado azul claro de las escenas (héroes) y del fondo */
+  --g-agua: linear-gradient(135deg, #EAF7FE 0%, #D6EEFA 45%, #C9E9F7 75%, #D3F2EF 100%);
+  --g-agua-tenue: linear-gradient(180deg, #F6FBFE 0%, #EAF6FD 100%);
+  --g-agua-boton: linear-gradient(135deg, #0EA5E9 0%, #0369A1 100%);
+  --c-ola: rgba(255, 255, 255, .55);
+  --c-ola-2: rgba(14, 165, 233, .14);
+  --c-burbuja: rgba(255, 255, 255, .75);
+  --g-sidebar: linear-gradient(180deg, #FFFFFF 0%, #F3FAFE 45%, #E6F4FC 100%);
+  --sidebar-olas: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 90' preserveAspectRatio='none'%3E%3Cpath d='M0 38c32-14 64-14 96 0s64 14 96 0 48-10 64-4v56H0z' fill='%23BAE6FD' fill-opacity='.45'/%3E%3Cpath d='M0 58c40-14 80-14 120 0s76 12 136-4v36H0z' fill='%237DD3FC' fill-opacity='.35'/%3E%3C/svg%3E");
+  --shadow-soft: 0 1px 2px rgba(11, 42, 66, .04), 0 6px 20px -16px rgba(3, 105, 161, .35);
   --c-sol: #F2B544;
   --c-sol-soft: #FDF3DE;
 
@@ -48,14 +60,14 @@
   --c-none-bg: #ECEEF4;
 
   /* Velos (fondos detrás de cajón y diálogos) */
-  --c-scrim: rgba(16, 21, 42, .45);
+  --c-scrim: rgba(7, 26, 44, .45);
 
   /* Ilustración del tanque de la zona */
   --zona-brillo: var(--c-surface);
 
   /* Tipografía */
-  --font-text: "Atkinson Hyperlegible Next", "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-display: "Nunito", "Atkinson Hyperlegible Next", system-ui, sans-serif;
+  --font-text: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Montserrat", "Inter", system-ui, sans-serif;
   --t-4xl: 3rem;        /* 48 */
   --t-3xl: 2.25rem;     /* 36 */
   --t-2xl: 1.5rem;      /* 24 */
@@ -86,8 +98,8 @@
   --r-pill: 999px;
 
   /* Elevación (solo capas superpuestas y el héroe) */
-  --shadow-raise: 0 1px 2px rgba(27, 37, 70, .06), 0 8px 24px -12px rgba(27, 37, 70, .18);
-  --shadow-overlay: 0 24px 48px -16px rgba(16, 21, 42, .35), 0 2px 8px rgba(16, 21, 42, .10);
+  --shadow-raise: 0 1px 2px rgba(11, 42, 66, .05), 0 10px 28px -14px rgba(3, 105, 161, .28);
+  --shadow-overlay: 0 24px 48px -16px rgba(7, 26, 44, .35), 0 2px 8px rgba(7, 26, 44, .10);
 
   /* Movimiento */
   --ease: cubic-bezier(.2, .7, .2, 1);
@@ -112,24 +124,36 @@ body[data-theme="dark"],
 body.dark-mode {
   color-scheme: dark;
 
-  --c-page: #10152A;
-  --c-surface: #171D35;
-  --c-surface-2: #1D2440;
-  --c-surface-tint: #252E55;
-  --c-line: #2A3356;
-  --c-line-strong: #3A4470;
+  --c-page: #071A2C;
+  --c-surface: #0C2338;
+  --c-surface-2: #0F2943;
+  --c-surface-tint: #123150;
+  --c-line: #1C3D5C;
+  --c-line-strong: #2A5478;
 
-  --c-ink: #E8EBF5;
-  --c-ink-2: #B3BAD3;
-  --c-ink-3: #8F98B8;
+  --c-ink: #E6F3FC;
+  --c-ink-2: #A9C4DA;
+  --c-ink-3: #86A3BB;
 
-  --c-anil: #A3B4FF;
-  --c-anil-strong: #C5D0FF;
-  --c-anil-soft: #252E55;
-  --c-on-anil: #10152A;
+  --c-anil: #7DD3FC;
+  --c-anil-strong: #BAE6FD;
+  --c-anil-soft: #123150;
+  --c-on-anil: #071A2C;
 
-  --c-agua: #4FC3E6;
-  --c-agua-soft: #173447;
+  --c-agua: #38BDF8;
+  --c-agua-soft: #0E3350;
+  --c-agua-claro: #0369A1;
+
+  /* Océano de noche */
+  --g-agua: linear-gradient(135deg, #0B2A44 0%, #0D3352 55%, #0B3A4C 100%);
+  --g-agua-tenue: linear-gradient(180deg, #08203A 0%, #071A2C 100%);
+  --g-agua-boton: linear-gradient(135deg, #38BDF8 0%, #7DD3FC 100%);
+  --c-ola: rgba(125, 211, 252, .10);
+  --c-ola-2: rgba(56, 189, 248, .10);
+  --c-burbuja: rgba(186, 230, 253, .35);
+  --g-sidebar: linear-gradient(180deg, #0A2034 0%, #0B2540 100%);
+  --sidebar-olas: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 90' preserveAspectRatio='none'%3E%3Cpath d='M0 38c32-14 64-14 96 0s64 14 96 0 48-10 64-4v56H0z' fill='%2338BDF8' fill-opacity='.10'/%3E%3Cpath d='M0 58c40-14 80-14 120 0s76 12 136-4v36H0z' fill='%237DD3FC' fill-opacity='.12'/%3E%3C/svg%3E");
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, .25);
   --c-sol: #E7A93A;
   --c-sol-soft: #2E2817;
 
@@ -145,7 +169,7 @@ body.dark-mode {
   --c-none: #A3AAC4;
   --c-none-bg: #222A47;
 
-  --c-scrim: rgba(5, 8, 20, .62);
+  --c-scrim: rgba(2, 10, 20, .62);
   --zona-brillo: var(--c-ink);
 
   /* En fondo oscuro la sombra necesita más cuerpo para verse */
@@ -252,7 +276,7 @@ body.dark-mode {
 :where(h1, h2, h3, h4, h5, h6) {
   color: var(--c-ink);
   font-family: var(--font-display);
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1.25;
   letter-spacing: -0.01em;
   text-wrap: balance;
@@ -409,10 +433,23 @@ body.dark-mode {
   height: 100dvh;
   overflow-y: auto;
   overscroll-behavior: contain;
-  background: var(--c-surface);
+  background: var(--g-sidebar);
   border-right: 1px solid var(--c-line);
   scrollbar-width: thin;
   scrollbar-color: var(--c-line-strong) transparent;
+}
+
+/* Olas decorativas al pie de la barra lateral (no reciben clics) */
+.sidebar::after {
+  content: "";
+  position: sticky;
+  bottom: 0;
+  flex: none;
+  display: block;
+  height: 90px;
+  margin-top: auto;
+  background: var(--sidebar-olas) bottom / 100% 90px no-repeat;
+  pointer-events: none;
 }
 
 .sidebar-head {
@@ -442,7 +479,7 @@ body.dark-mode {
   color: var(--c-anil);
   font-family: var(--font-display);
   font-size: 1.375rem;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: -0.01em;
   line-height: 1;
   text-decoration: none;
@@ -527,7 +564,7 @@ body.dark-mode {
 }
 
 .nav-link:hover {
-  background: var(--c-surface-2);
+  background: color-mix(in srgb, var(--c-surface) 70%, transparent);
   color: var(--c-ink);
 }
 
@@ -537,9 +574,23 @@ body.dark-mode {
 }
 
 .nav-link.active {
-  background: var(--c-surface-tint);
+  position: relative;
+  background: var(--c-surface);
   color: var(--c-anil);
   font-weight: 600;
+  box-shadow: 0 1px 2px rgba(11, 42, 66, .06), 0 8px 18px -12px rgba(3, 105, 161, .45);
+}
+
+/* Marca del enlace activo: una franja de agua a la izquierda */
+.nav-link.active::before {
+  content: "";
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 0;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--g-agua-boton);
 }
 
 .nav-link.active > .ti,
@@ -557,8 +608,10 @@ body.dark-mode {
   gap: var(--s-3);
   height: var(--topbar-h);
   padding: 0 var(--gutter);
-  background: var(--c-surface);
+  background: color-mix(in srgb, var(--c-surface) 82%, transparent);
   border-bottom: 1px solid var(--c-line);
+  -webkit-backdrop-filter: saturate(160%) blur(12px);
+  backdrop-filter: saturate(160%) blur(12px);
 }
 
 .topbar-actions {
@@ -843,9 +896,9 @@ mark.global-search-highlight {
   color: var(--c-ink);
   font-family: var(--font-display);
   font-size: var(--t-3xl);
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1.15;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
   text-align: left;
 }
 
@@ -933,9 +986,9 @@ mark.global-search-highlight {
   color: var(--c-ink);
   font-family: var(--font-display);
   font-size: var(--t-2xl);
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1.25;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
 }
 
 .section-lede {
@@ -966,6 +1019,7 @@ mark.global-search-highlight {
   border: 1px solid var(--c-line);
   border-radius: var(--r-lg);
   background: var(--c-surface);
+  box-shadow: var(--shadow-soft);
 }
 
 .panel-head {
@@ -1015,12 +1069,14 @@ mark.global-search-highlight {
 
 .panel--tint {
   border-color: transparent;
-  background: var(--c-anil-soft);
+  background: var(--g-agua-tenue);
+  box-shadow: none;
 }
 
+/* Antes cálido; con el tema agua es la escena azul clara de los héroes */
 .panel--warm {
   border-color: transparent;
-  background: var(--c-sol-soft);
+  background: var(--g-agua);
 }
 
 @media (max-width: 639.98px) {
@@ -1052,8 +1108,9 @@ mark.global-search-highlight {
   min-width: 0;
   padding: var(--s-5);
   border: 1px solid var(--c-line);
-  border-radius: var(--r-md);
+  border-radius: var(--r-lg);
   background: var(--c-surface);
+  box-shadow: var(--shadow-soft);
   color: var(--c-ink);
   text-decoration: none;
 }
@@ -1093,7 +1150,7 @@ a.tile .tile-head {
   color: var(--c-ink);
   font-family: var(--font-display);
   font-size: 1.75rem;
-  font-weight: 800;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
   line-height: 1.1;
   letter-spacing: -0.01em;
@@ -1284,9 +1341,14 @@ a.tile:focus-visible .tile-chevron {
 .btn--primary {
   --btn-bg: var(--c-anil);
   --btn-fg: var(--c-on-anil);
-  --btn-line: var(--c-anil);
+  --btn-line: transparent;
   --btn-bg-hover: var(--c-anil-strong);
-  --btn-line-hover: var(--c-anil-strong);
+  --btn-line-hover: transparent;
+  background-image: var(--g-agua-boton);
+}
+
+.btn--primary:hover {
+  background-image: none;
 }
 
 .btn--secondary {
@@ -3022,6 +3084,409 @@ dialog.dialog::backdrop {
 /* Consejos marcados: la tarjeta responde con un pequeño salto del ícono */
 .tip-card.is-completed .tip-icon {
   animation: sd-pop 520ms var(--ease);
+}
+
+/* ── 6d. Escenas de agua (tema agua) ───────────────────────────────────── */
+/* Escena: degradado azul claro con olas y burbujas al fondo (_agua_fondo.html).
+   <section class="agua-escena">{% include 'App/_agua_fondo.html' %}…contenido…</section> */
+.agua-escena {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--c-agua) 14%, transparent);
+  border-radius: var(--r-xl);
+  background: var(--g-agua);
+  box-shadow: var(--shadow-raise);
+}
+
+.agua-escena > :not(.agua-fondo) {
+  position: relative;
+  z-index: 1;
+}
+
+.agua-fondo {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* Foto opcional detrás del texto: se funde con el degradado hacia la izquierda */
+.agua-foto {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 72%;
+  height: 100%;
+  object-fit: cover;
+  object-position: right center;
+  opacity: .95;
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, rgba(0, 0, 0, .55) 30%, #000 60%);
+  mask-image: linear-gradient(to right, transparent 0%, rgba(0, 0, 0, .55) 30%, #000 60%);
+}
+
+:root[data-theme="dark"] .agua-foto,
+html.dark-mode .agua-foto {
+  opacity: .22;
+  mix-blend-mode: luminosity;
+}
+
+/* En pantallas angostas el texto ocupa todo el ancho: la foto queda como textura tenue arriba */
+@media (max-width: 759.98px) {
+  .agua-foto {
+    width: 100%;
+    height: 60%;
+    opacity: .35;
+    -webkit-mask-image: linear-gradient(to bottom, #000 0%, transparent 100%);
+    mask-image: linear-gradient(to bottom, #000 0%, transparent 100%);
+  }
+}
+
+/* Olas: dos capas que se desplazan a distinta velocidad */
+.agua-olas {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 72px;
+}
+
+.agua-ola {
+  fill: var(--c-ola);
+  animation: agua-oleaje 9s linear infinite;
+}
+
+.agua-ola--2 {
+  fill: var(--c-ola-2);
+  animation-duration: 14s;
+  animation-direction: reverse;
+}
+
+@keyframes agua-oleaje {
+  to { transform: translateX(-600px); }
+}
+
+/* Burbujas que suben despacio (posición, tamaño y ritmo por variables) */
+.agua-burbuja {
+  position: absolute;
+  bottom: -20px;
+  left: var(--x, 50%);
+  width: var(--s, 10px);
+  height: var(--s, 10px);
+  border: 1.5px solid var(--c-burbuja);
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, var(--c-burbuja), transparent 60%);
+  opacity: 0;
+  animation: agua-subir var(--d, 9s) var(--ease) var(--t, 0s) infinite;
+}
+
+@keyframes agua-subir {
+  0% { opacity: 0; transform: translate(0, 0) scale(.6); }
+  15% { opacity: 1; }
+  50% { transform: translate(8px, -45%) scale(1); }
+  85% { opacity: .8; }
+  100% { opacity: 0; transform: translate(-6px, -260px) scale(1.1); }
+}
+
+/* Tarjeta de cristal sobre la escena */
+.agua-cristal {
+  border: 1px solid rgba(255, 255, 255, .75);
+  border-radius: var(--r-xl);
+  background: color-mix(in srgb, var(--c-surface) 58%, transparent);
+  box-shadow: 0 18px 40px -24px rgba(3, 105, 161, .45);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  backdrop-filter: blur(10px) saturate(140%);
+}
+
+:root[data-theme="dark"] .agua-cristal,
+html.dark-mode .agua-cristal {
+  border-color: rgba(125, 211, 252, .16);
+  background: color-mix(in srgb, var(--c-surface) 70%, transparent);
+}
+
+.agua-flota {
+  animation: agua-flotar 6s ease-in-out infinite;
+}
+
+@keyframes agua-flotar {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+/* Medidor de presión (_medidor_presion.html): la aguja gira según --pct (0–100) */
+.medidor {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.medidor-pista {
+  fill: none;
+  stroke: var(--c-line);
+  stroke-width: 16;
+  stroke-linecap: round;
+}
+
+.medidor-zona {
+  fill: none;
+  stroke-width: 16;
+}
+
+.medidor-zona--ok { stroke: var(--c-ok-dot); }
+.medidor-zona--warn { stroke: var(--c-warn-dot); }
+.medidor-zona--bad { stroke: var(--c-bad-dot); }
+
+.medidor-marca {
+  stroke: var(--c-ink-3);
+  stroke-width: 2;
+  stroke-linecap: round;
+  opacity: .5;
+}
+
+.medidor-aguja {
+  transform-box: view-box;
+  transform-origin: 110px 112px;
+  transform: rotate(calc(var(--pct, 0) * 1.8deg - 90deg));
+  transition: transform 900ms var(--ease);
+  animation: medidor-barrer 1200ms var(--ease) 200ms backwards;
+}
+
+.medidor-aguja path {
+  fill: var(--c-ink);
+}
+
+.medidor-eje {
+  fill: var(--c-surface);
+  stroke: var(--c-ink);
+  stroke-width: 4;
+}
+
+.medidor-texto {
+  fill: var(--c-ink-3);
+  font-family: var(--font-text);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+@keyframes medidor-barrer {
+  from { transform: rotate(-90deg); }
+}
+
+/* Gota de calidad (_gota_calidad.html): color según el estado, burbujas dentro */
+.gota {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  --gota-color: var(--c-agua);
+}
+
+.gota--warn { --gota-color: var(--c-warn-dot); }
+.gota--bad { --gota-color: var(--c-bad-dot); }
+.gota--none { --gota-color: var(--c-none); }
+
+.gota-cuerpo {
+  fill: color-mix(in srgb, var(--gota-color) 16%, var(--c-surface));
+  stroke: var(--gota-color);
+  stroke-width: 3;
+}
+
+.gota-agua {
+  fill: var(--gota-color);
+  opacity: .85;
+}
+
+.gota-ola {
+  animation: agua-oleaje-corto 3.2s linear infinite;
+}
+
+.gota-brillo {
+  fill: none;
+  stroke: #FFFFFF;
+  stroke-width: 4;
+  stroke-linecap: round;
+  opacity: .7;
+}
+
+.gota-burbuja {
+  fill: none;
+  stroke: #FFFFFF;
+  stroke-width: 1.5;
+  opacity: 0;
+  animation: gota-subir 3.4s ease-in infinite;
+}
+
+.gota-burbuja:nth-of-type(2) { animation-delay: 1.1s; }
+.gota-burbuja:nth-of-type(3) { animation-delay: 2.2s; }
+
+.gota-anillo {
+  fill: none;
+  stroke: var(--gota-color);
+  stroke-width: 2;
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: gota-anillo 3s ease-out infinite;
+}
+
+@keyframes agua-oleaje-corto {
+  to { transform: translateX(-40px); }
+}
+
+@keyframes gota-subir {
+  0% { opacity: 0; transform: translateY(0); }
+  20% { opacity: .9; }
+  100% { opacity: 0; transform: translateY(-46px); }
+}
+
+@keyframes gota-anillo {
+  0% { opacity: .5; transform: scale(.9); }
+  100% { opacity: 0; transform: scale(1.25); }
+}
+
+/* Grifo con goteo (_goteo.html) */
+.goteo {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.goteo-grifo {
+  fill: var(--c-surface-tint);
+  stroke: var(--c-anil);
+  stroke-width: 3;
+  stroke-linejoin: round;
+}
+
+.goteo-gota {
+  fill: var(--c-agua);
+  transform-box: fill-box;
+  transform-origin: center top;
+  animation: goteo-caer 2.2s cubic-bezier(.55, 0, .9, .5) infinite;
+}
+
+.goteo-onda {
+  fill: none;
+  stroke: var(--c-agua);
+  stroke-width: 2;
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: goteo-onda 2.2s ease-out infinite;
+}
+
+.goteo-onda--2 {
+  animation-delay: .25s;
+}
+
+.goteo-charco {
+  fill: var(--c-agua-soft);
+}
+
+@keyframes goteo-caer {
+  0% { opacity: 0; transform: translateY(0) scale(.4); }
+  20% { opacity: 1; transform: translateY(0) scale(1); }
+  70% { opacity: 1; transform: translateY(var(--caida, 44px)) scale(1); }
+  76%, 100% { opacity: 0; transform: translateY(var(--caida, 44px)) scale(1.2, .6); }
+}
+
+@keyframes goteo-onda {
+  0%, 70% { opacity: 0; transform: scale(.3); }
+  75% { opacity: .9; }
+  100% { opacity: 0; transform: scale(1.4); }
+}
+
+/* Tubería con flujo (válvula de la zona): data-estado="open|closed|unknown" */
+.tuberia {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.tuberia-tubo {
+  fill: none;
+  stroke: var(--c-line);
+  stroke-width: 12;
+  stroke-linecap: round;
+}
+
+.tuberia-flujo {
+  fill: none;
+  stroke: var(--c-agua);
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-dasharray: 2 12;
+  animation: zona-fluir 1.2s linear infinite;
+}
+
+.tuberia-valvula {
+  fill: var(--c-ok-bg);
+  stroke: var(--c-ok);
+  stroke-width: 2.5;
+  transition: fill var(--dur-2) var(--ease), stroke var(--dur-2) var(--ease);
+}
+
+.tuberia-volante {
+  fill: none;
+  stroke: var(--c-ok);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  transform-box: fill-box;
+  transform-origin: center bottom;
+  transition: transform var(--dur-3) var(--ease), stroke var(--dur-2) var(--ease);
+}
+
+[data-estado="closed"] .tuberia-flujo--salida,
+[data-estado="unknown"] .tuberia-flujo {
+  opacity: 0;
+}
+
+[data-estado="closed"] .tuberia-flujo--entrada {
+  animation-duration: 3s;
+}
+
+[data-estado="closed"] .tuberia-valvula {
+  fill: var(--c-warn-bg);
+  stroke: var(--c-warn);
+}
+
+[data-estado="closed"] .tuberia-volante {
+  stroke: var(--c-warn);
+  transform: rotate(90deg);
+}
+
+[data-estado="unknown"] .tuberia-valvula {
+  fill: var(--c-none-bg);
+  stroke: var(--c-none);
+}
+
+[data-estado="unknown"] .tuberia-volante {
+  stroke: var(--c-none);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agua-ola,
+  .agua-burbuja,
+  .agua-flota,
+  .medidor-aguja,
+  .gota-ola,
+  .gota-burbuja,
+  .gota-anillo,
+  .goteo-gota,
+  .goteo-onda,
+  .tuberia-flujo {
+    animation: none;
+  }
+
+  .agua-burbuja,
+  .goteo-onda,
+  .gota-anillo {
+    display: none;
+  }
 }
 
 /* ── 7. Utilidades ─────────────────────────────────────────────────────── */

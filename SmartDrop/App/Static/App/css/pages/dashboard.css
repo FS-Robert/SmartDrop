@@ -1,25 +1,23 @@
 /* ==========================================================================
-   SmartDrop — Inicio del residente.
-   El único momento audaz del producto: el tanque de la zona, en luz cálida,
-   junto a una frase que resume el agua de la zona. Todo lo demás, sereno.
-   Solo tokens de smartdrop.css.
+   SmartDrop — Inicio del residente (tema agua).
+   El momento principal: una escena de agua (degradado azul claro, foto, olas y
+   burbujas) con la frase que resume el agua de la zona y el tanque en una
+   tarjeta de cristal. Debajo, cada lectura con su dibujo animado.
+   Solo tokens de smartdrop.css (las escenas de agua están en su sección 6d).
    ========================================================================== */
 
 .dash-messages {
   margin-bottom: var(--s-5);
 }
 
-/* ── Héroe: el tanque de la zona ─────────────────────────────────────────────────────── */
+/* ── Héroe: escena de agua ──────────────────────────────────────────────── */
 .home-hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: var(--s-6);
   align-items: center;
   margin-bottom: var(--s-8);
-  padding: var(--s-6) var(--s-6) var(--s-5);
-  border-radius: var(--r-xl);
-  background: var(--c-sol-soft);
-  box-shadow: var(--shadow-raise);
+  padding: var(--s-6) var(--s-5) var(--s-9);
 }
 
 .home-hero-text {
@@ -30,45 +28,72 @@
 }
 
 .home-hero-saludo {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  width: fit-content;
   margin: 0;
-  color: var(--c-ink-2);
-  font-size: var(--t-lg);
+  padding: var(--s-1) var(--s-3);
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--c-surface) 65%, transparent);
+  color: var(--c-anil-strong);
+  font-size: var(--t-sm);
   font-weight: 600;
 }
 
 .home-hero-title {
-  max-width: 18ch;
-  margin: 0;
+  max-width: 16ch;
+  margin: var(--s-1) 0 0;
   color: var(--c-ink);
   font-family: var(--font-display);
-  font-size: var(--t-3xl);
-  font-weight: 800;
-  line-height: 1.12;
-  letter-spacing: -0.015em;
+  font-size: clamp(1.9rem, 3.4vw, 2.75rem);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.025em;
   text-wrap: balance;
 }
 
+/* Datos rápidos en píldoras de cristal */
 .home-hero-facts {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--s-3) var(--s-7);
-  margin: var(--s-3) 0 0;
+  gap: var(--s-2);
+  margin: var(--s-4) 0 0;
 }
 
 .home-hero-facts > div {
   min-width: 0;
+  padding: 10px var(--s-4);
+  border: 1px solid rgba(255, 255, 255, .7);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--c-surface) 62%, transparent);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+:root[data-theme="dark"] .home-hero-facts > div,
+html.dark-mode .home-hero-facts > div {
+  border-color: rgba(125, 211, 252, .14);
 }
 
 .home-hero-facts dt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   color: var(--c-ink-2);
-  font-size: var(--t-sm);
-  font-weight: 500;
+  font-size: var(--t-xs);
+  font-weight: 600;
+}
+
+.home-hero-facts dt > .ti {
+  color: var(--c-agua);
+  font-size: 1rem;
 }
 
 .home-hero-facts dd {
-  margin: 0;
+  margin: 2px 0 0;
   color: var(--c-ink);
-  font-size: var(--t-lg);
+  font-size: var(--t-md);
   font-weight: 700;
 }
 
@@ -81,43 +106,55 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--s-3) var(--s-6);
-  margin-top: var(--s-3);
-  padding-top: var(--s-4);
-  border-top: 1px solid var(--c-line);
+  margin-top: var(--s-4);
+}
+
+.home-hero-controls .live {
+  padding: var(--s-1) var(--s-3);
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--c-surface) 65%, transparent);
 }
 
 .home-hero-zona {
   min-width: 0;
+  padding: var(--s-5) var(--s-4) var(--s-3);
 }
 
 .home-hero-svg {
   display: block;
   width: 100%;
-  max-width: 260px;
+  max-width: 280px;
   margin-inline: auto;
 }
 
 @media (min-width: 760px) {
-  .home-hero-svg {
-    max-width: 440px;
-  }
-}
-
-@media (min-width: 760px) {
   .home-hero {
-    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
     gap: var(--s-7);
-    padding: var(--s-8) var(--s-8) var(--s-6);
+    padding: var(--s-8) var(--s-8) var(--s-9);
   }
 
-  .home-hero-zona {
-    align-self: end;
+  .home-hero-svg {
+    max-width: 400px;
   }
 }
 
 /* ── Lecturas ───────────────────────────────────────────────────────────── */
 .vital {
   gap: var(--s-3);
+  overflow: hidden;
+}
+
+/* Brillo de agua en la parte de arriba de cada lectura */
+.vital::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 4px;
+  background: var(--g-agua-boton);
+  opacity: .85;
 }
 
 .vital-msg {
@@ -137,6 +174,32 @@
   align-items: baseline;
   gap: var(--s-1);
   margin: 0;
+}
+
+/* Dibujo de cada lectura, abajo a la derecha */
+.vital-visual {
+  align-self: flex-end;
+  margin-top: auto;
+  pointer-events: none;
+}
+
+.vital-visual--medidor {
+  width: 112px;
+}
+
+.vital-visual--gota {
+  width: 52px;
+}
+
+.vital-visual--goteo {
+  width: 92px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  a.tile.vital:hover .vital-visual {
+    transform: translateY(-2px);
+    transition: transform var(--dur-2) var(--ease);
+  }
 }
 
 /* ── Válvula y detalles ─────────────────────────────────────────────────── */
@@ -166,8 +229,44 @@
   line-height: 1.35;
 }
 
+/* Tubería: del tanque a la zona, pasando por la válvula */
+.dash-tuberia {
+  position: relative;
+  margin-top: var(--s-5);
+  padding: var(--s-3) var(--s-4) var(--s-5);
+  border-radius: var(--r-md);
+  background: var(--g-agua-tenue);
+}
+
+.dash-tuberia-label {
+  position: absolute;
+  bottom: var(--s-2);
+  color: var(--c-ink-2);
+  font-size: var(--t-xs);
+  font-weight: 600;
+}
+
+.dash-tuberia-label--desde {
+  left: var(--s-4);
+}
+
+.dash-tuberia-label--hasta {
+  right: var(--s-4);
+}
+
 .valve-last-update {
-  margin: var(--s-5) 0 0;
+  margin: var(--s-4) 0 0;
+}
+
+.stats-row dt {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.stats-row dt > .ti {
+  color: var(--c-agua);
+  font-size: 1.125rem;
 }
 
 /* ── En tu zona ─────────────────────────────────────────────────────────── */
@@ -182,7 +281,11 @@
 }
 
 .dash-empty {
-  padding: var(--s-6) var(--s-6) var(--s-7);
+  padding: var(--s-5) var(--s-6) var(--s-7);
+}
+
+.dash-empty > .ilus {
+  max-width: 132px;
 }
 
 .dash-empty > p {

@@ -2,7 +2,7 @@
 {% load static sd_ui %}
 {% block title %}Calidad del agua{% endblock %}
 {% block nav_calidad %}active{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/sensores.css' %}?v=20261011-zona1">{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/sensores.css' %}?v=20261018-agua1">{% endblock %}
 
 {% block content %}
 <header class="page-head">
@@ -16,7 +16,10 @@
 </header>
 
 <div class="sensor-layout">
-  <section class="panel sensor-state" aria-labelledby="calidad-estado">
+  <section class="panel sensor-state agua-escena" aria-labelledby="calidad-estado">
+    {% include 'App/_agua_fondo.html' %}
+    <div class="sensor-escena">
+    <div class="sensor-escena-texto">
     <div class="sensor-state-head">
       <span class="status status--lg status--{{ calidad.estado|estado_css }}"><span class="status-dot" aria-hidden="true"></span>{{ calidad.badge }}</span>
       <span class="status status--{{ calidad.estado|estado_css }}"><span class="status-dot" aria-hidden="true"></span>{% if calidad.estado == 'Mala' %}No apta para beber{% elif calidad.estado == 'Sin datos' %}Sin datos de potabilidad{% else %}Apta para beber{% endif %}</span>
@@ -43,6 +46,12 @@
       <div class="range-ticks num"><span>0</span><span style="left: 30%;">300</span><span style="left: 60%;">600</span><span style="left: 100%;">1000 ppm</span></div>
     </div>
     <p class="sensor-value-note">{{ calidad.descripcion }}</p>
+    </div>
+    <div class="sensor-escena-dibujo agua-cristal agua-flota">
+      {% include 'App/_gota_calidad.html' with estado=calidad.estado|estado_css uid='calidad' %}
+      <p class="sensor-escena-pie sensor-escena-pie--centro" aria-hidden="true"><span class="num">{{ calidad.tds|floatformat:0 }} ppm</span></p>
+    </div>
+    </div>
   </section>
 
   <div class="sensor-aside">

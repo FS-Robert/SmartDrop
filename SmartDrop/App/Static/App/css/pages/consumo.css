@@ -38,6 +38,31 @@
   margin-bottom: var(--s-5);
 }
 
+/* Con el tema agua el total es una franja de agua con el grifo goteando */
+.consumo-total.agua-escena {
+  align-items: center;
+  padding: var(--s-5) var(--s-6) var(--s-8);
+  border-radius: var(--r-lg);
+  box-shadow: none;
+}
+
+.consumo-total-aside {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--s-2);
+}
+
+.consumo-total-aside > .goteo {
+  width: 104px;
+}
+
+@media (max-width: 520px) {
+  .consumo-total-aside > .goteo {
+    display: none;
+  }
+}
+
 .consumo-total-label {
   margin: 0;
   color: var(--c-ink-2);
@@ -58,7 +83,7 @@
   color: var(--c-ink);
   font-family: var(--font-display);
   font-size: var(--t-4xl);
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1;
   letter-spacing: -0.02em;
 }

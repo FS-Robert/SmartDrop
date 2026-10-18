@@ -5,11 +5,13 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>SmartDrop – {% block title %}Dashboard{% endblock %}</title>
+  <meta name="theme-color" content="#E6F4FC"/>
+  <link rel="icon" type="image/png" href="{% static 'App/img/LogoSmartDrop.png' %}"/>
   <link rel="stylesheet" href="{% static 'App/fonts/tabler/tabler-icons-subset.css' %}?v=2.47"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-  <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;500;600;700&family=Nunito:wght@700;800&display=swap" rel="stylesheet"/>
-  <link rel="stylesheet" href="{% static 'App/css/smartdrop.css' %}?v=20261011-zona1"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="{% static 'App/css/smartdrop.css' %}?v=20261018-agua1"/>
   {% block extra_css %}{% endblock %}
   <script>
     (function () {
@@ -89,8 +91,8 @@
           </div>
         {% else %}
           <div class="nav-group">
-            <p class="nav-group-title" id="nav-g-agua">Mi agua</p>
-            <ul class="nav-list" aria-labelledby="nav-g-agua">
+            <p class="nav-group-title" id="nav-g-general">General</p>
+            <ul class="nav-list" aria-labelledby="nav-g-general">
               <li><a href="{% url 'dashboard' %}" class="nav-link {% block nav_dashboard %}{% endblock %}"><i class="ti ti-home" aria-hidden="true"></i><span>Inicio</span></a></li>
               <li><a href="{% url 'estado_sistema' %}" class="nav-link {% block nav_estado_sistema %}{% endblock %}"><i class="ti ti-activity-heartbeat" aria-hidden="true"></i><span>Estado del sistema</span></a></li>
             </ul>

@@ -1,4 +1,10 @@
-<aside class="auth-brand">
+{% load static %}<aside class="auth-brand">
+  <img class="auth-brand-foto" src="{% static 'App/img/Imagen principal.jpg' %}" alt="" aria-hidden="true" decoding="async">
+  <span class="auth-burbuja" aria-hidden="true" style="--x: 12%; --s: 12px; --d: 11s; --t: 0s;"></span>
+  <span class="auth-burbuja" aria-hidden="true" style="--x: 34%; --s: 8px; --d: 9s; --t: 3s;"></span>
+  <span class="auth-burbuja" aria-hidden="true" style="--x: 58%; --s: 14px; --d: 13s; --t: 1.5s;"></span>
+  <span class="auth-burbuja" aria-hidden="true" style="--x: 77%; --s: 9px; --d: 10s; --t: 5s;"></span>
+  <span class="auth-burbuja" aria-hidden="true" style="--x: 90%; --s: 7px; --d: 8s; --t: 6.5s;"></span>
   <a class="auth-logo" href="{% url 'login' %}">
     {% include 'App/_auth_logo.html' with gid='sd-drop-brand' %}
     SmartDrop
@@ -26,7 +32,7 @@
   <p class="auth-brand-foot">&copy; 2026 SmartDrop. Todos los derechos reservados.</p>
 
   <svg class="auth-brand-waves" viewBox="0 0 600 220" preserveAspectRatio="none" aria-hidden="true">
-    <path d="M0 120 C 120 80, 240 160, 360 120 S 540 70, 600 100 V220 H0Z" fill="rgba(255,255,255,0.05)"/>
-    <path d="M0 160 C 140 120, 260 200, 400 160 S 560 130, 600 150 V220 H0Z" fill="rgba(255,255,255,0.06)"/>
+    <path d="M-60 120 C 60 80, 240 160, 360 120 S 560 70, 680 100 V220 H-60Z" fill="rgba(255,255,255,0.55)"/>
+    <path d="M-60 160 C 100 120, 260 200, 400 160 S 580 130, 680 150 V220 H-60Z" fill="rgba(14,165,233,0.14)"/>
   </svg>
 </aside>

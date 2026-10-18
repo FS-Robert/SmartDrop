@@ -2,7 +2,7 @@
 {% load static %}
 {% block title %}Predicción de fugas{% endblock %}
 {% block nav_ml_fugas %}active{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/prediccion.css' %}?v=20261011-zona1">{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/prediccion.css' %}?v=20261018-agua1">{% endblock %}
 
 {% block content %}
 <header class="page-head ml-head">
@@ -35,7 +35,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'App/js/ml_predictions.js' %}?v=20261011-zona1"></script>
+<script src="{% static 'App/js/ml_predictions.js' %}?v=20261018-agua1"></script>
 <script>
 (function () {
   const LEAKS_URL = "{% url 'ml_engine:leak_overview' %}";

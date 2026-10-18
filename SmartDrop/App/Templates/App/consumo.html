@@ -2,7 +2,7 @@
 {% load static sd_ui %}
 {% block title %}Consumo{% endblock %}
 {% block nav_consumo %}active{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/consumo.css' %}?v=20261011-zona1">{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/consumo.css' %}?v=20261018-agua1">{% endblock %}
 
 {% block content %}
 <header class="page-head consumo-heading">
@@ -23,12 +23,16 @@
 
 <div class="consumo-layout">
   <section class="panel chart-card" aria-labelledby="chart-status">
-    <div class="consumo-total">
+    <div class="consumo-total agua-escena">
+      {% include 'App/_agua_fondo.html' %}
       <div>
         <h2 class="consumo-total-label" id="chart-status">{{ consumo.estado_label|sentence }}</h2>
         <p class="consumo-total-value"><span id="chart-value" class="num">{{ consumo.valor_semana }}</span> <span class="consumo-total-unit">litros en el periodo</span></p>
       </div>
-      <span class="status {% if consumo.estado_label == 'SIN DATOS DE CONSUMO' %}status--none{% else %}status--info{% endif %}" id="chart-badge"><span class="status-dot" aria-hidden="true"></span>{% if consumo.estado_label == 'SIN DATOS DE CONSUMO' %}Sin datos{% else %}Con registros{% endif %}</span>
+      <div class="consumo-total-aside">
+        <span class="status {% if consumo.estado_label == 'SIN DATOS DE CONSUMO' %}status--none{% else %}status--info{% endif %}" id="chart-badge"><span class="status-dot" aria-hidden="true"></span>{% if consumo.estado_label == 'SIN DATOS DE CONSUMO' %}Sin datos{% else %}Con registros{% endif %}</span>
+        {% include 'App/_goteo.html' %}
+      </div>
     </div>
     <div class="chart-canvas-wrap">
       <canvas id="consumoChart" role="img" aria-label="Gráfica de consumo de agua por periodo"></canvas>
@@ -98,7 +102,7 @@
 {{ consumo.valor_mes|json_script:"consumo-valor-mes" }}
 {{ consumo.mes_key|json_script:"consumo-mes-key" }}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script src="{% static 'App/js/sd_charts.js' %}?v=20261011-zona1"></script>
+<script src="{% static 'App/js/sd_charts.js' %}?v=20261018-agua1"></script>
 <script>
   const jsonData = id => JSON.parse(document.getElementById(id).textContent);
   const dataSemana = jsonData('consumo-datos-semana');

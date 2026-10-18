@@ -1,19 +1,21 @@
-/* Páginas de acceso (login y registro): panel de marca a la izquierda y formulario a la derecha. */
+/* Páginas de acceso (login y registro), tema agua: panel de marca azul claro (foto, olas y burbujas)
+   a la izquierda y formulario a la derecha. Mismos colores que smartdrop.css. */
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
   --auth-font-body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --auth-font-heading: 'Montserrat', 'Inter', system-ui, sans-serif;
   --auth-bg: #ffffff;
-  --auth-surface: #f7f7fb;
-  --auth-text: #17142b;
-  --auth-text-2: #5b5770;
-  --auth-text-3: #8a8699;
-  --auth-border: #dcdae6;
-  --auth-border-hover: #c3bfd3;
-  --auth-brand: #6b21a8;
-  --auth-brand-hover: #5b1a91;
-  --auth-brand-ring: rgba(107, 33, 168, 0.18);
+  --auth-surface: #F5FAFE;
+  --auth-text: #0B2A42;
+  --auth-text-2: #3A5870;
+  --auth-text-3: #52708A;
+  --auth-border: #D6E7F2;
+  --auth-border-hover: #AECDE2;
+  --auth-brand: #0369A1;
+  --auth-brand-hover: #075985;
+  --auth-brand-ring: rgba(3, 105, 161, 0.18);
+  --auth-boton: linear-gradient(135deg, #0377B5 0%, #0369A1 50%, #075985 100%);
   --auth-danger: #b42318;
   --auth-danger-bg: #fef3f2;
   --auth-danger-border: #fecdca;
@@ -43,11 +45,48 @@ body.sd-auth {
   justify-content: space-between;
   gap: 48px;
   padding: 48px 56px;
-  color: #fff;
+  color: var(--auth-text);
   background:
-    radial-gradient(900px 520px at 110% -10%, rgba(56, 189, 248, 0.28), transparent 60%),
-    radial-gradient(700px 520px at -20% 110%, rgba(168, 85, 247, 0.45), transparent 60%),
-    linear-gradient(160deg, #1e1b4b 0%, #3b1a78 52%, #5b1a91 100%);
+    radial-gradient(700px 420px at 100% 0%, rgba(255, 255, 255, 0.85), transparent 60%),
+    linear-gradient(160deg, #EAF7FE 0%, #D6EEFA 48%, #C2E6F6 100%);
+}
+
+/* Foto del agua al pie del panel, fundida con el degradado */
+.auth-brand-foto {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 34%;
+  object-fit: cover;
+  object-position: 75% 55%;
+  opacity: .9;
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(to top, #000 35%, transparent 95%);
+  mask-image: linear-gradient(to top, #000 35%, transparent 95%);
+}
+
+/* Burbujas que suben */
+.auth-burbuja {
+  position: absolute;
+  bottom: -20px;
+  left: var(--x, 50%);
+  width: var(--s, 10px);
+  height: var(--s, 10px);
+  border: 1.5px solid rgba(255, 255, 255, .85);
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, .9), transparent 60%);
+  opacity: 0;
+  pointer-events: none;
+  animation: auth-subir var(--d, 10s) cubic-bezier(.2, .7, .2, 1) var(--t, 0s) infinite;
+}
+
+@keyframes auth-subir {
+  0% { opacity: 0; transform: translate(0, 0) scale(.6); }
+  15% { opacity: 1; }
+  85% { opacity: .8; }
+  100% { opacity: 0; transform: translate(-6px, -420px) scale(1.1); }
 }
 .auth-brand-waves {
   position: absolute;
@@ -56,13 +95,21 @@ body.sd-auth {
   height: 220px;
   pointer-events: none;
 }
-.auth-brand > *:not(.auth-brand-waves) { position: relative; z-index: 1; }
+.auth-brand > *:not(.auth-brand-waves):not(.auth-brand-foto):not(.auth-burbuja) { position: relative; z-index: 1; }
+
+.auth-brand-waves path { animation: auth-oleaje 12s linear infinite; }
+.auth-brand-waves path + path { animation-duration: 18s; animation-direction: reverse; }
+
+@keyframes auth-oleaje {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(-40px); }
+}
 
 .auth-logo {
   display: inline-flex;
   align-items: center;
   gap: 12px;
-  color: #fff;
+  color: var(--auth-text);
   text-decoration: none;
   font-family: var(--auth-font-heading);
   font-weight: 700;
@@ -81,7 +128,7 @@ body.sd-auth {
   margin-bottom: 16px;
 }
 .auth-brand-copy > p {
-  color: rgba(255, 255, 255, 0.78);
+  color: var(--auth-text-2);
   font-size: 1rem;
   line-height: 1.6;
 }
@@ -102,8 +149,10 @@ body.sd-auth {
   place-items: center;
   width: 38px; height: 38px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 0 8px 18px -12px rgba(3, 105, 161, .5);
+  color: var(--auth-brand);
   font-size: 19px;
 }
 .auth-features strong {
@@ -113,12 +162,12 @@ body.sd-auth {
   margin-bottom: 2px;
 }
 .auth-features span {
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--auth-text-2);
   font-size: 0.875rem;
   line-height: 1.5;
 }
 .auth-brand-foot {
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--auth-text-2);
   font-size: 0.8rem;
 }
 
@@ -247,7 +296,7 @@ body.sd-auth {
   margin-top: 6px;
   border: 0;
   border-radius: 10px;
-  background: var(--auth-brand);
+  background: var(--auth-brand) var(--auth-boton);
   color: #fff;
   font: inherit;
   font-size: 0.95rem;
@@ -257,6 +306,7 @@ body.sd-auth {
   transition: background-color 0.15s, box-shadow 0.15s;
 }
 .auth-submit:hover { background: var(--auth-brand-hover); }
+.auth-submit { box-shadow: 0 10px 22px -14px rgba(3, 105, 161, .9); }
 .auth-submit:focus-visible { outline: none; box-shadow: 0 0 0 4px var(--auth-brand-ring); }
 .auth-submit[disabled] { cursor: progress; opacity: 0.85; }
 .auth-submit .spinner {
@@ -323,4 +373,6 @@ body.sd-auth {
 }
 @media (prefers-reduced-motion: reduce) {
   .auth-submit .spinner { animation-duration: 2s; }
+  .auth-burbuja { display: none; }
+  .auth-brand-waves path { animation: none; }
 }

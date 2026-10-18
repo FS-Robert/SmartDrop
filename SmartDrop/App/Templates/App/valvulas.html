@@ -2,7 +2,7 @@
 {% load static sd_ui %}
 {% block title %}Electroválvulas{% endblock %}
 {% block nav_valvulas %}active{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/valvulas.css' %}?v=20261011-zona1">{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/valvulas.css' %}?v=20261018-agua1">{% endblock %}
 
 {% block content %}
 <div class="valves-page">
@@ -225,7 +225,7 @@
 {{ estadisticas.labels_dias|json_script:"valvulas-labels-dias" }}
 {{ estadisticas.aperturas_dias|json_script:"valvulas-aperturas-dias" }}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script src="{% static 'App/js/sd_charts.js' %}?v=20261011-zona1"></script>
+<script src="{% static 'App/js/sd_charts.js' %}?v=20261018-agua1"></script>
 <script>
   const TIMER_MIN_SECONDS = 5;
   const TIMER_MAX_SECONDS = 120;

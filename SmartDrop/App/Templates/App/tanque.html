@@ -2,7 +2,7 @@
 {% load static sd_ui %}
 {% block title %}Nivel del tanque{% endblock %}
 {% block nav_tanque %}active{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/sensores.css' %}?v=20261011-zona1">{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/sensores.css' %}?v=20261018-agua1">{% endblock %}
 
 {% block content %}
 <header class="page-head">
@@ -16,7 +16,8 @@
 </header>
 
 <div class="sensor-layout tanque-layout">
-  <section class="panel panel--warm sensor-state tanque-visual" aria-labelledby="tanque-estado">
+  <section class="panel panel--warm sensor-state tanque-visual agua-escena" aria-labelledby="tanque-estado">
+    {% include 'App/_agua_fondo.html' %}
     <div class="tanque-hero">
       <div class="tanque-hero-text">
         <span class="status status--lg status--{{ tanque.estado_amigable|estado_css }} tank-available"><span class="status-dot" aria-hidden="true"></span>{{ tanque.porcentaje|floatformat:0 }} % lleno</span>
@@ -30,7 +31,7 @@
         </div>
         <div class="range-ticks range-ticks--flat num"><span>0 L</span><span style="left: 100%;">{{ tanque.capacidad }} L</span></div>
       </div>
-      <div class="tanque-hero-zona">
+      <div class="tanque-hero-zona agua-cristal agua-flota">
         {% include 'App/_zona_ilustracion.html' with nivel=tanque.porcentaje uid='tanque' clase='tanque-svg' %}
       </div>
     </div>

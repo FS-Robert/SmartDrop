@@ -1,7 +1,7 @@
 /* ==========================================================================
    SmartDrop — páginas de acceso: iniciar sesión, crear cuenta, vincular vivienda.
    Pantalla dividida (≥ 960px): formulario sobre surface a la izquierda y, a la
-   derecha, la escena cálida (sol-soft) con el tanque de la zona. En pantallas
+   derecha, la escena de agua (degradado azul claro) con el tanque de la zona. En pantallas
    menores la escena se vuelve una franja pequeña arriba del formulario.
    Solo tokens de smartdrop.css; una clase por regla.
    ========================================================================== */
@@ -159,7 +159,7 @@
   gap: var(--s-4);
   padding: var(--s-3) var(--s-5) var(--s-3) var(--s-3);
   border-radius: var(--r-lg);
-  background: var(--c-sol-soft);
+  background: var(--g-agua);
 }
 
 .auth-scene-text {

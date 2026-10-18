@@ -538,6 +538,8 @@ def dashboard(request):
             'valor_exacto': f"{pressure_value} kPa" if pressure_value is not None else 'Sin lectura',
             'mensaje_amigable': pressure_msg,
             'estado_amigable': pressure_status,
+            # Posición de la aguja del medidor (escala de 0 a 5 kPa, igual que la página de presión).
+            'pct': round(min(max(pressure_value / 5 * 100, 0), 100)) if pressure_value is not None else 0,
         },
         'calidad': {
             'estado': quality_state,

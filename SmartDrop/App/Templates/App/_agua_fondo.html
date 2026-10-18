@@ -1,0 +1,21 @@
+{% comment %}
+  Fondo de las escenas de agua: olas que se mueven y burbujas que suben (siempre decorativo).
+  Uso, como primer hijo de un elemento .agua-escena:
+    {% include 'App/_agua_fondo.html' %}
+    {% include 'App/_agua_fondo.html' with foto=True %}   → agrega la foto del agua a la derecha
+  Estilos en smartdrop.css (sección 6d); el movimiento se apaga con "reducir movimiento".
+{% endcomment %}{% load static %}<div class="agua-fondo" aria-hidden="true">
+  {% if foto %}<img class="agua-foto" src="{% static 'App/img/Imagen principal.jpg' %}" alt="" decoding="async">{% endif %}
+  <span class="agua-burbuja" style="--x: 6%; --s: 9px; --d: 10s; --t: 0s;"></span>
+  <span class="agua-burbuja" style="--x: 18%; --s: 14px; --d: 12s; --t: 3s;"></span>
+  <span class="agua-burbuja" style="--x: 31%; --s: 7px; --d: 9s; --t: 6s;"></span>
+  <span class="agua-burbuja" style="--x: 44%; --s: 11px; --d: 11s; --t: 1.5s;"></span>
+  <span class="agua-burbuja" style="--x: 57%; --s: 8px; --d: 8s; --t: 4.5s;"></span>
+  <span class="agua-burbuja" style="--x: 69%; --s: 13px; --d: 13s; --t: 2s;"></span>
+  <span class="agua-burbuja" style="--x: 81%; --s: 9px; --d: 10s; --t: 7s;"></span>
+  <span class="agua-burbuja" style="--x: 92%; --s: 6px; --d: 9s; --t: 5s;"></span>
+  <svg class="agua-olas" viewBox="0 0 1200 72" preserveAspectRatio="none" focusable="false">
+    <path class="agua-ola agua-ola--2" d="M0 40 Q150 50 300 40 T600 40 T900 40 T1200 40 T1500 40 T1800 40 T2100 40 T2400 40 V72 H0Z"/>
+    <path class="agua-ola" d="M0 30 Q150 16 300 30 T600 30 T900 30 T1200 30 T1500 30 T1800 30 T2100 30 T2400 30 V72 H0Z"/>
+  </svg>
+</div>

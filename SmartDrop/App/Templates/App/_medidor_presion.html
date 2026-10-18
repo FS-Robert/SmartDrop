@@ -1,0 +1,18 @@
+{% comment %}
+  Medidor de presión: semicírculo con las zonas baja (0–2 kPa), normal (2–3.5) y alta (3.5–5) y una aguja.
+  Uso:  {% include 'App/_medidor_presion.html' with pct=presion.needle_pos uid='presion' %}
+  pct   posición de la aguja, 0–100 (% de la escala de 0 a 5 kPa).
+  uid   prefijo del id de la aguja ("<uid>-aguja"), para moverla en vivo:
+          aguja.style.setProperty('--pct', nuevoPct)
+  clase clases extra para el <svg>. Siempre decorativo: el valor y el estado se dicen en texto al lado.
+{% endcomment %}<svg class="medidor{% if clase %} {{ clase }}{% endif %}" viewBox="0 0 220 128" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+  <path class="medidor-pista" d="M20 112A90 90 0 0 1 200 112"/>
+  <path class="medidor-zona medidor-zona--warn" pathLength="100" stroke-dasharray="39.4 200" d="M20 112A90 90 0 0 1 200 112"/>
+  <path class="medidor-zona medidor-zona--ok" pathLength="100" stroke-dasharray="29.2 200" stroke-dashoffset="-40.4" d="M20 112A90 90 0 0 1 200 112"/>
+  <path class="medidor-zona medidor-zona--warn" pathLength="100" stroke-dasharray="29.6 200" stroke-dashoffset="-70.4" d="M20 112A90 90 0 0 1 200 112"/>
+  <path class="medidor-marca" d="M86.5 39.7L78.5 15M154.7 50.5L170 29.5"/>
+  <g class="medidor-aguja" id="{{ uid|default:'medidor' }}-aguja" style="--pct: {{ pct|default:0 }};">
+    <path d="M105.5 112L110 30L114.5 112Z"/>
+  </g>
+  <circle class="medidor-eje" cx="110" cy="112" r="9"/>
+</svg>

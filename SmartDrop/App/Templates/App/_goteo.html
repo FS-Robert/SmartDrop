@@ -1,0 +1,12 @@
+{% comment %}
+  Grifo con una gota que cae y hace ondas (consumo de agua). Siempre decorativo.
+  Uso:  {% include 'App/_goteo.html' %}   ·   clase: clases extra para el <svg>.
+{% endcomment %}<svg class="goteo{% if clase %} {{ clase }}{% endif %}" viewBox="0 0 160 150" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+  <ellipse class="goteo-charco" cx="96" cy="134" rx="40" ry="8"/>
+  <ellipse class="goteo-onda" cx="96" cy="134" rx="26" ry="5"/>
+  <ellipse class="goteo-onda goteo-onda--2" cx="96" cy="134" rx="40" ry="8"/>
+  <path class="goteo-grifo" d="M8 34H84a20 20 0 0 1 20 20V68H88V58a8 8 0 0 0-8-8H8Z"/>
+  <path class="goteo-grifo" d="M44 34V22M30 20H58"/>
+  <rect class="goteo-grifo" x="86" y="66" width="20" height="8" rx="3"/>
+  <path class="goteo-gota" d="M96 80c-5 6-7.5 9.5-7.5 13a7.5 7.5 0 0 0 15 0c0-3.5-2.5-7-7.5-13Z" style="--caida: 36px;"/>
+</svg>

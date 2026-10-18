@@ -1,0 +1,22 @@
+{% comment %}
+  Gota de agua con burbujas: su color dice el estado de la calidad.
+  Uso:  {% include 'App/_gota_calidad.html' with estado='ok' uid='calidad' %}
+  estado  ok | warn | bad | none (el filtro estado_css da estos valores).
+  uid     prefijo del recorte del agua si hay más de una gota en la página.
+  clase   clases extra para el <svg>. Siempre decorativa: el estado se dice en texto al lado.
+{% endcomment %}{% with u=uid|default:'gota' %}<svg class="gota gota--{{ estado|default:'ok' }}{% if clase %} {{ clase }}{% endif %}" viewBox="0 0 160 196" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+  <defs>
+    <clipPath id="{{ u }}-forma"><path d="M80 10C80 10 22 82 22 122a58 58 0 0 0 116 0C138 82 80 10 80 10Z"/></clipPath>
+  </defs>
+  <ellipse class="gota-anillo" cx="80" cy="188" rx="46" ry="6"/>
+  <path class="gota-cuerpo" d="M80 10C80 10 22 82 22 122a58 58 0 0 0 116 0C138 82 80 10 80 10Z"/>
+  <g clip-path="url(#{{ u }}-forma)">
+    <g class="gota-ola">
+      <path class="gota-agua" d="M0 104q10 -6 20 0t20 0t20 0t20 0t20 0t20 0t20 0t20 0t20 0t20 0V200H0Z"/>
+    </g>
+    <circle class="gota-burbuja" cx="62" cy="160" r="5"/>
+    <circle class="gota-burbuja" cx="92" cy="168" r="3.5"/>
+    <circle class="gota-burbuja" cx="104" cy="150" r="4.5"/>
+  </g>
+  <path class="gota-brillo" d="M48 112c0-12 6-26 14-38"/>
+</svg>{% endwith %}
