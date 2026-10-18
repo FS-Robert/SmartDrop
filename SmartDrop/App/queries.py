@@ -136,7 +136,8 @@ def sensors():
     )
 
 
-def _tanks_or_empty():
+def tanks():
+    """Altura y capacidad de los tanques por sensor de nivel; [] si la tabla no responde."""
     try:
         return _cached(
             'tanques',
@@ -149,6 +150,59 @@ def _tanks_or_empty():
         )
     except Exception:
         return []
+
+
+# ── Nivel del tanque (misma cuenta para la web y la app) ─────────────────────
+
+RECENT_READINGS_WINDOW = 10
+
+
+def recent_values(lecturas, sensor_id, window=RECENT_READINGS_WINDOW):
+    """Valores de las `window` lecturas más recientes del sensor (`lecturas` va de la más reciente a la más antigua)."""
+    values = []
+    for lectura in lecturas:
+        if str(lectura.get('id_sensor')) != str(sensor_id) or lectura.get('valor') is None:
+            continue
+        values.append(safe_float(lectura.get('valor')))
+        if len(values) == window:
+            break
+    return values
+
+
+def _level_config(sensor, tanques):
+    """El sensor de nivel con los datos de su tanque (altura y capacidad) encima."""
+    sensor_id = str(sensor.get('id_sensor'))
+    tank = next((item for item in tanques if str(item.get('id_sensor_nivel')) == sensor_id), {})
+    return {**sensor, **tank}
+
+
+def _fill_percentage(value, config):
+    """(% de llenado, capacidad del rango) de una lectura en cm: sobre la altura del tanque o, sin ella, el rango del sensor."""
+    sensor_min = safe_float(config.get('rango_min'))
+    sensor_max = safe_float(config.get('rango_max'))
+    capacity = sensor_max if sensor_max > sensor_min else 100
+    percentage = ((value - sensor_min) / (capacity - sensor_min) * 100) if capacity > sensor_min else 0
+    configured_height = safe_float(config.get('altura_total'))
+    if configured_height > 0:
+        percentage = value / configured_height * 100
+    return round(min(max(percentage, 0), 100), 2), capacity
+
+
+def level_percentage(value, sensor, tanques):
+    """% de llenado que representa un valor del sensor de nivel (cm)."""
+    return _fill_percentage(safe_float(value), _level_config(sensor or {}, tanques))[0]
+
+
+def tank_summary(level, sensores, tanques):
+    """(litros, porcentaje, capacidad) del tanque a partir de una lectura de nivel."""
+    if not level:
+        return 0, 0, 0
+    level_sensor_id = str(level.get('id_sensor'))
+    sensor = next((item for item in sensores if str(item.get('id_sensor')) == level_sensor_id), {'id_sensor': level_sensor_id})
+    config = _level_config(sensor, tanques)
+    percentage, capacity = _fill_percentage(safe_float(level.get('valor')), config)
+    display_capacity = round(safe_float(config.get('capacidad_maxima_litros')) or capacity, 2)
+    return round(display_capacity * percentage / 100, 2), percentage, display_capacity
 
 
 def _in_filter(viviendas):
@@ -178,7 +232,7 @@ def owned_data(user, consumption=False):
             {'id_vivienda': in_filter, 'order': 'fecha_registro.desc', 'limit': '2000'},
         ),
         sensors,
-        _tanks_or_empty,
+        tanks,
     ]
     if consumption:
         tasks.append(lambda: _consumption_rows(in_filter))

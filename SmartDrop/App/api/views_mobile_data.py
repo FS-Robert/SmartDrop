@@ -46,23 +46,46 @@ def _matching_sensors(sensors, parameter):
     return [s for s in sensors if any(name in _sensor_type(s) for name in names)]
 
 
-def _visible_data(request):
-    """Viviendas, sensores y lecturas visibles según el rol del usuario.
+def _visible_data_and_tanks(request):
+    """Viviendas, sensores, lecturas y tanques visibles según el rol del usuario.
 
     Admin (rol_id == 2): todas las lecturas de todos los sensores.
     Usuario normal: solo los datos de sus viviendas.
     """
     if getattr(request.user, 'rol_id', None) == 2:
-        viviendas, sensores = queries.run_parallel(
+        viviendas, sensores, tanques = queries.run_parallel(
             lambda: supabase_client.select('vivienda', 'id_vivienda,nic,direccion', {'limit': '1000'}),
             queries.sensors,
+            queries.tanks,
         )
         sensor_ids = [s.get('id_sensor') for s in sensores if s.get('id_sensor')]
         lecturas = _readings_for_sensors(sensor_ids)
-        return viviendas, sensores, lecturas
+        return viviendas, sensores, lecturas, tanques
 
     data = queries.owned_data(request.user)
-    return data.viviendas, data.sensores, data.lecturas
+    return data.viviendas, data.sensores, data.lecturas, data.tanques
+
+
+def _visible_data(request):
+    """Viviendas, sensores y lecturas visibles según el rol del usuario (sin los tanques)."""
+    viviendas, sensores, lecturas, _ = _visible_data_and_tanks(request)
+    return viviendas, sensores, lecturas
+
+
+def _level_in_percent(block, sensor, tanques):
+    """Pasa a % de llenado (la misma cuenta de la web) el valor, la serie y el rango de un bloque de nivel en cm.
+
+    `fuera_de_rango` y `estado` ya vienen calculados con los cm contra los límites del sensor y no cambian.
+    """
+    def percent(value):
+        return None if value is None else queries.level_percentage(value, sensor, tanques)
+
+    block = {**block, 'unidad': '%', 'rango_min': percent(block.get('rango_min')), 'rango_max': percent(block.get('rango_max'))}
+    if 'valor' in block:
+        block['valor'] = percent(block['valor'])
+    if 'datos' in block:
+        block['datos'] = [{**item, 'valor': percent(item['valor'])} for item in block['datos']]
+    return block
 
 
 def _range_status(value, minimum, maximum):
@@ -167,7 +190,7 @@ class MobileEstadoAguaView(APIView):
         return queries.consumption_on(rows, today)
 
     def get(self, request):
-        viviendas, sensors, readings = _visible_data(request)
+        viviendas, sensors, readings, tanques = _visible_data_and_tanks(request)
         latest = {}
         for reading in readings:
             sensor = next((item for item in sensors if str(item.get('id_sensor')) == str(reading.get('id_sensor'))), {})
@@ -202,12 +225,18 @@ class MobileEstadoAguaView(APIView):
                     'texto_anomalias': 'Revisar calidad del agua.' if outside else 'Sin anomalías recientes.',
                 })
             if any(name in _sensor_type(sensor) for name in ('nivel', 'level')):
-                capacity = safe_float(sensor.get('capacidad_maxima_litros'), 0)
+                # El sensor mide cm de agua: igual que el dashboard web, se promedian las últimas lecturas
+                # y se pasan a % y litros con la altura y capacidad del tanque.
+                recientes = queries.recent_values(readings, sensor.get('id_sensor'))
+                promedio = round(sum(recientes) / len(recientes), 2) if recientes else value
+                liters, percentage, capacity = queries.tank_summary(
+                    {'id_sensor': sensor.get('id_sensor'), 'valor': promedio}, sensors, tanques,
+                )
                 result.update({
-                    'porcentaje': value,
-                    'litros_disponibles': round(capacity * value / 100, 1),
+                    'porcentaje': percentage,
+                    'litros_disponibles': round(liters, 1),
                     'capacidad_maxima_litros': capacity,
-                    'barriles_disponibles': round(capacity * value / 100 / 158.987, 2),
+                    'barriles_disponibles': round(liters / 158.987, 2),
                     'capacidad_maxima_barriles': round(capacity / 158.987, 2),
                     'bomba_estado': None,
                     'autonomia_estimada_texto': None,
@@ -266,7 +295,7 @@ class MobileGraficasView(APIView):
             # Admin: los sensores se comparten entre todas las viviendas; cada punto es el promedio de
             # todas las lecturas registradas en ese intervalo (igual que la gráfica web del sensor).
             range_key = _range_key(hasta - desde)
-            sensors = queries.sensors()
+            sensors, tanques = queries.run_parallel(queries.sensors, queries.tanks)
             result = {}
             chosen = {}
             for parameter in parameters:
@@ -294,19 +323,23 @@ class MobileGraficasView(APIView):
                     'rango_max': (sensor or {}).get('rango_max'),
                     'datos': datos,
                 }
+                if parameter == 'nivel' and sensor:
+                    result[parameter] = _level_in_percent(result[parameter], sensor, tanques)
             return Response(result)
 
         # Usuario normal: solo los datos de su(s) vivienda(s).
-        _, sensors, readings = _visible_data(request)
+        _, sensors, readings, tanques = _visible_data_and_tanks(request)
         result = {}
         for parameter in parameters:
             sensor = _matching_sensor(sensors, parameter)
             result[parameter] = {
-                'unidad': '%' if parameter == 'nivel' else (sensor or {}).get('unidad_medida', ''),
+                'unidad': (sensor or {}).get('unidad_medida', ''),
                 'rango_min': (sensor or {}).get('rango_min'),
                 'rango_max': (sensor or {}).get('rango_max'),
                 'datos': _reading_series(sensor, readings, desde),
             }
+            if parameter == 'nivel':
+                result[parameter] = _level_in_percent(result[parameter], sensor, tanques)
         return Response(result)
 
 
@@ -314,7 +347,7 @@ class MobileResumenView(APIView):
     permission_classes = [IsAuthenticatedUser]
 
     def get(self, request):
-        viviendas, sensors, readings = _visible_data(request)
+        viviendas, sensors, readings, tanques = _visible_data_and_tanks(request)
         nic_by_id = {row.get('id_vivienda'): row.get('nic') for row in viviendas}
         prefs = preferencias.preferencias_de(request.user)
         response = {}
@@ -325,7 +358,7 @@ class MobileResumenView(APIView):
                 last = series[-1]
                 response[parameter] = {
                     'valor': last['valor'],
-                    'unidad': '%' if parameter == 'nivel' else (sensor or {}).get('unidad_medida', ''),
+                    'unidad': (sensor or {}).get('unidad_medida', ''),
                     'fecha': last['fecha'],
                     # Las categorías que el usuario desactivó en su perfil no cuentan como alerta.
                     'fuera_de_rango': last['fuera_de_rango'] and preferencias.sensor_habilitado(prefs, parameter),
@@ -335,5 +368,7 @@ class MobileResumenView(APIView):
                     'rango_max': (sensor or {}).get('rango_max'),
                     'nic': nic_by_id.get(last.get('id_vivienda')),
                 }
+                if parameter == 'nivel':
+                    response[parameter] = _level_in_percent(response[parameter], sensor, tanques)
         response['total_alertas'] = sum(1 for key in ('flujo', 'presion', 'nivel') if response.get(key, {}).get('fuera_de_rango'))
         return Response(response)

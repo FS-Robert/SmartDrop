@@ -1010,6 +1010,58 @@ class MobilePerfilTests(TestCase):
 		self.assertEqual([(a['clave'], a['estado']) for a in avisos], [('sensor:presion', 'Baja')])
 
 
+class MobileNivelTanqueTests(TestCase):
+	"""La app muestra el nivel del tanque con la cuenta de la web: los cm del sensor sobre la altura del tanque."""
+
+	def setUp(self):
+		from .api.authentication import MobileUser
+		self.user = MobileUser({'id_usuario': 77, 'correo': 'ana@example.com', 'id_rol': 3, 'nombre_rol': 'user'})
+		self.admin = MobileUser({'id_usuario': 1, 'correo': 'admin@example.com', 'id_rol': 2, 'nombre_rol': 'admin'})
+		self.client = APIClient()
+		now = timezone.now().isoformat()
+		self.sensores = [{'id_sensor': 2, 'tipo_sensor': 'nivel', 'unidad_medida': 'cm', 'rango_min': 2, 'rango_max': 400,
+						  'umbral_critico_bajo': 10, 'umbral_critico_alto': 380, 'capacidad_maxima_litros': None}]
+		self.tanques = [{'id_sensor_nivel': 2, 'capacidad_maxima_litros': 20, 'altura_total': 30}]
+		# 24 cm y 21 cm de agua en un tanque de 30 cm: 80 % y 70 %, en promedio 75 %.
+		self.lecturas = [
+			{'id_sensor': 2, 'id_vivienda': 4, 'valor': 24, 'fecha_registro': now},
+			{'id_sensor': 2, 'id_vivienda': 4, 'valor': 21, 'fecha_registro': now},
+		]
+
+	def _como_usuario(self):
+		from .queries import OwnedData
+		self.client.force_authenticate(user=self.user)
+		data = OwnedData([{'id_vivienda': 4, 'nic': 'NIC-0004'}], self.sensores, self.lecturas, self.tanques, [])
+		return patch('App.api.views_mobile_data.queries.owned_data', return_value=data)
+
+	def test_estado_agua_da_porcentaje_y_litros_como_el_dashboard_web(self):
+		with self._como_usuario(), patch('App.api.views_mobile_data.MobileEstadoAguaView._liters_today', return_value=0):
+			nivel = self.client.get(reverse('mobile_estado_agua')).json()['nivel']
+		self.assertEqual((nivel['porcentaje'], nivel['litros_disponibles'], nivel['capacidad_maxima_litros']), (75, 15, 20))
+		self.assertEqual(nivel['estado'], 'Normal')
+
+	def test_grafica_y_resumen_del_usuario_salen_en_porcentaje(self):
+		with self._como_usuario():
+			grafica = self.client.get(reverse('mobile_graficas'), {'parametros': 'nivel'}).json()['nivel']
+			resumen = self.client.get(reverse('mobile_resumen')).json()['nivel']
+		self.assertEqual(grafica['unidad'], '%')
+		self.assertEqual([dato['valor'] for dato in grafica['datos']], [70, 80])
+		self.assertEqual((grafica['rango_min'], grafica['rango_max']), (6.67, 100))
+		self.assertEqual((resumen['valor'], resumen['unidad'], resumen['fuera_de_rango']), (80, '%', False))
+
+	def test_grafica_y_resumen_del_admin_salen_en_porcentaje(self):
+		self.client.force_authenticate(user=self.admin)
+		with patch('App.api.views_mobile_data.queries.sensors', return_value=self.sensores), \
+				patch('App.api.views_mobile_data.queries.tanks', return_value=self.tanques), \
+				patch('App.api.views_mobile_data.queries.sensor_series', return_value={1791000000: 15.0}), \
+				patch('App.api.views_mobile_data.supabase_client.select',
+					  side_effect=select_by_table(vivienda=[{'id_vivienda': 4, 'nic': 'NIC-0004'}], lectura=self.lecturas)):
+			grafica = self.client.get(reverse('mobile_graficas'), {'parametros': 'nivel'}).json()['nivel']
+			resumen = self.client.get(reverse('mobile_resumen')).json()['nivel']
+		self.assertEqual((grafica['unidad'], grafica['datos'][0]['valor']), ('%', 50))
+		self.assertEqual((resumen['valor'], resumen['unidad']), (80, '%'))
+
+
 class CatalogoTraduccionTests(TestCase):
 	"""Catálogo español→inglés compartido por la web y la app."""
 

@@ -34,11 +34,14 @@ from .queries import (
     owned_consumption,
     owned_data,
     owner_id,
+    recent_values,
+    RECENT_READINGS_WINDOW,
     run_parallel,
     safe_float,
     sensor_series as _sensor_series,
     SENSOR_BUCKETS as _SENSOR_BUCKETS,
     sensors,
+    tank_summary as _tank_summary,
     user_viviendas,
     users_by_id,
     with_flow_consumption,
@@ -299,9 +302,6 @@ def _latest_readings_by_type(lecturas):
     return latest
 
 
-RECENT_READINGS_WINDOW = 10
-
-
 def _averaged_readings_by_type(lecturas, window=RECENT_READINGS_WINDOW):
     """Última lectura de cada tipo con `valor` reemplazado por el promedio de sus
     `window` lecturas más recientes (mismo sensor), para que un 0 aislado no domine.
@@ -311,16 +311,7 @@ def _averaged_readings_by_type(lecturas, window=RECENT_READINGS_WINDOW):
     """
     averaged = {}
     for tipo, latest in _latest_readings_by_type(lecturas).items():
-        sensor_id = str(latest.get('id_sensor'))
-        values = []
-        for lectura in lecturas:
-            if lectura.get('tipo_sensor') != tipo or str(lectura.get('id_sensor')) != sensor_id:
-                continue
-            if lectura.get('valor') is None:
-                continue
-            values.append(safe_float(lectura.get('valor')))
-            if len(values) == window:
-                break
+        values = recent_values(lecturas, latest.get('id_sensor'), window)
         reading = dict(latest)
         if values:
             reading['valor'] = round(sum(values) / len(values), 2)
@@ -402,29 +393,6 @@ def _status_badge_class(status):
     if status in {'baja', 'alta', 'bajo', 'lleno', 'maximo'}:
         return 'badge-high'
     return 'badge-closed'
-
-
-def _tank_summary(level, sensores, tanques):
-    """(litros, porcentaje, capacidad) del tanque a partir de la última lectura de nivel."""
-    if not level:
-        return 0, 0, 0
-    level_sensor_id = str(level.get('id_sensor'))
-    sensor = next((item for item in sensores if str(item.get('id_sensor')) == level_sensor_id), {})
-    tank = next((item for item in tanques if str(item.get('id_sensor_nivel')) == level_sensor_id), {})
-    sensor = {**sensor, **tank}
-    value = safe_float(level.get('valor'))
-    configured_capacity = safe_float(sensor.get('capacidad_maxima_litros'))
-    configured_height = safe_float(sensor.get('altura_total'))
-    sensor_min = safe_float(sensor.get('rango_min'))
-    sensor_max = safe_float(sensor.get('rango_max'))
-    capacity = sensor_max if sensor_max > sensor_min else 100
-    percentage = ((value - sensor_min) / (capacity - sensor_min) * 100) if capacity > sensor_min else 0
-    if configured_height > 0:
-        percentage = value / configured_height * 100
-    display_capacity = configured_capacity or capacity
-    percentage = round(min(max(percentage, 0), 100), 2)
-    display_capacity = round(display_capacity, 2)
-    return round(display_capacity * percentage / 100, 2), percentage, display_capacity
 
 
 def _ago(count, unit):
