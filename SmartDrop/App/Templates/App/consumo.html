@@ -1,91 +1,85 @@
 {% extends 'App/base.html' %}
+{% load static sd_ui %}
 {% block title %}Consumo{% endblock %}
 {% block nav_consumo %}active{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/consumo.css' %}?v=20261011-zona1">{% endblock %}
 
 {% block content %}
-<div class="consumo-heading">
+<header class="page-head consumo-heading">
   <div>
-    <h1 class="page-title">CONSUMO DE AGUA</h1>
-    <p class="page-subtitle">Analiza el uso del agua y observa cómo cambia con el tiempo.</p>
+    <h1 class="page-title">Consumo de agua</h1>
+    <p class="page-lede">
+      {% if viviendas %}Cuánta agua usa tu casa ({{ viviendas.0.nic }}{% if viviendas.0.direccion %}, {{ viviendas.0.direccion }}{% endif %}) y cómo cambia con el tiempo.{% else %}No tienes una vivienda vinculada. <a href="{% url 'vincular_vivienda' %}">Vincular vivienda</a>{% endif %}
+    </p>
   </div>
-  
-  <!-- Tabs Día / Semana / Mes -->
-  <div class="tab-row">
-    <button class="tab-btn" onclick="cambiarTab('dia',   this)">Día</button>
-    <button class="tab-btn active" onclick="cambiarTab('semana', this)">Semana</button>
-    <button class="tab-btn" onclick="cambiarTab('mes',   this)">Mes</button>
+  <div class="page-actions">
+    <div class="segmented tab-row" role="group" aria-label="Periodo">
+      <button type="button" class="segmented-btn tab-btn" aria-pressed="false" onclick="cambiarTab('dia', this)">Día</button>
+      <button type="button" class="segmented-btn tab-btn active" aria-pressed="true" onclick="cambiarTab('semana', this)">Semana</button>
+      <button type="button" class="segmented-btn tab-btn" aria-pressed="false" onclick="cambiarTab('mes', this)">Mes</button>
+    </div>
   </div>
-</div>
-
-{% if viviendas %}
-<p class="page-subtitle">Vivienda: {{ viviendas.0.nic }}{% if viviendas.0.direccion %} · {{ viviendas.0.direccion }}{% endif %}</p>
-{% else %}
-<p class="page-subtitle">No tienes una vivienda vinculada.</p>
-{% endif %}
+</header>
 
 <div class="consumo-layout">
-  <!-- Gráfica -->
-  <div class="chart-card">
-    <div class="chart-header">
+  <section class="panel chart-card" aria-labelledby="chart-status">
+    <div class="consumo-total">
       <div>
-        <div class="chart-status" id="chart-status">{{ consumo.estado_label }}</div>
-        <div class="chart-value"><span id="chart-value">{{ consumo.valor_semana }}</span>L</div>
+        <h2 class="consumo-total-label" id="chart-status">{{ consumo.estado_label|sentence }}</h2>
+        <p class="consumo-total-value"><span id="chart-value" class="num">{{ consumo.valor_semana }}</span> <span class="consumo-total-unit">litros en el periodo</span></p>
       </div>
-      <span class="badge badge-high" id="chart-badge">{{ consumo.estado_label }}</span>
+      <span class="status {% if consumo.estado_label == 'SIN DATOS DE CONSUMO' %}status--none{% else %}status--info{% endif %}" id="chart-badge"><span class="status-dot" aria-hidden="true"></span>{% if consumo.estado_label == 'SIN DATOS DE CONSUMO' %}Sin datos{% else %}Con registros{% endif %}</span>
     </div>
     <div class="chart-canvas-wrap">
-      <canvas id="consumoChart"></canvas>
+      <canvas id="consumoChart" role="img" aria-label="Gráfica de consumo de agua por periodo"></canvas>
     </div>
-    <div id="consumo-detail" style="margin-top:0.75rem; font-size:13px; color:#6b5b7b; font-weight:700;">
-      Selecciona un punto para ver el detalle
-    </div>
-  </div>
-</div>
+    <p id="consumo-detail" class="consumo-detail" aria-live="polite">Toca una barra o una fila del historial para ver el detalle.</p>
+  </section>
 
-  <!-- Lateral -->
   <div class="consumo-side">
-    <div class="historial-card">
-
-      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
-        <div class="card-header">Historial</div>
-        <div class="month-nav" id="week-navigation" style="display:none;">
-          <button onclick="semanaAnterior()">←</button>
-          <span id="week-label">Semana 1</span>
-          <button onclick="semanaSiguiente()">→</button>
+    <section class="panel historial-card" aria-labelledby="historial-titulo">
+      <div class="panel-head">
+        <h2 class="panel-title" id="historial-titulo">Historial</h2>
+        <div class="period-nav month-nav" id="week-navigation" style="display:none;">
+          <button type="button" class="btn-icon" onclick="semanaAnterior()" aria-label="Semana anterior"><i class="ti ti-arrow-left" aria-hidden="true"></i></button>
+          <span id="week-label" class="period-nav-label">Semana 1</span>
+          <button type="button" class="btn-icon" onclick="semanaSiguiente()" aria-label="Semana siguiente"><i class="ti ti-arrow-right" aria-hidden="true"></i></button>
         </div>
-        <div class="month-nav" id="month-navigation">
-          <button onclick="mesAnterior()">←</button>
-          <span id="mes-label">{{ consumo.mes }}</span>
-          <button onclick="mesSiguiente()">→</button>
+        <div class="period-nav month-nav" id="month-navigation">
+          <button type="button" class="btn-icon" onclick="mesAnterior()" aria-label="Mes anterior"><i class="ti ti-arrow-left" aria-hidden="true"></i></button>
+          <span id="mes-label" class="period-nav-label">{{ consumo.mes }}</span>
+          <button type="button" class="btn-icon" onclick="mesSiguiente()" aria-label="Mes siguiente"><i class="ti ti-arrow-right" aria-hidden="true"></i></button>
         </div>
       </div>
 
-      <div style="margin-top:1rem; display:flex; flex-direction:column; gap:6px; max-height:320px; overflow-y:auto; padding-right:5px;" id="historial-list">
+      <ul class="history-list" id="historial-list">
         {% for semana in consumo.historial %}
-        <div class="history-item" style="display:flex; justify-content:space-between; font-size:13px; font-weight:600; padding:4px 0; border-bottom:1px solid #f0eafa; cursor:pointer;">
-          <span style="color:#888;">{{ semana.label }}</span>
-          <span style="color:#2d1a4a;">{{ semana.valor }}L</span>
-        </div>
+        <li><button type="button" class="history-item"><span>{{ semana.label }}</span><span class="num">{{ semana.valor }} L</span></button></li>
         {% endfor %}
-      </div>
-    </div>
-    
-    <div class="comparison-card">
-      <div class="card-header">Comparación</div>
-      <div class="comparison-val up">
-        {{ consumo.variacion_label }}
-      </div>
-      <div style="font-size:12px; color:#888; font-weight:600; margin-top:4px;">Comparación basada en datos registrados</div>
-    </div>
-    
-    <section class="card">
-      <div style="padding-bottom: 0.3rem;" class="card-header">Resumen</div>
-      <div class="detail-row"><span>Promedio diario</span><span class="detail-val">{{ consumo.prom_dia }}L</span></div>
-      <div class="detail-row"><span>Día más alto</span><span class="detail-val">{{ consumo.dia_alto }}L</span></div>
-      <div class="detail-row"><span>Día más bajo</span><span class="detail-val">{{ consumo.dia_bajo }}L</span></div>
+      </ul>
     </section>
 
+    <section class="panel comparison-card" aria-labelledby="comparacion-titulo">
+      <h2 class="panel-title" id="comparacion-titulo">Comparación</h2>
+      {% with signo=consumo.variacion_label|slice:":1" %}
+      <p class="comparison-val {% if signo == '+' %}is-up{% elif signo == '-' %}is-down{% endif %}">
+        {% if signo == '+' %}<i class="ti ti-arrow-up" aria-hidden="true"></i>{% elif signo == '-' %}<i class="ti ti-arrow-down" aria-hidden="true"></i>{% endif %}
+        {{ consumo.variacion_label }}
+      </p>
+      <p class="muted comparison-note">{% if signo == '+' %}Usaste más agua que la semana anterior.{% elif signo == '-' %}Usaste menos agua que la semana anterior. ¡Bien hecho!{% else %}Comparación basada en los datos registrados.{% endif %}</p>
+      {% endwith %}
+    </section>
+
+    <section class="panel" aria-labelledby="resumen-titulo">
+      <h2 class="panel-title" id="resumen-titulo">Resumen</h2>
+      <dl class="kv kv--inline">
+        <div><dt>Promedio diario</dt><dd class="num">{{ consumo.prom_dia }} L</dd></div>
+        <div><dt>Día más alto</dt><dd class="num">{{ consumo.dia_alto }} L</dd></div>
+        <div><dt>Día más bajo</dt><dd class="num">{{ consumo.dia_bajo }} L</dd></div>
+      </dl>
+    </section>
   </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -104,6 +98,7 @@
 {{ consumo.valor_mes|json_script:"consumo-valor-mes" }}
 {{ consumo.mes_key|json_script:"consumo-mes-key" }}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="{% static 'App/js/sd_charts.js' %}?v=20261011-zona1"></script>
 <script>
   const jsonData = id => JSON.parse(document.getElementById(id).textContent);
   const dataSemana = jsonData('consumo-datos-semana');
@@ -121,60 +116,74 @@
   const valorMes = jsonData('consumo-valor-mes');
   let activeHistoryItems = historialSemana;
   let semanaActual = 0;
+  let selectedIndex = -1;
+
+  function barColors(count) {
+    return Array.from({ length: count }, (_, i) => (i === selectedIndex ? SDCharts.color('anil') : SDCharts.color('agua')));
+  }
 
   const ctx = document.getElementById('consumoChart').getContext('2d');
   const chart = new Chart(ctx, {
-    type: 'line',
+    type: 'bar',
     data: {
       labels: labelsSemana,
       datasets: [{
         label: 'Consumo (L)',
         data: dataSemana,
-        borderColor: '#7c3aed',
-        backgroundColor: 'rgba(124,58,237,0.08)',
-        borderWidth: 2.5,
-        pointBackgroundColor: '#7c3aed',
-        pointRadius: 4,
-        tension: 0.4,
-        fill: true,
+        backgroundColor: barColors(dataSemana.length),
+        hoverBackgroundColor: SDCharts.color('anil'),
+        maxBarThickness: 44,
       }]
     },
     options: {
       responsive: true,
-      maintainAspectRatio: false,
       onClick(event, elements) {
         if (elements.length) selectHistory(elements[0].index);
       },
-      plugins: { legend: { display: false } },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: (item) => ` ${item.formattedValue} L` } },
+      },
       scales: {
-        x: { grid: { color: '#f0eafa' }, ticks: { color: '#888', font: { family: 'Inter', weight: '600' } } },
-        y: { grid: { color: '#f0eafa' }, ticks: { color: '#888', font: { family: 'Inter', weight: '600' } } }
+        x: { grid: { display: false } },
+        y: { beginAtZero: true, ticks: { callback: (value) => `${value} L` } }
       }
     },
   });
+  chart.$sdRecolor = function () {
+    const ds = chart.data.datasets[0];
+    ds.backgroundColor = barColors(ds.data.length);
+    ds.hoverBackgroundColor = SDCharts.color('anil');
+  };
+
+  function setChartData(data, labels) {
+    selectedIndex = -1;
+    chart.data.datasets[0].data = data;
+    chart.data.datasets[0].backgroundColor = barColors(data.length);
+    chart.data.labels = labels;
+    chart.update();
+  }
 
   function selectHistory(index) {
     const item = activeHistoryItems[index];
     if (!item) return;
+    selectedIndex = index;
     document.querySelectorAll('.history-item').forEach(row => {
-      row.style.backgroundColor = '';
-      row.style.fontWeight = '600';
+      row.classList.toggle('is-selected', row.dataset.historyIndex === String(index));
+      row.setAttribute('aria-pressed', row.dataset.historyIndex === String(index) ? 'true' : 'false');
     });
-    const selectedRow = document.querySelector(`[data-history-index="${index}"]`);
-    if (selectedRow) {
-      selectedRow.style.backgroundColor = '#f0eafa';
-      selectedRow.style.fontWeight = '800';
-    }
+    chart.data.datasets[0].backgroundColor = barColors(chart.data.datasets[0].data.length);
     chart.setActiveElements([{ datasetIndex: 0, index }]);
     chart.tooltip.setActiveElements([{ datasetIndex: 0, index }]);
     chart.update();
     document.getElementById('consumo-detail').textContent =
-      `${item.detalle}: ${item.valor}L registrado`;
+      `${item.detalle}: ${item.valor} L registrados.`;
   }
 
   function cambiarTab(tipo, btn) {
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-pressed', 'false'); });
     btn.classList.add('active');
+    btn.setAttribute('aria-pressed', 'true');
     const configs = {
       dia:    { data: dataDia,    labels: labelsDia,    val: valorDia },
       semana: { data: dataSemana, labels: labelsSemana, val: valorSemana },
@@ -185,14 +194,13 @@
       semanaActual = 0;
       renderDiaSemana(semanaActual);
     } else {
-      chart.data.datasets[0].data = c.data;
-      chart.data.labels = c.labels;
-      chart.update();
+      setChartData(c.data, c.labels);
       document.getElementById('chart-value').textContent = c.val;
     }
     document.getElementById('week-navigation').style.display = tipo === 'dia' ? 'flex' : 'none';
     document.getElementById('month-navigation').style.display = tipo === 'mes' || tipo === 'dia' ? 'none' : 'flex';
     if (tipo !== 'dia') renderHistorial(tipo === 'mes' ? historialMes : historialSemana);
+    document.getElementById('consumo-detail').textContent = 'Toca una barra o una fila del historial para ver el detalle.';
   }
 
   function renderDiaSemana(index) {
@@ -200,9 +208,7 @@
     if (!week) return;
     semanaActual = index;
     activeHistoryItems = week.items;
-    chart.data.datasets[0].data = week.items.map(item => item.valor);
-    chart.data.labels = week.items.map(item => item.label);
-    chart.update();
+    setChartData(week.items.map(item => item.valor), week.items.map(item => item.label));
     document.getElementById('chart-value').textContent = week.items.reduce((total, item) => total + item.valor, 0).toFixed(2);
     document.getElementById('week-label').textContent = week.label;
     renderHistorial(week.items);
@@ -213,13 +219,21 @@
     const list = document.getElementById('historial-list');
     list.replaceChildren();
     items.forEach((item, index) => {
-      const row = document.createElement('div');
+      const li = document.createElement('li');
+      const row = document.createElement('button');
+      row.type = 'button';
       row.className = 'history-item';
       row.dataset.historyIndex = index;
-      row.style.cssText = 'display:flex; justify-content:space-between; font-size:13px; font-weight:600; padding:4px 0; border-bottom:1px solid #f0eafa; cursor:pointer;';
-      row.innerHTML = `<span style="color:#888;">${item.label}</span><span style="color:#2d1a4a;">${item.valor}L</span>`;
+      row.setAttribute('aria-pressed', 'false');
+      const label = document.createElement('span');
+      label.textContent = item.label;
+      const value = document.createElement('span');
+      value.className = 'num';
+      value.textContent = `${item.valor} L`;
+      row.append(label, value);
       row.addEventListener('click', () => selectHistory(index));
-      list.appendChild(row);
+      li.appendChild(row);
+      list.appendChild(li);
     });
   }
 

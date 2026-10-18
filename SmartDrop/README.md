@@ -171,14 +171,14 @@ ws://127.0.0.1:8000/ws/sensors/
 Si el sitio aparece sin estilos, verifica:
 
 ```bash
-python manage.py findstatic App/css/dashboard.css
+python manage.py findstatic App/css/smartdrop.css
 python manage.py findstatic App/js/sensor_realtime.js
 ```
 
 Prueba también en el navegador:
 
 ```text
-http://127.0.0.1:8000/static/App/css/dashboard.css
+http://127.0.0.1:8000/static/App/css/smartdrop.css
 ```
 
 La respuesta debe ser HTTP `200` y tener tipo `text/css`.
@@ -472,7 +472,7 @@ Antes de publicar:
 ### El sitio aparece sin CSS
 
 ```bash
-python manage.py findstatic App/css/dashboard.css
+python manage.py findstatic App/css/smartdrop.css
 ```
 
 Reinicia Daphne y recarga con `Ctrl+Shift+R`.

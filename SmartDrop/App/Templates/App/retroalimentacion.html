@@ -1,117 +1,102 @@
 {% extends 'App/base.html' %}
+{% load static %}
 {% block title %}Retroalimentación{% endblock %}
 {% block nav_retro %}active{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/ahorro.css' %}?v=20261011-zona1">{% endblock %}
 
 {% block content %}
-<div class="retro-heading">
-  <h1 class="page-title">RETROALIMENTACIÓN</h1>
-  <p class="page-subtitle">Conoce cómo ha sido tu consumo y descubre oportunidades para mejorar.</p>
-</div>
-
-
-<div class="retro-layout">
-  <!-- Visual principal -->
-  <div class="retro-main card">
-
-    <!-- Indicador de gota -->
-    <div class="retro-summary-heading">
-      <span class="retro-icon"><i class="ti ti-droplet"></i></span>
-      <span class="card-header">Indicador de consumo</span>
-    </div>
-
-    <div class="speech-bubble">
-      {{ retro.mensaje }}
-    </div>
-
-    <div class="retro-state {% if retro.tendencia == 'alta' %}trend-icon up{% elif retro.tendencia == 'baja' %}trend-icon down{% endif %}">
-      {{ retro.estado_agua }}
-    </div>
-
-    <div class="comparison-val {% if retro.tendencia == 'alta' %}trend-icon up{% else %}trend-icon down{% endif %}">
-      {% if retro.tendencia == 'baja' %}↓{% elif retro.tendencia == 'alta' %}↑{% else %}→{% endif %}
-      {{ retro.comparacion }}
-    </div>
-
-
-    <div class="drop-indicator">
-      <svg viewBox="0 0 240 160" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <clipPath id="dropClip">
-            <path d="M 60 10 Q 100 60 100 100 A 40 40 0 0 1 20 100 Q 20 60 60 10 Z"/>
-          </clipPath>
-        </defs>
-        <!-- Contorno gota -->
-        <path d="M 60 10 Q 100 60 100 100 A 40 40 0 0 1 20 100 Q 20 60 60 10 Z"
-              fill="#f5f0ff" stroke="#c4b5fd" stroke-width="2"/>
-        <!-- Relleno según nivel -->
-        <rect x="20" y="{{ retro.fill_y }}" width="80" height="{{ retro.fill_h }}"
-              fill="#7c3aed" opacity="0.7" clip-path="url(#dropClip)"/>
-        <!-- Etiquetas -->
-
-        <g clip-path="url(#dropClip)">
-          <line x1="0" y1="53" x2="125" y2="53" stroke="#8b7ab8" stroke-width="1" stroke-dasharray="3 2"/>
-          <line x1="0" y1="97" x2="125" y2="97" stroke="#8b7ab8" stroke-width="1" stroke-dasharray="3 2"/>
-        </g>
-
-        <text x="125" y="35" text-anchor="start" font-size="11" fill="#888" font-weight="700" font-family="Inter">Consumo elevado</text>
-        <text x="125" y="80" text-anchor="start" font-size="11" fill="#888" font-weight="700" font-family="Inter">Consumo normal</text>
-        <text x="125" y="130" text-anchor="start" font-size="11" fill="#888" font-weight="700" font-family="Inter">Consumo bajo</text>
-      </svg>
-    </div>
-
-    <div class="retro-consumo-actual">{{ retro.consumo_actual }}L</div>
+<header class="page-head retro-heading">
+  <div>
+    <h1 class="page-title">Retroalimentación</h1>
+    <p class="page-lede">Cómo ha sido tu consumo este mes y qué puedes mejorar.</p>
   </div>
+</header>
 
-  <!-- Lateral de estadísticas -->
-  <div class="retro-side">
-
-    <div class="retro-stat card">
-      <div class="card-header">COMPARACIÓN MENSUAL</div>
-      <div class="retro-card">
-        <div class="retro-stat-num">{{ retro.variacion_mes }}</div>
-      <div class="retro-trend" style="margin-top:0.5rem;">
-        {% if retro.tendencia == 'baja' %}
-          <i class="ti ti-arrow-down trend-icon down"></i>
-        {% else %}
-          <i class="ti ti-arrow-up trend-icon up"></i>
-        {% endif %}
+<div class="ahorro-layout retro-layout">
+  <section class="panel panel--warm retro-main" aria-labelledby="retro-mensaje">
+    <div class="retro-hero">
+      <div class="retro-hero-text">
+        <p class="retro-kicker">Tu consumo</p>
+        <h2 class="retro-message speech-bubble" id="retro-mensaje">{{ retro.mensaje }}</h2>
+        <span class="status {% if retro.tendencia == 'alta' %}status--warn{% elif retro.tendencia == 'baja' %}status--ok{% else %}status--info{% endif %} retro-state">
+          <span class="status-dot" aria-hidden="true"></span>{{ retro.estado_agua }}
+        </span>
+        <p class="retro-trend-line comparison-val {% if retro.tendencia == 'alta' %}is-up{% elif retro.tendencia == 'baja' %}is-down{% endif %}">
+          <i class="ti {% if retro.tendencia == 'baja' %}ti-arrow-down{% elif retro.tendencia == 'alta' %}ti-arrow-up{% else %}ti-arrow-right{% endif %}" aria-hidden="true"></i>
+          {{ retro.comparacion }}
+        </p>
+        <p class="retro-actual"><span class="num">{{ retro.consumo_actual }}</span> <span>litros consumidos</span></p>
       </div>
-      <div style="font-size:13px; color:#888; font-weight:600;">VS. {{ retro.periodo_comparacion|default:'MES ANTERIOR' }}</div>
+
+      <div class="drop-indicator" role="img" aria-label="Indicador de consumo: {{ retro.estado_agua }}">
+        <svg viewBox="0 0 240 160" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <defs>
+            <clipPath id="dropClip">
+              <path d="M 60 10 Q 100 60 100 100 A 40 40 0 0 1 20 100 Q 20 60 60 10 Z"/>
+            </clipPath>
+          </defs>
+          <path class="drop-shell" d="M 60 10 Q 100 60 100 100 A 40 40 0 0 1 20 100 Q 20 60 60 10 Z"/>
+          <rect class="drop-fill" x="20" y="{{ retro.fill_y }}" width="80" height="{{ retro.fill_h }}" clip-path="url(#dropClip)"/>
+          <g clip-path="url(#dropClip)">
+            <line class="drop-guide" x1="0" y1="53" x2="125" y2="53"/>
+            <line class="drop-guide" x1="0" y1="97" x2="125" y2="97"/>
+          </g>
+          <text class="drop-label" x="118" y="35">Consumo elevado</text>
+          <text class="drop-label" x="118" y="80">Consumo normal</text>
+          <text class="drop-label" x="118" y="130">Consumo bajo</text>
+        </svg>
       </div>
     </div>
+  </section>
 
-    <div class="card">
-      <div class="card-header">Resumen mensual</div>
-      <div class="detail-row"><span>Total consumido</span><span class="detail-val">{{ retro.total_mes }}L</span></div>
-      <div class="detail-row"><span>Promedio diario</span><span class="detail-val">{{ retro.prom_dia }}L</span></div>
-      <div class="detail-row"><span>Ahorro estimado</span><span class="detail-val" style="color:#0F6E56;">{{ retro.ahorro }}L</span></div>
-    </div>
+  <div class="ahorro-side retro-side">
+    <section class="panel retro-stat" aria-labelledby="retro-mensual">
+      <h2 class="panel-title" id="retro-mensual">Comparación mensual</h2>
+      <p class="retro-stat-num {% if retro.tendencia == 'baja' %}is-down{% else %}is-up{% endif %}">
+        <i class="ti {% if retro.tendencia == 'baja' %}ti-arrow-down{% else %}ti-arrow-up{% endif %} trend-icon" aria-hidden="true"></i>
+        {{ retro.variacion_mes }}
+      </p>
+      <p class="muted retro-periodo">Frente al {{ retro.periodo_comparacion|default:'mes anterior'|lower }}</p>
+    </section>
+
+    <section class="panel" aria-labelledby="retro-resumen">
+      <h2 class="panel-title" id="retro-resumen">Resumen del mes</h2>
+      <dl class="kv kv--inline">
+        <div><dt>Total consumido</dt><dd class="num">{{ retro.total_mes }} L</dd></div>
+        <div><dt>Promedio diario</dt><dd class="num">{{ retro.prom_dia }} L</dd></div>
+        <div><dt>Ahorro estimado</dt><dd class="num retro-ahorro">{{ retro.ahorro }} L</dd></div>
+      </dl>
+    </section>
 
     {% if retro.alerta %}
-    <div class="alert-box full-width card">
-      <i class="ti ti-alert-triangle alert-icon"></i>
+    <div class="notice notice--warn" role="status">
+      <i class="ti ti-alert-triangle" aria-hidden="true"></i>
       <div>
-        <div class="danger-title">{{ retro.alerta }}</div>
-        <div class="alert-text">Reduce el tiempo de ducha, revisa fugas y evita dejar las llaves abiertas.</div>
+        <p class="notice-title">{{ retro.alerta }}</p>
+        <p>Reduce el tiempo de ducha, revisa si hay fugas y no dejes las llaves abiertas.</p>
       </div>
     </div>
     {% elif retro.motivacion %}
-    <div class="alert-box full-width card">
-      <i class="ti ti-award alert-icon"></i>
+    <div class="notice notice--ok" role="status">
+      <i class="ti ti-award" aria-hidden="true"></i>
       <div>
-        <div class="retro-state">{{ retro.motivacion }}</div>
-        <div class="alert-text">Continúa con tus hábitos de ahorro de agua.</div>
+        <p class="notice-title">{{ retro.motivacion }}</p>
+        <p>Sigue con tus hábitos de ahorro de agua.</p>
       </div>
     </div>
     {% endif %}
 
-    <div class="card">
-      <div class="card-header">Recomendaciones</div>
-      {% for recomendacion in retro.recomendaciones %}
-      <div class="detail-row"><span>{{ recomendacion }}</span></div>
-      {% endfor %}
-    </div>
-
+    {% if retro.recomendaciones %}
+    <section class="panel" aria-labelledby="retro-recos">
+      <h2 class="panel-title" id="retro-recos">Qué puedes hacer</h2>
+      <ul class="tip-list">
+        {% for recomendacion in retro.recomendaciones %}
+        <li><i class="ti ti-leaf" aria-hidden="true"></i><span>{{ recomendacion }}</span></li>
+        {% endfor %}
+      </ul>
+      <a class="btn btn--ghost btn--sm" href="{% url 'recomendaciones' %}">Ver todos los consejos de ahorro</a>
+    </section>
+    {% endif %}
   </div>
 </div>
 {% endblock %}

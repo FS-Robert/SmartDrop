@@ -1,50 +1,52 @@
 {% extends 'App/base.html' %}
+{% load static %}
 {% block title %}{{ zone.name }} — Predicción{% endblock %}
 {% block nav_ml %}active{% endblock %}
-
-{% block extra_css %}
-  <style>
-    .chart-wrap { background:var(--panel); padding:12px; border-radius:12px; border:1px solid var(--border); margin-bottom:16px; }
-    .table-styled { width:100%; border-collapse:collapse; margin-top:12px; }
-    .table-styled th, .table-styled td { padding:8px 10px; border-bottom:1px solid var(--border); font-size:13px; text-align:left; }
-    .table-styled th { color:#6B21A8; font-weight:800; }
-    .shortage-banner { padding:12px 16px; border-radius:10px; margin-bottom:16px; font-weight:700; }
-    .shortage-critico, .shortage-alto { background:#fdeaea; color:#b3261e }
-    .shortage-medio { background:#fff4e0; color:#a86a00 }
-    .shortage-bajo { background:#e6f7ee; color:#1a7a4c }
-    .kv { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:10px; }
-    .kv div { background:rgba(124,58,237,.08); border-radius:10px; padding:10px 12px; font-size:13px; }
-    .kv b { display:block; font-size:11px; color:var(--muted); text-transform:uppercase; margin-bottom:2px; }
-  </style>
-{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/prediccion.css' %}?v=20261011-zona1">{% endblock %}
 
 {% block content %}
-<h1 class="page-title">{{ zone.name }}</h1>
-<a href="{% url 'ml_engine:dashboard' %}">&larr; Volver a la predicción de suministro</a>
+<nav class="breadcrumb" aria-label="Ruta">
+  <a href="{% url 'ml_engine:dashboard' %}">Predicción de suministro</a>
+  <span aria-current="page">{{ zone.name }}</span>
+</nav>
 
-<div id="shortage-banner" style="margin-top:12px;"></div>
-
-<div class="chart-wrap">
-  <h3>Datos del tanque y de la vivienda</h3>
-  <div class="kv">
-    <div><b>Capacidad</b>{{ zone.capacidad_maxima_litros|floatformat:1 }} L</div>
-    <div><b>Nivel crítico</b>{{ zone.nivel_critico_litros|floatformat:1 }} L</div>
-    <div><b>Nivel actual</b>{{ zone.nivel_actual_litros|floatformat:1 }} L</div>
-    {% for home in homes %}
-      <div><b>Vivienda</b>{{ home.meta.nic }} · {{ home.meta.titular }}</div>
-      <div><b>Dirección</b>{{ home.meta.direccion }} ({{ home.meta.zona }})</div>
-      <div><b>Consumo estimado (próxima hora)</b><span id="forecast-{{ home.id }}" data-home-id="{{ home.id }}">…</span></div>
-    {% endfor %}
-    <div id="pump-info" style="display:none;"><b>Bomba</b><span></span></div>
+<header class="page-head">
+  <div>
+    <h1 class="page-title">{{ zone.name }}</h1>
+    <p class="page-lede">Cuánta agua le queda a este tanque y cuándo podría llegar al nivel crítico.</p>
   </div>
-</div>
+  <div class="page-actions">
+    <a class="btn btn--secondary" href="{% url 'ml_engine:dashboard' %}"><i class="ti ti-arrow-left" aria-hidden="true"></i>Volver a la predicción</a>
+  </div>
+</header>
 
-<div class="chart-wrap">
-  <h3>Nivel proyectado del tanque (litros)</h3>
-  <canvas id="tankChart" height="90"></canvas>
-</div>
+<div id="shortage-banner" class="zone-banner" aria-live="polite"></div>
 
+<section class="panel zone-data" aria-labelledby="datos-titulo">
+  <h2 class="panel-title" id="datos-titulo">Datos del tanque y de la vivienda</h2>
+  <dl class="kv">
+    <div><dt>Capacidad</dt><dd class="num">{{ zone.capacidad_maxima_litros|floatformat:1 }} L</dd></div>
+    <div><dt>Nivel crítico</dt><dd class="num">{{ zone.nivel_critico_litros|floatformat:1 }} L</dd></div>
+    <div><dt>Nivel actual</dt><dd class="num">{{ zone.nivel_actual_litros|floatformat:1 }} L</dd></div>
+    {% for home in homes %}
+      <div><dt>Vivienda</dt><dd>{{ home.meta.nic }}<br><span class="muted">{{ home.meta.titular }}</span></dd></div>
+      <div><dt>Dirección</dt><dd>{{ home.meta.direccion }} ({{ home.meta.zona }})</dd></div>
+      <div><dt>Consumo estimado (próxima hora)</dt><dd><span id="forecast-{{ home.id }}" data-home-id="{{ home.id }}">Calculando…</span></dd></div>
+    {% endfor %}
+    <div id="pump-info" style="display:none;"><dt>Bomba</dt><dd><span></span></dd></div>
+  </dl>
+</section>
+
+<section class="panel chart-wrap" aria-labelledby="proyeccion-titulo">
+  <h2 class="panel-title" id="proyeccion-titulo">Nivel proyectado del tanque</h2>
+  <p class="muted zone-chart-note">La línea es el nivel esperado; la franja muestra entre qué valores probablemente estará.</p>
+  <div class="zone-chart"><canvas id="tankChart" role="img" aria-label="Nivel proyectado del tanque en litros"></canvas></div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="{% static 'App/js/sd_charts.js' %}?v=20261011-zona1"></script>
 <script>
 const zoneId = {{ zone.id }};
 
@@ -52,20 +54,30 @@ const zoneId = {{ zone.id }};
   const resp = await fetch(`/v1/ml/zones/${zoneId}/tank-trajectory/`, {credentials: 'same-origin'});
   if (!resp.ok) return;
   const data = await resp.json();
-  const labels = data.trajectory.map(p => new Date(p.target_ts).toLocaleString());
+  const labels = data.trajectory.map(p => new Date(p.target_ts).toLocaleString('es-SV', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }));
   const ctx = document.getElementById('tankChart').getContext('2d');
-  new Chart(ctx, {
+  const chart = new Chart(ctx, {
     type: 'line',
     data: {
       labels,
       datasets: [
-        {label: 'Nivel máximo esperado', data: data.trajectory.map(p => p.p90_litros), borderColor: '#9b7bd8', borderDash: [4,4], pointRadius: 0},
-        {label: 'Nivel esperado', data: data.trajectory.map(p => p.p50_litros), borderColor: '#6B21A8', pointRadius: 0},
-        {label: 'Nivel mínimo esperado', data: data.trajectory.map(p => p.p10_litros), borderColor: '#9b7bd8', borderDash: [4,4], pointRadius: 0},
+        {label: 'Nivel máximo esperado', data: data.trajectory.map(p => p.p90_litros), borderColor: SDCharts.alpha('agua', 0.45), borderDash: [4, 4], borderWidth: 1.5, backgroundColor: SDCharts.alpha('agua', 0.12), fill: '+2'},
+        {label: 'Nivel esperado', data: data.trajectory.map(p => p.p50_litros), borderColor: SDCharts.color('agua')},
+        {label: 'Nivel mínimo esperado', data: data.trajectory.map(p => p.p10_litros), borderColor: SDCharts.alpha('agua', 0.45), borderDash: [4, 4], borderWidth: 1.5},
       ],
     },
-    options: {responsive: true, plugins: {legend: {position: 'bottom'}}},
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom' } },
+      scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 8, maxRotation: 0 } }, y: { ticks: { callback: (v) => `${v} L` } } },
+    },
   });
+  chart.$sdRecolor = () => {
+    const [hi, mid, lo] = chart.data.datasets;
+    hi.borderColor = SDCharts.alpha('agua', 0.45); hi.backgroundColor = SDCharts.alpha('agua', 0.12);
+    mid.borderColor = SDCharts.color('agua'); lo.borderColor = SDCharts.alpha('agua', 0.45);
+  };
 })();
 
 (async function loadShortage() {
@@ -74,21 +86,29 @@ const zoneId = {{ zone.id }};
   const data = await resp.json();
   const banner = document.getElementById('shortage-banner');
   const pred = data.shortage_prediction;
+  const MOD = { critico: 'bad', alto: 'bad', medio: 'warn', bajo: 'ok' };
+  const LABEL = { critico: 'Riesgo crítico', alto: 'Riesgo alto', medio: 'Riesgo medio', bajo: 'Riesgo bajo' };
+  function paint(mod, title, text) {
+    banner.className = `notice notice--${mod} zone-banner shortage-banner`;
+    banner.innerHTML = `<i class="ti ${mod === 'ok' ? 'ti-check' : 'ti-alert-triangle'}" aria-hidden="true"></i><div><p class="notice-title"></p><p class="zone-banner-text"></p></div>`;
+    banner.querySelector('.notice-title').textContent = title;
+    banner.querySelector('.zone-banner-text').textContent = text;
+  }
   if (!pred) {
-    banner.className = 'shortage-banner shortage-bajo';
-    banner.textContent = 'Todavía no hay una predicción para este tanque. Usa "Realizar predicciones" en el panel.';
+    paint('info', 'Sin predicción todavía', 'Usa "Realizar predicciones" en el panel de suministro para calcularla.');
     return;
   }
-  banner.className = `shortage-banner shortage-${pred.nivel_riesgo}`;
   const pct = (pred.probabilidad_desabasto_horizonte * 100).toFixed(0);
+  const mod = MOD[pred.nivel_riesgo] || 'info';
+  const label = LABEL[pred.nivel_riesgo] || `Riesgo ${pred.nivel_riesgo}`;
   if (pred.nivel_riesgo === 'critico') {
-    banner.textContent = 'RIESGO CRÍTICO: el tanque ya está en o por debajo del nivel crítico.';
+    paint(mod, label, 'El tanque ya está en o por debajo del nivel crítico.');
   } else if (pred.median_hours_to_shortage == null) {
-    banner.textContent = `Riesgo BAJO: sin desabasto esperado en las próximas ${pred.horizonte_horas} h (probabilidad ${pct}%).`;
+    paint(mod, label, `No se espera desabasto en las próximas ${pred.horizonte_horas} h (probabilidad ${pct} %).`);
   } else {
-    banner.textContent = `Riesgo ${pred.nivel_riesgo.toUpperCase()}: ≈ ${Math.round(pred.median_hours_to_shortage)}h hasta nivel crítico ` +
-      `(rango: ${Math.round(pred.p10_hours_to_shortage)}-${Math.round(pred.p90_hours_to_shortage)}h), ` +
-      `probabilidad dentro del horizonte de ${pred.horizonte_horas}h: ${pct}%.`;
+    paint(mod, label, `Llegaría al nivel crítico en unas ${Math.round(pred.median_hours_to_shortage)} h ` +
+      `(entre ${Math.round(pred.p10_hours_to_shortage)} y ${Math.round(pred.p90_hours_to_shortage)} h). ` +
+      `Probabilidad dentro de las próximas ${pred.horizonte_horas} h: ${pct} %.`);
   }
   const d = pred.details || {};
   if (d.bomba_sin_recargar_ahora != null) {
@@ -96,7 +116,7 @@ const zoneId = {{ zone.id }};
     box.style.display = '';
     box.querySelector('span').textContent = d.bomba_sin_recargar_ahora
       ? 'No está recargando aunque el nivel ya bajó del umbral de arranque'
-      : `Operando normal (arranca ≈ ${Number(d.umbral_arranque_bomba_l).toFixed(1)} L, para ≈ ${Number(d.umbral_paro_bomba_l).toFixed(1)} L)`;
+      : `Operando normal (arranca con ≈ ${Number(d.umbral_arranque_bomba_l).toFixed(1)} L y se detiene con ≈ ${Number(d.umbral_paro_bomba_l).toFixed(1)} L)`;
   }
 })();
 
@@ -104,11 +124,11 @@ document.querySelectorAll('[data-home-id]').forEach(async (cell) => {
   const homeId = cell.dataset.homeId;
   try {
     const resp = await fetch(`/v1/ml/homes/${homeId}/consumption-forecast/`, {credentials: 'same-origin'});
-    if (!resp.ok) return;
+    if (!resp.ok) { cell.textContent = 'Sin datos'; return; }
     const data = await resp.json();
     const latest = data.forecasts[0];
     cell.textContent = latest ? `${latest.p50.toFixed(2)} L (entre ${latest.p10.toFixed(2)} y ${latest.p90.toFixed(2)} L)` : 'Sin datos';
-  } catch (e) { cell.textContent = 'Error'; }
+  } catch (e) { cell.textContent = 'No se pudo calcular'; }
 });
 </script>
 {% endblock %}

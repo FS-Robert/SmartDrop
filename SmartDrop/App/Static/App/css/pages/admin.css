@@ -1,0 +1,156 @@
+/* ==========================================================================
+   SmartDrop — consola de administración: panel general y problemas
+   reportados. Más densa que la del residente, igual de serena.
+   Solo tokens de smartdrop.css.
+   ========================================================================== */
+
+.admin-messages {
+  margin-bottom: var(--s-5);
+}
+
+/* ── Necesita atención ──────────────────────────────────────────────────── */
+.admin-attention {
+  margin-bottom: var(--s-6);
+}
+
+.admin-flush-head {
+  padding: var(--s-5) var(--s-6) var(--s-3);
+  margin: 0;
+}
+
+.admin-attention .list {
+  margin: 0;
+}
+
+.admin-attention .list-row-aside.btn {
+  flex: none;
+}
+
+.admin-attention-ok {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-4) var(--s-6) var(--s-5);
+  color: var(--c-ink-2);
+  font-size: var(--t-sm);
+}
+
+.admin-attention-ok > p {
+  margin: 0;
+}
+
+.admin-attention .list + .admin-attention-ok {
+  border-top: 1px solid var(--c-line);
+}
+
+/* ── Indicadores ────────────────────────────────────────────────────────── */
+.admin-kpis {
+  margin-bottom: var(--s-8);
+}
+
+.val-alert {
+  color: var(--c-warn);
+}
+
+/* ── Tablas ─────────────────────────────────────────────────────────────── */
+.admin-sensor-name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-3);
+  font-weight: 600;
+}
+
+.admin-sensor-name > .ti {
+  color: var(--c-agua);
+}
+
+.admin-lecturas {
+  max-height: 560px;
+  overflow-y: auto;
+}
+
+.admin-lecturas thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+/* ── Problemas reportados ───────────────────────────────────────────────── */
+.conteos-row {
+  margin-bottom: var(--s-6);
+}
+
+.conteos-row .tile.is-current {
+  border-color: var(--c-anil);
+  box-shadow: inset 0 0 0 1px var(--c-anil);
+}
+
+.filtros-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-3) var(--s-4);
+  margin-bottom: var(--s-5);
+}
+
+.field--inline {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--s-3);
+}
+
+.field--inline > .field-label {
+  margin: 0;
+  white-space: nowrap;
+}
+
+.field--inline > select {
+  width: auto;
+  min-width: 11rem;
+}
+
+.autor-nombre,
+.reporte-tipo {
+  margin: 0;
+  color: var(--c-ink);
+  font-weight: 600;
+}
+
+.autor-correo,
+.reporte-desc {
+  margin: 2px 0 0;
+  color: var(--c-ink-3);
+  font-size: var(--t-sm);
+}
+
+.desc-cell {
+  min-width: 16rem;
+  max-width: 28rem;
+}
+
+.prio {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 var(--s-3);
+  border: 1px solid var(--c-line-strong);
+  border-radius: var(--r-xs);
+  color: var(--c-ink-2);
+  font-size: var(--t-sm);
+  font-weight: 600;
+}
+
+.prio--alta {
+  border-color: var(--c-bad-dot);
+  color: var(--c-bad);
+}
+
+.prio--media {
+  border-color: var(--c-warn-dot);
+  color: var(--c-warn);
+}
+
+.btn-ver .count-badge {
+  margin-left: var(--s-1);
+}

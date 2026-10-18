@@ -1,49 +1,58 @@
-{% load static %}
 <!DOCTYPE html>
 <html lang="{{ ui_idioma|default:'es' }}">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>SmartDrop — Vincular vivienda</title>
-  <link rel="stylesheet" href="{% static 'App/fonts/tabler/tabler-icons-subset.css' %}?v=2.47"/>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{% static 'App/css/dashboard.css' %}"/>
-  {% include 'App/_i18n_head.html' %}
+  {% include 'App/_auth_head.html' %}
 </head>
 
-<body>
-  <main class="auth-panel">
-    <div class="auth-bg" id="auth-bg" data-bg="{% static 'App/img/fondo1.jpg' %}"></div>
-    <div class="auth-card">
-      <h1>Vincula tu vivienda</h1>
-      <p>Para monitorear tu consumo necesitas vincular tu vivienda con tu número de cuenta y el nombre del titular.</p>
-      <form method="post" novalidate>
-        {% csrf_token %}
-        {% if form.non_field_errors %}
-        <div class="form-error">{{ form.non_field_errors }}</div>
-        {% endif %}
+<body class="auth-body">
+  {% include 'App/_auth_icons.html' %}
 
-        <label for="id_numero_cuenta">Número de cuenta (NIC)</label>
-        {{ form.numero_cuenta }}
-        {{ form.numero_cuenta.errors }}
+  <div class="auth">
+    <main class="auth-main" id="contenido">
+      <div class="auth-inner">
+        <p class="brand brand--lg auth-brand"><span class="brand-mark" aria-hidden="true"></span><span>SmartDrop</span></p>
 
-        <label for="id_nombre_completo_titular">Nombre completo del titular</label>
-        {{ form.nombre_completo_titular }}
-        {{ form.nombre_completo_titular.errors }}
+        <h1 class="page-title">Vincula tu vivienda</h1>
+        <p class="page-lede">Para mostrarte el agua de tu zona necesitamos saber cuál es tu vivienda. Usa el número de cuenta (NIC) y el nombre del titular tal como aparecen en tu recibo.</p>
 
-        <button type="submit" class="btn-primary">Vincular vivienda</button>
-      </form>
-      <p class="auth-footer"><a href="{% url 'logout' %}">Cerrar sesión</a></p>
-    </div>
-  </main>
+        <form method="post" class="auth-form" novalidate>
+          {% csrf_token %}
+          {% if form.non_field_errors %}
+          <div class="auth-error" role="alert">{{ form.non_field_errors }}</div>
+          {% endif %}
 
-  <script>
-    document.addEventListener('DOMContentLoaded', function () {
-      var bg = document.getElementById('auth-bg');
-      bg.style.backgroundImage = "url('" + bg.dataset.bg + "')";
-    });
-  </script>
+          <div class="field">
+            <label class="field-label" for="id_numero_cuenta">Número de cuenta (NIC)</label>
+            {{ form.numero_cuenta }}
+            {{ form.numero_cuenta.errors }}
+          </div>
+
+          <div class="field">
+            <label class="field-label" for="id_nombre_completo_titular">Nombre completo del titular</label>
+            {{ form.nombre_completo_titular }}
+            <p class="field-hint">Escríbelo completo, con nombres y apellidos.</p>
+            {{ form.nombre_completo_titular.errors }}
+          </div>
+
+          <button type="submit" class="btn btn--primary btn--lg btn--block auth-submit"><span>Vincular vivienda</span></button>
+        </form>
+
+        <div class="auth-alt">
+          <p class="auth-alt-text">{% if user.is_authenticated %}Sesión iniciada como <strong>{{ user.email }}</strong>{% else %}¿Quieres usar otra cuenta?{% endif %}</p>
+          <a class="auth-alt-link" href="{% url 'logout' %}"><svg class="icon" aria-hidden="true"><use href="#i-logout"></use></svg>Cerrar sesión</a>
+        </div>
+      </div>
+    </main>
+
+    <aside class="auth-scene">
+      <div class="auth-scene-card">
+        <p class="auth-scene-text">Un paso más y verás el tanque de tu zona.</p>
+        {% include 'App/_zona_ilustracion.html' with nivel=70 decorativo=True uid='auth' clase='auth-zona' %}
+      </div>
+    </aside>
+  </div>
+
+  {% include 'App/_auth_scripts.html' %}
 </body>
 </html>

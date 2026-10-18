@@ -1,68 +1,95 @@
 {% extends 'App/base.html' %}
-{% block title %}Calidad del Agua{% endblock %}
+{% load static sd_ui %}
+{% block title %}Calidad del agua{% endblock %}
 {% block nav_calidad %}active{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/sensores.css' %}?v=20261011-zona1">{% endblock %}
 
 {% block content %}
-<div class="calidad-heading">
-  <h1 class="page-title">CALIDAD DEL AGUA</h1>
-  <p class="page-subtitle calidad-page-subtitle">Consulta los parámetros actuales de calidad y su estado.</p>
-</div>
+<header class="page-head">
+  <div>
+    <h1 class="page-title">Calidad del agua</h1>
+    <p class="page-lede">Si el agua de tu casa es apta para usar y beber, según los sensores.</p>
+  </div>
+  <div class="page-actions">
+    <p class="updated">Último análisis: {{ calidad.ultimo_analisis|fecha_corta }}</p>
+  </div>
+</header>
 
-<div class="quality-summary-grid">
-  <section class="quality-summary-card card">
-    <div class="quality-summary-heading">
-      <span class="quality-icon"><i class="ti ti-droplet"></i></span>
-      <span class="card-header">Calidad</span>
+<div class="sensor-layout">
+  <section class="panel sensor-state" aria-labelledby="calidad-estado">
+    <div class="sensor-state-head">
+      <span class="status status--lg status--{{ calidad.estado|estado_css }}"><span class="status-dot" aria-hidden="true"></span>{{ calidad.badge }}</span>
+      <span class="status status--{{ calidad.estado|estado_css }}"><span class="status-dot" aria-hidden="true"></span>{% if calidad.estado == 'Mala' %}No apta para beber{% elif calidad.estado == 'Sin datos' %}Sin datos de potabilidad{% else %}Apta para beber{% endif %}</span>
     </div>
-    <div class="safe-label">{{ calidad.titulo }}</div>
-    <div class="stars">
-      {% for i in calidad.estrellas_range %}★{% endfor %}
-      {% for i in calidad.estrellas_vacias %}☆{% endfor %}
+    <h2 class="sensor-message" id="calidad-estado">{% if calidad.estado == 'Buena' %}El agua de tu casa está limpia.{% elif calidad.estado == 'Media' %}El agua es aceptable, pero conviene vigilarla.{% elif calidad.estado == 'Mala' %}El agua necesita revisión antes de beberla.{% else %}Aún no hay lecturas de calidad para tu casa.{% endif %}</h2>
+
+    <p class="sensor-value">
+      <span class="num">{{ calidad.tds|floatformat:0 }}</span>
+      <span class="sensor-unit">ppm de sólidos disueltos (TDS)</span>
+    </p>
+
+    <div class="range-scale" aria-hidden="true">
+      <div class="range-track">
+        <span class="range-zone range-zone--ok" style="flex-basis: 30%;"></span>
+        <span class="range-zone range-zone--warn" style="flex-basis: 30%;"></span>
+        <span class="range-zone range-zone--bad" style="flex-basis: 40%;"></span>
+        <span class="range-needle" style="left: {% if calidad.tds > 1000 %}100{% else %}{% widthratio calidad.tds 1000 100 %}{% endif %}%;"></span>
+      </div>
+      <div class="range-labels">
+        <span style="flex-basis: 30%;">Buena</span>
+        <span style="flex-basis: 30%;">Aceptable</span>
+        <span style="flex-basis: 40%;">Revisar</span>
+      </div>
+      <div class="range-ticks num"><span>0</span><span style="left: 30%;">300</span><span style="left: 60%;">600</span><span style="left: 100%;">1000 ppm</span></div>
     </div>
-    <p class="calidad-desc">{{ calidad.descripcion }}</p>
-    <div class="alert-box full-width"><i class="ti ti-shield-check"></i><p class="alert-text">{{ calidad.anomalias }}</p></div>
-    <div class="quality-analysis"><span>Último análisis</span><strong>{{ calidad.ultimo_analisis }}</strong></div>
+    <p class="sensor-value-note">{{ calidad.descripcion }}</p>
   </section>
 
-  <section class="quality-state-card card">
-    <div class="card-header">Estado general</div>
-    <div class="detail-row">
-      <div>
-        <p class="calidad-details">Calidad</p>
-      </div>
-      <span class="badge {% if calidad.estado == 'Buena' %}badge-perfect{% elif calidad.estado == 'Media' %}badge-high{% else %}badge-closed{% endif %}">{{ calidad.estado }}</span>
-    </div>
-    
-    <div class="detail-row">
-      <div>
-        <p class="calidad-details">Potabilidad</p>
-      </div>
-      <span class="badge {% if calidad.estado == 'Buena' %}badge-normal{% elif calidad.estado == 'Media' %}badge-high{% else %}badge-closed{% endif %}">{% if calidad.estado == 'Mala' %}No apta{% elif calidad.estado == 'Sin datos' %}Sin datos{% else %}Apta{% endif %}</span></div>
-    
-      <div class="detail-row">
-        <div>
-          <p class="calidad-details">Anomalías 30 días</p>
-        </div>
-        <span class="badge badge-closed">Sin datos</span>
-      </div>
-  </section>
-
-  <section class="quality-sensor-card card">
-    <div class="card-header">Estado del sensor</div>
-    <div class="sensor-body">
-       <strong>Última actualización</strong>
-    <span>{{ calidad.ultimo_analisis }}</span>
-    </div>
-  </section>
+  <div class="sensor-aside">
+    <section class="panel" aria-labelledby="calidad-general">
+      <h2 class="panel-title" id="calidad-general">Estado general</h2>
+      <dl class="kv kv--inline">
+        <div><dt>Calidad</dt><dd>{{ calidad.estado }}</dd></div>
+        <div><dt>Clasificación</dt><dd>{{ calidad.anomalias }}</dd></div>
+        <div><dt>Último análisis</dt><dd>{{ calidad.ultimo_analisis|fecha_corta }}</dd></div>
+      </dl>
+    </section>
+  </div>
 </div>
 
-<h2 class="quality-parameters-title">Parámetros de calidad</h2>
-<div class="quality-parameters-grid">
-  <div class="quality-parameter card"><span class="parameter-icon"><i class="ti ti-droplet"></i></span><span class="card-header">TDS</span><strong>{{ calidad.tds }} <small>ppm</small></strong><div class="parameter-bar"><i style="width:35%;"></i></div><small>0 ppm <b>1000 ppm</b></small></div>
-  <div class="quality-parameter card"><span class="parameter-icon"><i class="ti ti-chart-dots"></i></span><span class="card-header">pH</span><strong>{{ calidad.ph }}</strong><div class="parameter-bar"><i style="width:50%;"></i></div><small>0 <b>14</b></small></div>
-  <div class="quality-parameter card"><span class="parameter-icon"><i class="ti ti-flask"></i></span><span class="card-header">Cloro residual</span><strong>{{ calidad.cloro }} <small>mg/L</small></strong><div class="parameter-bar"><i style="width:35%;"></i></div><small>0 mg/L <b>3 mg/L</b></small></div>
-  <div class="quality-parameter card"><span class="parameter-icon"><i class="ti ti-droplets"></i></span><span class="card-header">Turbidez</span><strong>{{ calidad.turbidez }} <small>NTU</small></strong><div class="parameter-bar"><i style="width:20%;"></i></div><small>0 NTU <b>10 NTU</b></small></div>
-  <div class="quality-parameter card"><span class="parameter-icon"><i class="ti ti-bolt"></i></span><span class="card-header">Conductividad</span><strong>{{ calidad.conductividad }} <small>µS/cm</small></strong><div class="parameter-bar"><i style="width:30%;"></i></div><small>0 µS/cm <b>500 µS/cm</b></small></div>
-  <div class="quality-parameter card"><span class="parameter-icon"><i class="ti ti-temperature"></i></span><span class="card-header">Temperatura</span><strong>{{ calidad.temperatura }} <small>°C</small></strong><div class="parameter-bar"><i style="width:40%;"></i></div><small>0 °C <b>40 °C</b></small></div>
-</div>
+<section class="section" aria-labelledby="parametros-titulo">
+  <div class="section-head">
+    <h2 class="section-title" id="parametros-titulo">Otros parámetros</h2>
+    <p class="section-lede">Lecturas adicionales de los sensores de tu vivienda.</p>
+  </div>
+  <div class="panel panel--flush">
+    <ul class="list param-list">
+      <li class="list-row">
+        <span class="icon-chip icon-chip--anil"><i class="ti ti-chart-dots" aria-hidden="true"></i></span>
+        <div class="list-row-main"><p class="list-row-title">pH</p><p class="list-row-meta">Acidez del agua. Lo habitual para beber es entre 6.5 y 8.5.</p></div>
+        <div class="list-row-aside param-value num">{% if calidad.ph %}{{ calidad.ph }}{% else %}<span class="muted">Sin lectura</span>{% endif %}</div>
+      </li>
+      <li class="list-row">
+        <span class="icon-chip icon-chip--agua"><i class="ti ti-flask" aria-hidden="true"></i></span>
+        <div class="list-row-main"><p class="list-row-title">Cloro residual</p><p class="list-row-meta">Desinfectante que queda en el agua tratada.</p></div>
+        <div class="list-row-aside param-value num">{{ calidad.cloro }} <span class="param-unit">mg/L</span></div>
+      </li>
+      <li class="list-row">
+        <span class="icon-chip icon-chip--agua"><i class="ti ti-droplets" aria-hidden="true"></i></span>
+        <div class="list-row-main"><p class="list-row-title">Turbidez</p><p class="list-row-meta">Qué tan clara se ve el agua.</p></div>
+        <div class="list-row-aside param-value num">{{ calidad.turbidez }} <span class="param-unit">NTU</span></div>
+      </li>
+      <li class="list-row">
+        <span class="icon-chip icon-chip--anil"><i class="ti ti-bolt" aria-hidden="true"></i></span>
+        <div class="list-row-main"><p class="list-row-title">Conductividad</p><p class="list-row-meta">Relacionada con los minerales disueltos.</p></div>
+        <div class="list-row-aside param-value num">{% if calidad.conductividad %}{{ calidad.conductividad }} <span class="param-unit">µS/cm</span>{% else %}<span class="muted">Sin lectura</span>{% endif %}</div>
+      </li>
+      <li class="list-row">
+        <span class="icon-chip icon-chip--sol"><i class="ti ti-temperature" aria-hidden="true"></i></span>
+        <div class="list-row-main"><p class="list-row-title">Temperatura</p><p class="list-row-meta">Temperatura del agua en la tubería.</p></div>
+        <div class="list-row-aside param-value num">{% if calidad.temperatura %}{{ calidad.temperatura }} <span class="param-unit">°C</span>{% else %}<span class="muted">Sin lectura</span>{% endif %}</div>
+      </li>
+    </ul>
+  </div>
+</section>
 {% endblock %}

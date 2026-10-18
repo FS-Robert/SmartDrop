@@ -2,48 +2,34 @@
 {% load static %}
 {% block title %}Predicción de suministro{% endblock %}
 {% block nav_ml %}active{% endblock %}
-
-{% block extra_css %}
-  <style>
-    .ml-head { display:flex; justify-content:space-between; align-items:flex-end; gap:16px; flex-wrap:wrap; margin-bottom:6px; }
-    .ml-run-btn { display:inline-flex; align-items:center; gap:8px; padding:11px 20px; border:0; border-radius:10px; background:#6b2aa5; color:#fff; font-weight:700; cursor:pointer; box-shadow:0 6px 16px rgba(107,42,165,.28); }
-    .ml-run-btn:disabled { opacity:.6; cursor:wait; }
-    .ml-sub { color:var(--muted); font-size:13px; margin:4px 0 16px; }
-    .ml-banner { padding:12px 16px; border-radius:10px; margin-bottom:16px; font-size:14px; font-weight:600; }
-    .ml-banner.ok { background:#e6f7ee; color:#1a7a4c; }
-    .ml-banner.warn { background:#fff4e0; color:#a86a00; }
-    .ml-banner.err { background:#fdeaea; color:#b3261e; }
-    .ml-banner ul { margin:6px 0 0 18px; font-weight:500; }
-    .zone-card { background:var(--panel); border-radius:12px; padding:16px; border:1px solid var(--border); margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; gap:16px; text-decoration:none; color:inherit; }
-    .zone-card:hover { box-shadow:0 6px 18px rgba(43,20,60,0.08); }
-    .zone-name { font-weight:800; font-size:16px; }
-    .zone-meta { color:var(--muted); font-size:13px; }
-    .zone-side { text-align:right; min-width:170px; }
-    .riesgo-badge { display:inline-block; padding:4px 10px; border-radius:999px; font-size:12px; font-weight:800; text-transform:uppercase; }
-    .riesgo-bajo { background:#e6f7ee; color:#1a7a4c }
-    .riesgo-medio { background:#fff4e0; color:#a86a00 }
-    .riesgo-alto, .riesgo-critico { background:#fdeaea; color:#b3261e }
-    .riesgo-sin_datos { background:#f0ecf7; color:var(--muted) }
-    .zone-note { font-size:12px; color:var(--muted); margin-top:6px; }
-    .zone-note.warn { color:#a86a00; }
-  </style>
-{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/prediccion.css' %}?v=20261011-zona1">{% endblock %}
 
 {% block content %}
-<div class="ml-head">
+<header class="page-head ml-head">
   <div>
-    <h1 class="page-title">PREDICCIÓN DE SUMINISTRO</h1>
-    <p class="ml-sub" id="ml-last-run">Calculada con las lecturas de Supabase de cada vivienda y su tanque.</p>
+    <h1 class="page-title">Predicción de suministro</h1>
+    <p class="page-lede ml-sub" id="ml-last-run">Calculada con las lecturas de cada vivienda y su tanque.</p>
   </div>
-  <button type="button" class="ml-run-btn" id="ml-run-btn"><i class="ti ti-brain"></i> Realizar predicciones</button>
-</div>
+  <div class="page-actions">
+    <button type="button" class="btn btn--primary ml-run-btn" id="ml-run-btn"><i class="ti ti-brain" aria-hidden="true"></i><span>Realizar predicciones</span></button>
+  </div>
+</header>
 
-<div id="ml-banner"></div>
-<div id="zonas-container"><p class="ml-sub">Cargando…</p></div>
+<div id="ml-banner" aria-live="polite"></div>
+
+<section class="section" aria-labelledby="zonas-titulo">
+  <div class="section-head">
+    <h2 class="section-title" id="zonas-titulo">Tanques por vivienda</h2>
+    <p class="section-lede">Los que tienen más riesgo de quedarse sin agua aparecen marcados en rojo o ámbar.</p>
+  </div>
+  <div id="zonas-container" class="panel panel--flush" aria-busy="true">
+    <div class="ml-loading"><span class="skeleton"></span><span class="skeleton"></span><span class="skeleton"></span></div>
+  </div>
+</section>
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'App/js/ml_predictions.js' %}"></script>
+<script src="{% static 'App/js/ml_predictions.js' %}?v=20261011-zona1"></script>
 <script>
 (function () {
   const RUN_URL = "{% url 'ml_engine:prediction_run' %}";
@@ -51,7 +37,8 @@
   const SUMMARY_URL = "{% url 'ml_engine:zone_summary' %}";
   const STATUS_URL = "{% url 'ml_engine:prediction_status' %}";
   const DETAIL_URL = "{% url 'ml_engine:zone_detail' 0 %}";
-  const RISK_LABEL = { bajo: 'Bajo', medio: 'Medio', alto: 'Alto', critico: 'Crítico', sin_datos: 'Sin predicción' };
+  const RISK_LABEL = { bajo: 'Riesgo bajo', medio: 'Riesgo medio', alto: 'Riesgo alto', critico: 'Crítico', sin_datos: 'Sin predicción' };
+  const RISK_MOD = { bajo: 'ok', medio: 'warn', alto: 'bad', critico: 'bad', sin_datos: 'none' };
   const DATA_LABEL = {
     plana: 'Lecturas constantes: no hay patrón que analizar',
     insuficiente: 'Historial insuficiente',
@@ -67,38 +54,52 @@
 
   function hoursText(zone) {
     if (zone.nivel_riesgo === 'critico') return 'El tanque ya está en nivel crítico';
-    if (zone.horas_hasta_desabasto != null) return `Desabasto estimado en ≈ ${Math.round(zone.horas_hasta_desabasto)} h (${Math.round((zone.probabilidad_desabasto || 0) * 100)} %)`;
-    if (zone.nivel_riesgo === 'bajo') return 'Sin riesgo de desabasto en 72 h';
+    if (zone.horas_hasta_desabasto != null) return `Se quedaría sin agua en unas ${Math.round(zone.horas_hasta_desabasto)} h (probabilidad ${Math.round((zone.probabilidad_desabasto || 0) * 100)} %)`;
+    if (zone.nivel_riesgo === 'bajo') return 'Sin riesgo de desabasto en las próximas 72 h';
     return '';
   }
 
+  function emptyState(title, text) {
+    return `<div class="empty"><span class="icon-chip icon-chip--lg icon-chip--none" aria-hidden="true"><i class="ti ti-database"></i></span><h3>${title}</h3><p>${text}</p></div>`;
+  }
+
   async function loadZones() {
+    container.setAttribute('aria-busy', 'true');
     const response = await fetch(SUMMARY_URL, { credentials: 'same-origin' });
-    if (!response.ok) { container.innerHTML = '<p class="ml-sub">No se pudieron cargar los tanques.</p>'; return; }
+    container.setAttribute('aria-busy', 'false');
+    if (!response.ok) { container.innerHTML = emptyState('No se pudieron cargar los tanques', 'Revisa la conexión con el servidor e inténtalo de nuevo.'); return; }
     const { zonas } = await response.json();
     if (!zonas.length) {
-      container.innerHTML = '<p class="ml-sub">Todavía no hay viviendas sincronizadas. Pulsa <strong>Realizar predicciones</strong> para traerlas de Supabase.</p>';
+      container.innerHTML = emptyState('Todavía no hay viviendas sincronizadas', 'Pulsa <strong>Realizar predicciones</strong> para traerlas y calcular su riesgo.');
       return;
     }
-    container.innerHTML = zonas.map((zone) => {
+    container.innerHTML = '<ul class="list zone-list">' + zonas.map((zone) => {
       const dataIssue = DATA_LABEL[zone.calidad_datos];
+      const mod = RISK_MOD[zone.nivel_riesgo] || 'none';
+      const pct = Math.max(0, Math.min(100, Number(zone.porcentaje_llenado) || 0));
       const leak = zone.probabilidad_fuga != null && zone.anomalias_activas_24h > 0
-        ? `<div class="zone-note warn">Posible fuga (${Math.round(zone.probabilidad_fuga * 100)} %)</div>` : '';
+        ? `<span class="status status--bad"><span class="status-dot" aria-hidden="true"></span>Posible fuga (${Math.round(zone.probabilidad_fuga * 100)} %)</span>` : '';
       return `
-      <a class="zone-card" href="${DETAIL_URL.replace(/0\/$/, zone.zone_id + '/')}">
-        <div>
-          <div class="zone-name">${esc(zone.zone_name)} · ${esc(zone.nic)}</div>
-          <div class="zone-meta">${esc(zone.direccion)}${zone.zona ? ' · ' + esc(zone.zona) : ''}</div>
-          <div class="zone-meta">Nivel ${zone.porcentaje_llenado}% (${zone.nivel_actual_litros.toFixed(1)} L)</div>
-        </div>
-        <div class="zone-side">
-          <span class="riesgo-badge riesgo-${esc(zone.nivel_riesgo)}">${RISK_LABEL[zone.nivel_riesgo] || esc(zone.nivel_riesgo)}</span>
-          <div class="zone-note">${esc(hoursText(zone))}</div>
-          ${dataIssue ? `<div class="zone-note warn">${esc(dataIssue)}</div>` : ''}
-          ${leak}
-        </div>
-      </a>`;
-    }).join('');
+      <li>
+        <a class="list-row zone-card" href="${DETAIL_URL.replace(/0\/$/, zone.zone_id + '/')}">
+          <span class="icon-chip icon-chip--${mod === 'ok' ? 'agua' : mod}" aria-hidden="true"><i class="ti ti-building-warehouse"></i></span>
+          <div class="list-row-main">
+            <p class="list-row-title zone-name">${esc(zone.zone_name)} <span class="zone-nic">${esc(zone.nic)}</span></p>
+            <p class="list-row-meta zone-meta">${esc(zone.direccion)}${zone.zona ? `, ${esc(zone.zona)}` : ''}</p>
+            <div class="zone-level">
+              <div class="meter" aria-hidden="true"><span class="meter-fill meter-fill--agua" style="width:${pct}%"></span></div>
+              <span class="zone-level-text">${pct} % (${Number(zone.nivel_actual_litros || 0).toFixed(1)} L)</span>
+            </div>
+          </div>
+          <div class="list-row-aside zone-side">
+            <span class="status status--${mod} riesgo-badge riesgo-${esc(zone.nivel_riesgo)}"><span class="status-dot" aria-hidden="true"></span>${RISK_LABEL[zone.nivel_riesgo] || esc(zone.nivel_riesgo)}</span>
+            <p class="zone-note">${esc(hoursText(zone))}</p>
+            ${dataIssue ? `<p class="zone-note warn">${esc(dataIssue)}</p>` : ''}
+            ${leak}
+          </div>
+        </a>
+      </li>`;
+    }).join('') + '</ul>';
   }
 
   async function loadStatus() {
@@ -109,7 +110,7 @@
       const last = data.ultima_ejecucion;
       if (last && last.finished_at && last.status === 'done') {
         document.getElementById('ml-last-run').textContent =
-          `Última ejecución manual: ${new Date(last.finished_at).toLocaleString()} · el monitor automático revisa fugas cada ${data.monitor.cada_minutos} min.`;
+          `Última ejecución manual: ${new Date(last.finished_at).toLocaleString('es-SV')}. El monitor automático revisa fugas cada ${data.monitor.cada_minutos} min.`;
       }
     } catch (error) { /* informativo */ }
   }
@@ -119,18 +120,21 @@
     const risky = tanques.filter((t) => ['medio', 'alto', 'critico'].includes(t.nivel_riesgo));
     const fugas = result.fugas || {};
     const excluded = (fugas.excluidos || []);
-    let html = `<div class="ml-banner ${risky.length || fugas.posibles_fugas ? 'warn' : 'ok'}">
-      Predicción terminada en ${result.duracion_s} s: ${tanques.length} tanques analizados, ${risky.length} con riesgo de desabasto,
-      ${fugas.posibles_fugas || 0} posible(s) fuga(s)${fugas.alertas_creadas ? ` (${fugas.alertas_creadas} aviso(s) nuevo(s) enviado(s))` : ''}.`;
-    if (result.modelos && result.modelos.trained) html += `<br>Modelos actualizados: ${esc(result.modelos.models.join(', '))}.`;
-    if (result.modelos && result.modelos.error) html += `<br>${esc(result.modelos.error)}`;
-    if (excluded.length) html += `<ul>${excluded.map((e) => `<li>${esc(e.nic)}: ${esc(e.detail || e.status)}</li>`).join('')}</ul>`;
-    banner.innerHTML = html + '</div>';
+    const warn = risky.length || fugas.posibles_fugas;
+    let html = `<div class="notice ${warn ? 'notice--warn' : 'notice--ok'} ml-banner ${warn ? 'warn' : 'ok'}" role="status">
+      <i class="ti ${warn ? 'ti-alert-triangle' : 'ti-check'}" aria-hidden="true"></i><div>
+      <p class="notice-title">Predicción terminada en ${result.duracion_s} s</p>
+      <p>${tanques.length} tanques analizados, ${risky.length} con riesgo de desabasto y ${fugas.posibles_fugas || 0} posible(s) fuga(s)${fugas.alertas_creadas ? ` (${fugas.alertas_creadas} aviso(s) nuevo(s) enviado(s))` : ''}.</p>`;
+    if (result.modelos && result.modelos.trained) html += `<p>Modelos actualizados: ${esc(result.modelos.models.join(', '))}.</p>`;
+    if (result.modelos && result.modelos.error) html += `<p>${esc(result.modelos.error)}</p>`;
+    if (excluded.length) html += `<ul class="ml-excluded">${excluded.map((e) => `<li>${esc(e.nic)}: ${esc(e.detail || e.status)}</li>`).join('')}</ul>`;
+    banner.innerHTML = html + '</div></div>';
     if (window.SmartDropLeakAlerts) window.SmartDropLeakAlerts.refresh();
   }
 
   button.addEventListener('click', async () => {
     button.disabled = true;
+    button.classList.add('is-loading');
     banner.innerHTML = '';
     try {
       const result = await window.SmartDropPredictions.run({ runUrl: RUN_URL, jobUrl: JOB_URL });
@@ -138,9 +142,10 @@
       await loadZones();
       await loadStatus();
     } catch (error) {
-      banner.innerHTML = `<div class="ml-banner err">${esc(error.message)}</div>`;
+      banner.innerHTML = `<div class="notice notice--bad ml-banner err" role="alert"><i class="ti ti-alert-triangle" aria-hidden="true"></i><div><p>${esc(error.message)}</p></div></div>`;
     } finally {
       button.disabled = false;
+      button.classList.remove('is-loading');
     }
   });
 

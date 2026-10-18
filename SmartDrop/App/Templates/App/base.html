@@ -6,10 +6,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>SmartDrop – {% block title %}Dashboard{% endblock %}</title>
   <link rel="stylesheet" href="{% static 'App/fonts/tabler/tabler-icons-subset.css' %}?v=2.47"/>
-   <link rel="preconnect" href="https://fonts.googleapis.com"/>
-   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet"/>
-  <link rel="stylesheet" href="{% static 'App/css/dashboard.css' %}?v=20261006-perfil3"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;500;600;700&family=Nunito:wght@700;800&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="{% static 'App/css/smartdrop.css' %}?v=20261011-zona1"/>
   {% block extra_css %}{% endblock %}
   <script>
     (function () {
@@ -33,124 +33,226 @@
     }
   </script>
 
-  <!-- ── Topbar ── -->
-  <header class="topbar">
-    <div class="topbar-right">
-      {% if user.is_authenticated %}
-        <form class="global-search" method="get" action="{% url 'busqueda_global' %}">
-          <label class="sr-only" for="search-input">Buscar en SmartDrop</label>
-          <i class="ti ti-search" aria-hidden="true"></i>
-          <input id="search-input" name="q" type="search" value="{{ request.GET.q|default:'' }}" placeholder="Buscar..." autocomplete="off"/>
-          <button id="search-clear" class="search-clear" type="button" title="Limpiar búsqueda" aria-label="Limpiar búsqueda" hidden><i class="ti ti-x"></i></button>
-          <button type="submit" title="Buscar" aria-label="Buscar"><i class="ti ti-arrow-right"></i></button>
-        </form>
-      {% endif %}
-      {% if user.is_authenticated and user.rol_id == 2 %}
-        <a href="{% url 'ml_engine:leaks' %}" class="leak-bell" id="leak-bell" title="Alertas de fuga" aria-label="Alertas de fuga">
-          <i class="ti ti-bell" style="font-size:20px;"></i>
-          <span class="leak-bell-badge" id="leak-bell-badge" hidden>0</span>
+  <!-- Íconos que no están en la fuente Tabler (trazo 2, puntas redondeadas, 24×24) -->
+  <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true" focusable="false">
+    <symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/></symbol>
+    <symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6l-6 6"/></symbol>
+    <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6l6 -6"/></symbol>
+    <symbol id="i-logout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 8v-2a2 2 0 0 0 -2 -2h-7a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h7a2 2 0 0 0 2 -2v-2"/><path d="M9 12h12l-3 -3"/><path d="M18 15l3 -3"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065z"/><path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"/></symbol>
+    <symbol id="i-circle-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"/><path d="M9 12l2 2l4 -4"/></symbol>
+    <symbol id="i-circle-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"/><path d="M10 10l4 4m0 -4l-4 4"/></symbol>
+    <symbol id="i-wifi-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 18h.01"/><path d="M9.172 15.172a4 4 0 0 1 5.656 0"/><path d="M6.343 12.343a7.963 7.963 0 0 1 3.864 -2.14m4.163 .155a7.965 7.965 0 0 1 3.287 2"/><path d="M3.515 9.515a12 12 0 0 1 3.544 -2.455m3.101 -.92a12 12 0 0 1 10.325 3.374"/><path d="M3 3l18 18"/></symbol>
+    <symbol id="i-power" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 6a7.75 7.75 0 1 0 10 0"/><path d="M12 4v8"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12z"/><path d="M16 3v4"/><path d="M8 3v4"/><path d="M4 11h16"/><path d="M11 15h1"/><path d="M12 15v3"/></symbol>
+    <symbol id="i-external" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6h-6a2 2 0 0 0 -2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-6"/><path d="M11 13l9 -9"/><path d="M15 4h5v5"/></symbol>
+  </svg>
+
+  <a class="skip-link" href="#contenido">Saltar al contenido</a>
+
+  <div class="app">
+
+    <!-- ── Barra lateral (cajón en pantallas pequeñas) ── -->
+    <div class="sidebar" id="sidebar">
+      <div class="sidebar-head">
+        <a href="{% url 'dashboard' %}" class="brand">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <span>SmartDrop</span>
         </a>
-      {% else %}
-        <i class="ti ti-bell" style="font-size:20px;"></i>
-      {% endif %}
-      {% if user.is_authenticated %}
-        {% if user.rol_id != 2 %}
-          <a href="{% url 'usuario' %}" class="avatar" title="Mi perfil">{{ user.get_short_name|default:'U' }}</a>
+        <button type="button" class="btn-icon sidebar-close" id="nav-close" aria-label="Cerrar menú">
+          <i class="ti ti-x" aria-hidden="true"></i>
+        </button>
+      </div>
+
+      <nav class="nav" aria-label="Menú principal">
+        {% if user.is_authenticated and user.rol_id == 2 %}
+          <div class="nav-group">
+            <p class="nav-group-title" id="nav-g-operacion">Operación</p>
+            <ul class="nav-list" aria-labelledby="nav-g-operacion">
+              <li><a href="{% url 'admin_panel' %}" class="nav-link {% block nav_admin %}{% endblock %}"><i class="ti ti-layout-grid" aria-hidden="true"></i><span>Panel general</span></a></li>
+              <li><a href="{% url 'valvulas' %}" class="nav-link {% block nav_valvulas %}{% endblock %}"><i class="ti ti-toggle-left" aria-hidden="true"></i><span>Electroválvulas</span></a></li>
+            </ul>
+          </div>
+          <div class="nav-group">
+            <p class="nav-group-title" id="nav-g-prediccion">Predicción</p>
+            <ul class="nav-list" aria-labelledby="nav-g-prediccion">
+              <li><a href="{% url 'ml_engine:dashboard' %}" class="nav-link {% block nav_ml %}{% endblock %}"><i class="ti ti-chart-line" aria-hidden="true"></i><span>Suministro</span></a></li>
+              <li><a href="{% url 'ml_engine:leaks' %}" class="nav-link {% block nav_ml_fugas %}{% endblock %}"><i class="ti ti-droplet-half-2" aria-hidden="true"></i><span>Fugas</span></a></li>
+            </ul>
+          </div>
+          <div class="nav-group">
+            <p class="nav-group-title" id="nav-g-comunidad">Comunidad</p>
+            <ul class="nav-list" aria-labelledby="nav-g-comunidad">
+              <li><a href="{% url 'admin_reportes' %}" class="nav-link {% block nav_admin_reportes %}{% endblock %}"><i class="ti ti-list-details" aria-hidden="true"></i><span>Problemas reportados</span></a></li>
+              <li><a href="{% url 'alertas_historial' %}" class="nav-link {% block nav_admin_alertas %}{% endblock %}"><i class="ti ti-history" aria-hidden="true"></i><span>Historial de alertas</span></a></li>
+            </ul>
+          </div>
+        {% else %}
+          <div class="nav-group">
+            <p class="nav-group-title" id="nav-g-agua">Mi agua</p>
+            <ul class="nav-list" aria-labelledby="nav-g-agua">
+              <li><a href="{% url 'dashboard' %}" class="nav-link {% block nav_dashboard %}{% endblock %}"><i class="ti ti-home" aria-hidden="true"></i><span>Inicio</span></a></li>
+              <li><a href="{% url 'estado_sistema' %}" class="nav-link {% block nav_estado_sistema %}{% endblock %}"><i class="ti ti-activity-heartbeat" aria-hidden="true"></i><span>Estado del sistema</span></a></li>
+            </ul>
+          </div>
+          <div class="nav-group">
+            <p class="nav-group-title" id="nav-g-agua">Mi agua</p>
+            <ul class="nav-list" aria-labelledby="nav-g-agua">
+              <li><a href="{% url 'presion' %}" class="nav-link {% block nav_presion %}{% endblock %}"><i class="ti ti-gauge" aria-hidden="true"></i><span>Presión</span></a></li>
+              <li><a href="{% url 'calidad' %}" class="nav-link {% block nav_calidad %}{% endblock %}"><i class="ti ti-flask" aria-hidden="true"></i><span>Calidad</span></a></li>
+              <li><a href="{% url 'tanque' %}" class="nav-link {% block nav_tanque %}{% endblock %}"><i class="ti ti-database" aria-hidden="true"></i><span>Tanque</span></a></li>
+              <li><a href="{% url 'consumo' %}" class="nav-link {% block nav_consumo %}{% endblock %}"><i class="ti ti-chart-bar" aria-hidden="true"></i><span>Consumo</span></a></li>
+            </ul>
+          </div>
+          <div class="nav-group">
+            <p class="nav-group-title" id="nav-g-ahorro">Ahorro</p>
+            <ul class="nav-list" aria-labelledby="nav-g-ahorro">
+              <li><a href="{% url 'retroalimentacion' %}" class="nav-link {% block nav_retro %}{% endblock %}"><i class="ti ti-leaf" aria-hidden="true"></i><span>Retroalimentación</span></a></li>
+              <li><a href="{% url 'recomendaciones' %}" class="nav-link {% block nav_reco %}{% endblock %}"><i class="ti ti-bulb" aria-hidden="true"></i><span>Consejos de ahorro</span></a></li>
+            </ul>
+          </div>
+          <div class="nav-group">
+            <p class="nav-group-title" id="nav-g-comunidad">Comunidad</p>
+            <ul class="nav-list" aria-labelledby="nav-g-comunidad">
+              <li><a href="{% url 'reportes_panel' %}" class="nav-link {% block nav_reportar %}{% endblock %}"><i class="ti ti-alert-triangle" aria-hidden="true"></i><span>Reportar un problema</span></a></li>
+              <li><a href="{% url 'reportes_comunidad' %}" class="nav-link {% block nav_comunidad %}{% endblock %}"><i class="ti ti-users" aria-hidden="true"></i><span>Reportes de la comunidad</span></a></li>
+              <li><a href="{% url 'alertas_historial' %}" class="nav-link {% block nav_alertas %}{% endblock %}"><i class="ti ti-bell" aria-hidden="true"></i><span>Alertas</span></a></li>
+            </ul>
+          </div>
+          <div class="nav-group">
+            <p class="nav-group-title" id="nav-g-cuenta">Cuenta</p>
+            <ul class="nav-list" aria-labelledby="nav-g-cuenta">
+              <li><a href="{% url 'usuario' %}" class="nav-link {% block nav_usuario %}{% endblock %}"><i class="ti ti-user" aria-hidden="true"></i><span>Mi perfil</span></a></li>
+            </ul>
+          </div>
         {% endif %}
-        <a href="{% url 'logout' %}" class="topbar-link">Cerrar sesión</a>
-      {% else %}
-        <a href="{% url 'login' %}" class="topbar-link">Iniciar sesión</a>
-        <a href="{% url 'register' %}" class="topbar-link">Registro</a>
+      </nav>
+
+      {% if user.is_authenticated %}
+        <div class="sidebar-foot sidebar-foot--mobile">
+          <a href="{% url 'logout' %}" class="nav-link"><svg class="icon" aria-hidden="true"><use href="#i-logout"></use></svg><span>Cerrar sesión</span></a>
+        </div>
       {% endif %}
     </div>
-  </header>
+    <div class="scrim" id="nav-scrim"></div>
 
-  <div class="main">
+    <div class="app-main">
 
-    <!-- ── Sidebar ── -->
-    <nav class="sidebar">
-      <a href="{% url 'dashboard' %}" class="sidebar-brand">
-        <img src="{% static 'App/img/LogoSmartDrop.png' %}" alt="SmartDrop">
-      </a>
-      {% if user.is_authenticated and user.rol_id == 2 %}
-        <!-- Admin: mostrar solo acceso al panel administrativo -->
-        <a href="{% url 'admin_panel' %}" class="nav-item {% block nav_admin %}{% endblock %}">
-          <i class="ti ti-shield-check"></i> Panel admin
-        </a>
-        <a href="{% url 'valvulas' %}" class="nav-item {% block nav_valvulas %}{% endblock %}">
-          <i class="ti ti-toggle-left"></i> Electroválvulas
-        </a>
-        <a href="{% url 'ml_engine:dashboard' %}" class="nav-item {% block nav_ml %}{% endblock %}">
-          <i class="ti ti-brain"></i> Predicción Suministro
-        </a>
-        <a href="{% url 'ml_engine:leaks' %}" class="nav-item {% block nav_ml_fugas %}{% endblock %}">
-          <i class="ti ti-alert-triangle"></i> Predicción de fugas
-        </a>
-        <a href="{% url 'admin_reportes' %}" class="nav-item {% block nav_admin_reportes %}{% endblock %}">
-          <i class="ti ti-alert-triangle"></i> Problemas reportados
-        </a>
-        <a href="{% url 'alertas_historial' %}" class="nav-item {% block nav_admin_alertas %}{% endblock %}">
-          <i class="ti ti-bell"></i> Historial de alertas
-        </a>
-      {% else %}
-        <!-- Usuario normal: menú completo -->
-        <span class="nav-section-label">Principal</span>
-        <a href="{% url 'dashboard' %}"          class="nav-item {% block nav_dashboard %}{% endblock %}">
-          <i class="ti ti-home"></i> Inicio
-        </a>
-        <span class="nav-section-label">Monitoreo</span>
-        <a href="{% url 'estado_sistema' %}"      class="nav-item {% block nav_estado_sistema %}{% endblock %}">
-          <i class="ti ti-activity-heartbeat"></i> Estado del sistema
-        </a>
-        <a href="{% url 'presion' %}"            class="nav-item {% block nav_presion %}{% endblock %}">
-          <i class="ti ti-gauge"></i> Presión
-        </a>
-        <a href="{% url 'calidad' %}"            class="nav-item {% block nav_calidad %}{% endblock %}">
-          <i class="ti ti-droplet"></i> Calidad
-        </a>
-        <a href="{% url 'tanque' %}"             class="nav-item {% block nav_tanque %}{% endblock %}">
-          <i class="ti ti-building-warehouse"></i> Tanque
-        </a>
-        <span class="nav-section-label">Análisis</span>
-        <a href="{% url 'consumo' %}"            class="nav-item {% block nav_consumo %}{% endblock %}">
-          <i class="ti ti-chart-bar"></i> Consumo
-        </a>
-        <a href="{% url 'retroalimentacion' %}"  class="nav-item {% block nav_retro %}{% endblock %}">
-          <i class="ti ti-refresh"></i> Retroalimentación
-        </a>
-        <span class="nav-section-label">Consejos</span>
-        <a href="{% url 'recomendaciones' %}"    class="nav-item {% block nav_reco %}{% endblock %}">
-          <i class="ti ti-bulb"></i> Recomendaciones
-        </a>
-        <span class="nav-section-label">Comunidad</span>
-        <a href="{% url 'reportes_panel' %}"       class="nav-item {% block nav_reportar %}{% endblock %}">
-          <i class="ti ti-alert-triangle"></i> Reportar problemas
-        </a>
-        <a href="{% url 'reportes_comunidad' %}"   class="nav-item {% block nav_comunidad %}{% endblock %}">
-          <i class="ti ti-home"></i>Comunidad
-        </a>
-        <a href="{% url 'alertas_historial' %}"    class="nav-item {% block nav_alertas %}{% endblock %}">
-          <i class="ti ti-bell"></i> Alertas
-        </a>
-        <span class="nav-section-label">Cuenta</span>
-        <div class="nav-spacer"></div>
-        <a href="{% url 'usuario' %}"            class="nav-item {% block nav_usuario %}{% endblock %}">
-          <i class="ti ti-user"></i> Mi perfil
-        </a>
-      {% endif %}
-    </nav>
+      <!-- ── Barra superior ── -->
+      <header class="topbar">
+        <button type="button" class="btn-icon topbar-menu" id="nav-toggle" aria-controls="sidebar" aria-expanded="false" aria-label="Abrir menú">
+          <svg class="icon" aria-hidden="true"><use href="#i-menu"></use></svg>
+        </button>
 
-    <!-- ── Contenido ── -->
-    <main class="content">
-      {% block content %}{% endblock %}
-    </main>
+        {% if user.is_authenticated %}
+          <form class="global-search" method="get" action="{% url 'busqueda_global' %}" role="search">
+            <label class="sr-only" for="search-input">Buscar en SmartDrop</label>
+            <input id="search-input" class="global-search-input" name="q" type="search" value="{{ request.GET.q|default:'' }}" placeholder="Buscar en SmartDrop…" autocomplete="off"/>
+            <button id="search-clear" class="global-search-btn search-clear" type="button" title="Limpiar búsqueda" aria-label="Limpiar búsqueda" hidden><i class="ti ti-x" aria-hidden="true"></i></button>
+            <button class="global-search-btn" type="submit" title="Buscar" aria-label="Buscar"><i class="ti ti-search" aria-hidden="true"></i></button>
+          </form>
+        {% endif %}
 
+        <div class="topbar-actions">
+          {% if user.is_authenticated and user.rol_id == 2 %}
+            <a href="{% url 'ml_engine:leaks' %}" class="btn-icon leak-bell" id="leak-bell" title="Alertas de fuga" aria-label="Alertas de fuga">
+              <i class="ti ti-bell" aria-hidden="true"></i>
+              <span class="leak-bell-badge" id="leak-bell-badge" hidden>0</span>
+            </a>
+          {% elif user.is_authenticated %}
+            <a href="{% url 'alertas_historial' %}" class="btn-icon" title="Alertas" aria-label="Alertas">
+              <i class="ti ti-bell" aria-hidden="true"></i>
+            </a>
+          {% endif %}
+          {% if user.is_authenticated %}
+            {% if user.rol_id != 2 %}
+              <a href="{% url 'usuario' %}" class="account-link" title="Mi perfil" aria-label="Mi perfil">
+                <span class="avatar" aria-hidden="true">{{ user.get_short_name|default:'U'|slice:':1'|upper }}{{ user.apellido|slice:':1'|upper }}</span>
+                <span class="account-name" aria-hidden="true">{{ user.get_short_name|default:'' }}</span>
+              </a>
+            {% endif %}
+            <a href="{% url 'logout' %}" class="topbar-link topbar-link--logout">
+              <svg class="icon" aria-hidden="true"><use href="#i-logout"></use></svg><span class="topbar-link-label">Cerrar sesión</span>
+            </a>
+          {% else %}
+            <a href="{% url 'login' %}" class="topbar-link">Iniciar sesión</a>
+            <a href="{% url 'register' %}" class="topbar-link topbar-link--primary">Crear cuenta</a>
+          {% endif %}
+        </div>
+      </header>
+
+      <!-- ── Contenido ── -->
+      <main class="content" id="contenido" tabindex="-1">
+        {% block content %}{% endblock %}
+      </main>
+
+      <footer class="site-footer">
+        <p>&copy; 2026 SmartDrop. Todos los derechos reservados.</p>
+      </footer>
+
+    </div>
   </div>
 
-  <footer class="site-footer">
-    <img src="{% static 'App/img/LogoSmartDrop.png' %}" alt="" class="site-footer-mark">
-    <span>&copy; 2026 SmartDrop. Todos los derechos reservados.</span>
-  </footer>
+  <script>
+    // Enlace activo: los hijos marcan "active" con los bloques nav_*; aquí se anuncia a lectores de pantalla.
+    document.querySelectorAll('.nav-link.active').forEach(function (link) {
+      link.setAttribute('aria-current', 'page');
+    });
+  </script>
+
+  <script>
+    // Cajón de navegación (< 1024px): abre/cierra, Esc, velo, foco y bloqueo del desplazamiento.
+    (function () {
+      const sidebar = document.getElementById('sidebar');
+      const toggle = document.getElementById('nav-toggle');
+      const closeButton = document.getElementById('nav-close');
+      const scrim = document.getElementById('nav-scrim');
+      const appMain = document.querySelector('.app-main');
+      const skipLink = document.querySelector('.skip-link');
+      const drawerMode = window.matchMedia('(max-width: 1023.98px)');
+      if (!sidebar || !toggle) return;
+
+      function isOpen() {
+        return sidebar.classList.contains('is-open');
+      }
+
+      function setOpen(open, returnFocus) {
+        sidebar.classList.toggle('is-open', open);
+        if (scrim) scrim.classList.toggle('is-open', open);
+        document.documentElement.classList.toggle('is-drawer-open', open);
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        if (appMain) appMain.inert = open;
+        if (skipLink) skipLink.inert = open;
+        if (open) {
+          const first = sidebar.querySelector('.nav-link') || closeButton;
+          if (first) first.focus();
+        } else if (returnFocus) {
+          toggle.focus();
+        }
+      }
+
+      toggle.addEventListener('click', function () { setOpen(!isOpen(), true); });
+      if (closeButton) closeButton.addEventListener('click', function () { setOpen(false, true); });
+      if (scrim) scrim.addEventListener('click', function () { setOpen(false, true); });
+
+      document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && isOpen()) {
+          event.preventDefault();
+          setOpen(false, true);
+        }
+      });
+
+      sidebar.addEventListener('click', function (event) {
+        if (isOpen() && event.target.closest('.nav-link')) setOpen(false, false);
+      });
+
+      function onModeChange(event) {
+        if (!event.matches && isOpen()) setOpen(false, false);
+      }
+      if (drawerMode.addEventListener) drawerMode.addEventListener('change', onModeChange);
+      else if (drawerMode.addListener) drawerMode.addListener(onModeChange);
+    }());
+  </script>
 
   <script>
     (function () {
@@ -252,6 +354,7 @@
   {% if user.is_authenticated and user.rol_id == 2 %}
     <script src="{% static 'App/js/admin_leak_alerts.js' %}" data-alerts-url="{% url 'ml_engine:leak_alerts' %}" data-leaks-url="{% url 'ml_engine:leaks' %}"></script>
   {% endif %}
+  <script src="{% static 'App/js/sd_motion.js' %}?v=20261011-zona2"></script>
   {% block extra_js %}{% endblock %}
 </body>
 </html>

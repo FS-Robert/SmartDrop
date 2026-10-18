@@ -1,64 +1,47 @@
 {% extends 'App/base.html' %}
+{% load static sd_ui %}
 {% block title %}Estado del sistema{% endblock %}
 {% block nav_estado_sistema %}active{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/sensores.css' %}?v=20261011-zona1">{% endblock %}
 
 {% block content %}
-<div class="system-dashboard">
-<h1 class="page-title">ESTADO DEL SISTEMA</h1>
-<p class="page-subtitle">Consulta en tiempo real la disponibilidad del suministro</p>
-
-<div class="system-dashboard-top">
-<section class="system-status-panel" aria-live="polite">
-  <div class="card-label">Disponibilidad de suministro</div>
-  <div class="system-status-icon {% if valvula.clase == 'open' %}is-open{% else %}is-closed{% endif %}" id="system-valve-icon">
-    <i class="ti ti-toggle-left"></i>
-  </div>
-
-  <div class="system-status-value" id="system-valve-state">
-    Válvula: {{ valvula.estado }}</div>
-
-    <span class="badge {% if valvula.clase == 'open' %}badge-normal{% else %}badge-closed{% endif %}" id="system-valve-badge">
-      ● {{ valvula.estado|title }}
-    </span>
-  
-  <div class="system-status-copy">
-    <p class="system-status-updated">
-      Última actualización: <span id="system-valve-updated">{{ valvula.ultima_actualizacion }}</span></p>
-  </div>
-</section>
-
-<section class="system-info-card" aria-label="Permisos de la válvula">
-  <div class="system-info-top">
-    <div class="card-label">
-      <span>
-        <i class="ti ti-info-circle"></i>
-      </span>
-      <div>
-        <span>
-          <div>Información</div>
-        </span>
-      </div>
-    </div>
-  </div>
-  <p>Solo administradores pueden controlar la válvula</p>
-  
-  <div class="system-info-description">
-    Este panel muestra el estado en tiempo real del suministro de agua y la válvula de control. 
-    Los datos se actualizan automáticamente cuando los sensores envían nuevas lecturas. Si no ves información, 
-    verifica la conexión de los dispositivos.
-  </div>
-</section>
-</div>
-
-<section class="system-notification-card" aria-label="Notificaciones de suministro">
-  <i class="ti ti-bell"></i>
+<header class="page-head">
   <div>
-    <strong>Notificaciones de suministro</strong>
-    <p id="notification-status">Activa las notificaciones para saber cuándo se abre la válvula.</p>
+    <h1 class="page-title">Estado del sistema</h1>
+    <p class="page-lede">Si hay suministro de agua hacia tu zona en este momento.</p>
   </div>
-  <button type="button" id="enable-notifications" class="notification-button">Activar</button>
-</section>
+</header>
+
+<div class="sensor-layout">
+  <section class="panel sensor-state" aria-labelledby="suministro-titulo" aria-live="polite">
+    <div class="sensor-state-head">
+      <span class="status status--lg {% if valvula.clase == 'open' %}status--ok{% elif valvula.clase == 'closed' %}status--warn{% else %}status--none{% endif %}" id="system-valve-badge"><span class="status-dot" aria-hidden="true"></span>{{ valvula.estado|sentence }}</span>
+    </div>
+    <div class="system-supply">
+      <span class="icon-chip icon-chip--lg {% if valvula.clase == 'open' %}icon-chip--ok{% elif valvula.clase == 'closed' %}icon-chip--warn{% else %}icon-chip--none{% endif %}" id="system-valve-icon">
+        <i class="ti {% if valvula.clase == 'open' %}ti-lock-open{% else %}ti-lock{% endif %}" aria-hidden="true"></i>
+      </span>
+      <h2 class="sensor-message" id="suministro-titulo"><span id="system-valve-state">{% if valvula.clase == 'open' %}Hay suministro: la válvula está abierta.{% elif valvula.clase == 'closed' %}Sin suministro por ahora: la válvula está cerrada.{% else %}No sabemos si hay suministro en este momento.{% endif %}</span></h2>
+    </div>
+    <p class="updated">Última actualización: <span id="system-valve-updated">{{ valvula.ultima_actualizacion }}</span></p>
+  </section>
+
+  <div class="sensor-aside">
+    <section class="panel" aria-labelledby="notif-titulo">
+      <h2 class="panel-title" id="notif-titulo">Aviso cuando vuelva el agua</h2>
+      <p id="notification-status" class="system-notif-text">Activa las notificaciones para saber cuándo se abre la válvula.</p>
+      <button type="button" id="enable-notifications" class="btn btn--primary notification-button"><i class="ti ti-bell" aria-hidden="true"></i><span>Activar</span></button>
+    </section>
+  </div>
 </div>
+
+<section class="panel panel--tint sensor-help" aria-labelledby="info-titulo">
+  <h2 class="panel-title" id="info-titulo">Cómo funciona</h2>
+  <div class="prose">
+    <p>Este panel muestra en tiempo real si la válvula que lleva agua a tu zona está abierta. Se actualiza solo cuando los sensores envían nuevas lecturas.</p>
+    <p class="muted">Solo los administradores del sistema pueden abrir o cerrar la válvula. Si no ves información, es posible que los dispositivos estén sin conexión.</p>
+  </div>
+</section>
 {% endblock %}
 
 {% block extra_js %}
@@ -69,9 +52,11 @@
   const systemValveUpdated = document.getElementById('system-valve-updated');
   const systemValveIcon = document.getElementById('system-valve-icon');
   const notificationButton = document.getElementById('enable-notifications');
+  const notificationLabel = notificationButton.querySelector('span');
   const notificationStatus = document.getElementById('notification-status');
   const stateStorageKey = 'smartdrop-valvula-estado';
-  let previousValveState = window.localStorage.getItem(stateStorageKey);
+  let previousValveState = null;
+  try { previousValveState = window.localStorage.getItem(stateStorageKey); } catch (e) {}
 
   function updateNotificationControls() {
     if (!('Notification' in window)) {
@@ -79,11 +64,11 @@
       notificationStatus.textContent = 'Este navegador no admite notificaciones.';
     } else if (Notification.permission === 'granted') {
       notificationButton.disabled = true;
-      notificationButton.textContent = 'Activadas';
+      notificationLabel.textContent = 'Activadas';
       notificationStatus.textContent = 'Recibirás un aviso cuando se abra la válvula.';
     } else if (Notification.permission === 'denied') {
       notificationButton.disabled = true;
-      notificationButton.textContent = 'Bloqueadas';
+      notificationLabel.textContent = 'Bloqueadas';
       notificationStatus.textContent = 'Permite las notificaciones desde la configuración del navegador.';
     }
   }
@@ -108,6 +93,11 @@
     }
   }
 
+  function sentence(text) {
+    const value = String(text || '').trim();
+    return value === value.toUpperCase() ? value.charAt(0) + value.slice(1).toLowerCase() : value;
+  }
+
   async function refreshSystemValve() {
     try {
       const response = await fetch(systemValveUrl, { headers: { 'Accept': 'application/json' } });
@@ -116,13 +106,19 @@
       if (!result.ok) return;
       const valve = result.valvula;
       const isOpen = valve.clase === 'open';
+      const isClosed = valve.clase === 'closed';
+      const mod = isOpen ? 'ok' : (isClosed ? 'warn' : 'none');
       if (previousValveState === 'closed' && valve.clase === 'open') notifyValveOpened();
       previousValveState = valve.clase;
-      window.localStorage.setItem(stateStorageKey, valve.clase);
-      systemValveState.textContent = `Válvula: ${valve.estado}`;
-      systemValveBadge.textContent = `● ${isOpen ? 'Abierta' : 'Cerrada'}`;
-      systemValveBadge.className = `badge ${isOpen ? 'badge-normal' : 'badge-closed'}`;
-      systemValveIcon.className = `system-status-icon ${isOpen ? 'is-open' : 'is-closed'}`;
+      try { window.localStorage.setItem(stateStorageKey, valve.clase); } catch (e) {}
+      systemValveState.textContent = isOpen
+        ? 'Hay suministro: la válvula está abierta.'
+        : (isClosed ? 'Sin suministro por ahora: la válvula está cerrada.' : 'No sabemos si hay suministro en este momento.');
+      systemValveBadge.className = `status status--lg status--${mod}`;
+      systemValveBadge.innerHTML = '<span class="status-dot" aria-hidden="true"></span>';
+      systemValveBadge.append(sentence(valve.estado));
+      systemValveIcon.className = `icon-chip icon-chip--lg icon-chip--${mod}`;
+      systemValveIcon.innerHTML = `<i class="ti ${isOpen ? 'ti-lock-open' : 'ti-lock'}" aria-hidden="true"></i>`;
       systemValveUpdated.textContent = valve.ultima_actualizacion;
     } catch (error) {
       // Conserva el último estado válido si Supabase no responde temporalmente.

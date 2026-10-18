@@ -1,0 +1,88 @@
+{% comment %}
+  Tanque de la zona: ilustración firma de SmartDrop. Un tanque abastece a todas las viviendas de la
+  zona; el agua del dibujo sube hasta el nivel real y la tubería muestra el agua yendo a los vecinos.
+  Uso:
+    {% include 'App/_zona_ilustracion.html' with nivel=tanque.porcentaje decorativo=True %}
+  Parámetros:
+    nivel       0–100 (número o texto numérico). Fuera de rango se recorta; vacío o inválido = 0.
+    decorativo  True  → aria-hidden (el texto de al lado ya dice el nivel).
+                False → role="img" con el nombre "Tanque de tu zona al N %".
+    uid         (opcional) prefijo de ids si hay más de una en la misma página. Por defecto "zona".
+    clase       (opcional) clases extra para el <svg>.
+  Colores: clases .zona-* de smartdrop.css (tokens, funcionan en modo oscuro).
+{% endcomment %}{% widthratio nivel|default:0 100 100 as zona_pct %}{% if zona_pct|add:0 > 100 %}{% widthratio 100 1 1 as zona_pct %}{% elif zona_pct|add:0 < 0 or not zona_pct %}{% widthratio 0 1 1 as zona_pct %}{% endif %}{% widthratio zona_pct|add:-100 -100 118 as zona_vacio %}{% with u=uid|default:'zona' %}
+<svg class="zona{% if clase %} {{ clase }}{% endif %}" viewBox="0 0 360 260" xmlns="http://www.w3.org/2000/svg" {% if decorativo %}aria-hidden="true" focusable="false"{% else %}role="img" aria-labelledby="{{ u }}-titulo"{% endif %}>
+  {% if not decorativo %}<title id="{{ u }}-titulo">Tanque de tu zona al {{ zona_pct }} %</title>{% endif %}
+  <defs>
+    <clipPath id="{{ u }}-cuerpo"><rect x="0" y="0" width="130" height="118" rx="16"/></clipPath>
+  </defs>
+
+  <!-- Luz del día -->
+  <circle class="zona-sol zona-sol--halo" cx="302" cy="56" r="38"/>
+  <circle class="zona-sol" cx="302" cy="56" r="26"/>
+
+  <!-- Suelo -->
+  <ellipse class="zona-sombra" cx="150" cy="235" rx="104" ry="6"/>
+  <path class="zona-suelo" d="M20 233H340"/>
+
+  <!-- Patas y arriostres -->
+  <path class="zona-arriostre" d="M100 172L198 226M198 172L100 226"/>
+  <rect class="zona-pata" x="94" y="164" width="9" height="69" rx="2.5"/>
+  <rect class="zona-pata" x="195" y="164" width="9" height="69" rx="2.5"/>
+  <rect class="zona-trazo" x="94" y="164" width="9" height="69" rx="2.5"/>
+  <rect class="zona-trazo" x="195" y="164" width="9" height="69" rx="2.5"/>
+
+  <!-- Tubería de la zona: sale del tanque, pasa por la válvula y reparte a los vecinos -->
+  <path class="zona-tubo" d="M214 150H262V206H344"/>
+  <path class="zona-tubo" d="M288 206V190M314 206V190M340 206V190"/>
+  <path class="zona-flujo" d="M214 150H262V206H344"/>
+  <path class="zona-flujo zona-flujo--rama" d="M288 206V190M314 206V190M340 206V190"/>
+
+  <!-- Válvula -->
+  <rect class="zona-valvula-cuerpo" x="232" y="141" width="16" height="18" rx="4"/>
+  <rect class="zona-trazo" x="232" y="141" width="16" height="18" rx="4"/>
+  <path class="zona-trazo" d="M240 141V132M232 132H248"/>
+
+  <!-- Viviendas de la zona (a las que llega el agua) -->
+  <g class="zona-vecino">
+    <rect class="zona-vecino-caja" x="277" y="166" width="22" height="24" rx="7"/>
+    <rect class="zona-trazo" x="277" y="166" width="22" height="24" rx="7"/>
+    <path class="zona-gota" d="M288 171.5c-3.2 3.7-4.6 5.6-4.6 7.6a4.6 4.6 0 0 0 9.2 0c0-2-1.4-3.9-4.6-7.6z"/>
+  </g>
+  <g class="zona-vecino">
+    <rect class="zona-vecino-caja" x="303" y="166" width="22" height="24" rx="7"/>
+    <rect class="zona-trazo" x="303" y="166" width="22" height="24" rx="7"/>
+    <path class="zona-gota" d="M314 171.5c-3.2 3.7-4.6 5.6-4.6 7.6a4.6 4.6 0 0 0 9.2 0c0-2-1.4-3.9-4.6-7.6z"/>
+  </g>
+  <g class="zona-vecino">
+    <rect class="zona-vecino-caja" x="329" y="166" width="22" height="24" rx="7"/>
+    <rect class="zona-trazo" x="329" y="166" width="22" height="24" rx="7"/>
+    <path class="zona-gota" d="M340 171.5c-3.2 3.7-4.6 5.6-4.6 7.6a4.6 4.6 0 0 0 9.2 0c0-2-1.4-3.9-4.6-7.6z"/>
+  </g>
+
+  <!-- Tanque: el agua sube hasta el nivel real -->
+  <g transform="translate(84 48)">
+    <rect class="zona-tanque-fondo" x="0" y="0" width="130" height="118" rx="16"/>
+    <g clip-path="url(#{{ u }}-cuerpo)">
+      <g transform="translate(0 {{ zona_vacio }})">
+        <g class="zona-agua">
+          <g class="zona-ola">
+            <path d="M0 0q8 -4 16 0t16 0t16 0t16 0t16 0t16 0t16 0t16 0t16 0t16 0t16 0t16 0V130H0z"/>
+            <path class="zona-agua-brillo" d="M10 6q8 -3 16 0"/>
+          </g>
+        </g>
+      </g>
+      <rect class="zona-reflejo" x="10" y="14" width="6" height="86" rx="3"/>
+    </g>
+    <path class="zona-aro" d="M0 38H130M0 80H130"/>
+    <rect class="zona-trazo" x="0" y="0" width="130" height="118" rx="16"/>
+    <rect class="zona-tapa" x="49" y="-8" width="32" height="9" rx="3.5"/>
+    <rect class="zona-trazo" x="49" y="-8" width="32" height="9" rx="3.5"/>
+  </g>
+
+  <!-- Nivel: marca a la altura del agua -->
+  <g transform="translate(0 {{ zona_vacio|add:48 }})" aria-hidden="true">
+    <path class="zona-nivel-guia" d="M79 0l-9 -5v10z"/>
+    <text class="zona-nivel" x="64" y="6" text-anchor="end">{{ zona_pct }} %</text>
+  </g>
+</svg>{% endwith %}

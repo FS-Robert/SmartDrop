@@ -279,7 +279,7 @@ class ConsumoViewTests(TestCase):
 		response = self.client.get(reverse('estado_sistema'))
 
 		self.assertEqual(response.status_code, 200)
-		self.assertContains(response, 'Válvula: ABIERTA')
+		self.assertContains(response, 'Hay suministro: la válvula está abierta.')
 		self.assertContains(response, 'Última actualización:')
 
 
@@ -751,12 +751,12 @@ class AlertasExportTests(TestCase):
 	@patch('App.views_reportes.supabase_client.select', return_value=[])
 	def test_exportar_csv_solo_para_admin(self, select):
 		self.client.force_login(self.user)
-		self.assertNotContains(self.client.get(reverse('alertas_historial')), 'Exportar CSV')
+		self.assertNotContains(self.client.get(reverse('alertas_historial')), 'Descargar CSV')
 		response = self.client.get(reverse('alertas_export'))
 		self.assertRedirects(response, reverse('alertas_historial'), fetch_redirect_response=False)
 
 		self.client.force_login(self.admin)
-		self.assertContains(self.client.get(reverse('alertas_historial')), 'Exportar CSV')
+		self.assertContains(self.client.get(reverse('alertas_historial')), 'Descargar CSV')
 		self.assertEqual(self.client.get(reverse('alertas_export'))['Content-Type'], 'text/csv; charset=utf-8')
 
 class FlowConsumptionTests(TestCase):

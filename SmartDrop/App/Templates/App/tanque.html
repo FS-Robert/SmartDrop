@@ -1,105 +1,51 @@
 {% extends 'App/base.html' %}
-{% block title %}Nivel de Tanque{% endblock %}
+{% load static sd_ui %}
+{% block title %}Nivel del tanque{% endblock %}
 {% block nav_tanque %}active{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/sensores.css' %}?v=20261011-zona1">{% endblock %}
 
 {% block content %}
-<div class="tanque-page">
-<h1 class="page-title">NIVEL DEL TANQUE</h1>
-<p class="page-subtitle">Monitorea el nivel actual del agua en el tanque de almacenamiento.</p>
-
-<div class="tanque-layout">
-
-  <!-- Visual del tanque -->
-  <div class="tanque-visual card">
-    <div class="card-label">
-      <span class="card-label-content">
-        <i class="ti ti-droplet capacity-icon"></i>
-        <span class="card-header">Nivel del tanque</span>
-      </span>
-    </div>
-    <p>Representación visual del nivel de agua</p>
-
-    <div class="capacity-text">Capacidad del tanque: <strong>{{ tanque.capacidad }}L</strong></div>
-    
-    <div class="cylinder-wrap">
-      <div class="cylinder">
-        <div class="cylinder-fill" data-tank-height="{{ tanque.porcentaje }}"></div>
-        <div class="cylinder-label">{{ tanque.litros }} litros ({{ tanque.porcentaje }}%)</div>
-        <!-- Escalera decorativa -->
-        <div class="cylinder-ladder">
-          {% for i in "1234567890" %}
-            <div class="rung"></div>
-          {% endfor %}
-        </div>
-      </div>
-    </div>
-
-    <span class="badge {{ tanque.badge_class }} tank-available">
-      {{ tanque.litros }} litros disponibles ({{ tanque.porcentaje }}%)
-    </span>
+<header class="page-head">
+  <div>
+    <h1 class="page-title">Tanque de tu zona</h1>
+    <p class="page-lede">Cuánta agua queda en el tanque que abastece a tu zona y para cuánto tiempo alcanza.</p>
   </div>
+  <div class="page-actions">
+    <p class="updated">Última lectura: {{ tanque.ultima_lectura|fecha_corta }}</p>
+  </div>
+</header>
 
-  <!-- Info lateral -->
-  <div class="tanque-info">
-
-    <div class="info-card">
-      <i class="ti ti-engine info-icon"></i>
-      <div class="info-card-body">
-        <div class="info-card-label">Bomba</div>
-        <div class="info-card-value">
-          <span class="badge {% if estado_bomba == 'Enciende automáticamente' %}badge-normal{% else %}badge-off{% endif %} status-badge">
-            {{ estado_bomba }}
-          </span>
+<div class="sensor-layout tanque-layout">
+  <section class="panel panel--warm sensor-state tanque-visual" aria-labelledby="tanque-estado">
+    <div class="tanque-hero">
+      <div class="tanque-hero-text">
+        <span class="status status--lg status--{{ tanque.estado_amigable|estado_css }} tank-available"><span class="status-dot" aria-hidden="true"></span>{{ tanque.porcentaje|floatformat:0 }} % lleno</span>
+        <h2 class="sensor-message" id="tanque-estado">{{ tanque.nota }}</h2>
+        <p class="sensor-value">
+          <span class="num" data-countup>{{ tanque.litros }}</span>
+          <span class="sensor-unit">litros disponibles de {{ tanque.capacidad }} L</span>
+        </p>
+        <div class="meter meter--lg" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ tanque.porcentaje }}" aria-label="Nivel del tanque">
+          <span class="meter-fill meter-fill--agua" style="width: {{ tanque.porcentaje }}%;"></span>
         </div>
+        <div class="range-ticks range-ticks--flat num"><span>0 L</span><span style="left: 100%;">{{ tanque.capacidad }} L</span></div>
+      </div>
+      <div class="tanque-hero-zona">
+        {% include 'App/_zona_ilustracion.html' with nivel=tanque.porcentaje uid='tanque' clase='tanque-svg' %}
       </div>
     </div>
+  </section>
 
-    <div class="info-card">
-      <i class="ti ti-clock info-icon"></i>
-      <div class="info-card-body">
-        <div class="info-card-label">Autonomía estimada</div>
-        <div class="info-card-value">{{ autonomia }}</div>
-        <div class="info-card-sub">Bajo consumo actual</div>
-      </div>
-    </div>
-
-    <div class="info-card">
-      <i class="ti ti-history info-icon"></i>
-      <div class="info-card-body">
-        <div class="info-card-label">Última lectura</div>
-        <div class="info-card-value">{{ tanque.ultima_lectura }}</div>
-      </div>
-    </div>
-
-    <div class="info-card">
-      <i class="ti ti-chart-line info-icon"></i>
-      <div class="info-card-body">
-        <div class="info-card-label">Capacidad total</div>
-        <div class="info-card-value">{{ tanque.capacidad }}L</div>
-        <div class="tank-bar-wrap tank-bar-small">
-          <div class="tank-bar" data-tank-width="{{ tanque.porcentaje }}"></div>
-        </div>
-        <div class="tank-legend">
-          <span>0L</span>
-          <span>{{ tanque.capacidad }}L</span>
-        </div>
-      </div>
-    </div>
-
+  <div class="sensor-aside">
+    <section class="panel" aria-labelledby="tanque-detalles">
+      <h2 class="panel-title" id="tanque-detalles">Detalles</h2>
+      <dl class="kv kv--inline tanque-facts">
+        <div><dt>Autonomía estimada</dt><dd>{{ autonomia }}</dd></div>
+        <div><dt>Bomba</dt><dd><span class="status {% if estado_bomba == 'Enciende automáticamente' %}status--ok{% else %}status--none{% endif %} status-badge"><span class="status-dot" aria-hidden="true"></span>{{ estado_bomba }}</span></dd></div>
+        <div><dt>Capacidad total</dt><dd class="num">{{ tanque.capacidad }} L</dd></div>
+      </dl>
+      <p class="muted tanque-note">La autonomía se calcula con tu consumo actual.</p>
+    </section>
   </div>
 </div>
-
-<section class="tank-note">
-  <strong>NIVEL DEL TANQUE</strong>
-  <p>{{ tanque.nota }}</p>
-</section>
-</div>
-<script>
-  document.querySelectorAll('[data-tank-height]').forEach((element) => {
-    element.style.height = `${element.dataset.tankHeight}%`;
-  });
-  document.querySelectorAll('[data-tank-width]').forEach((element) => {
-    element.style.width = `${element.dataset.tankWidth}%`;
-  });
-</script>
 {% endblock %}

@@ -1,147 +1,254 @@
 {% extends 'App/base.html' %}
-{% block title %}Mi Perfil{% endblock %}
+{% load static %}
+{% block title %}Mi perfil{% endblock %}
 {% block nav_usuario %}active{% endblock %}
 
+{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/usuario.css' %}?v=20261011-zona1">{% endblock %}
+
 {% block content %}
-<div class="usuario-heading">
-  <h1 class="page-title">MI PERFIL</h1>
-  <p class="page-subtitle">Administra tu información y preferencias de SmartDrop.</p>
-</div>
-
-{% if messages %}
-  {% for message in messages %}
-    <div class="profile-message msg-{{ message.tags }}" role="status">{{ message }}</div>
-  {% endfor %}
-{% endif %}
-
-<div class="usuario-layout">
-  <section class="usuario-profile card">
-    <div class="profile-avatar" aria-label="Iniciales de {{ usuario.nombre }}">
-      <span>{{ usuario.iniciales }}</span>
-    </div>
-    <div class="profile-name">{{ usuario.nombre }}</div>
-    <div class="profile-email">{{ usuario.email }}</div>
-    <div class="profile-details">
-      <div class="profile-detail">
-        <span>Dirección</span>
-        <strong>{% if usuario.direccion %}{{ usuario.direccion }}{% else %}Sin vivienda vinculada{% endif %}</strong>
-      </div>
-      <div class="profile-detail">
-        <span>Teléfono</span>
-        <strong>{{ usuario.telefono }}</strong>
-      </div>
-      <div class="profile-detail">
-        <span>Cuenta activa desde</span>
-        <strong>{{ usuario.miembro_desde }}</strong>
-      </div>
-    </div>
-  </section>
-
-  <section class="settings-card profile-info-card">
-    <div class="profile-info-header">
-      <h2 class="card-header">Información personal</h2>
-      <button class="edit-profile-button" id="edit-profile-button" type="button"
-              aria-expanded="{% if profile_form.errors %}true{% else %}false{% endif %}"
-              aria-controls="edit-profile-form">
-        <i class="ti ti-pencil" aria-hidden="true"></i> Editar perfil
-      </button>
-    </div>
-
-    <div class="profile-info-fields" id="profile-info-fields" {% if profile_form.errors %}hidden{% endif %}>
-      <div class="profile-info-field">
-        <span>Nombre</span>
-        <strong>{{ usuario.nombre }}</strong>
-      </div>
-      <div class="profile-info-field">
-        <span>Dirección</span>
-        <strong>{% if usuario.direccion %}{{ usuario.direccion }}{% else %}Sin vivienda vinculada{% endif %}</strong>
-      </div>
-      <div class="profile-info-field">
-        <span>Teléfono</span>
-        <strong>{{ usuario.telefono }}</strong>
-      </div>
-      <div class="profile-info-field">
-        <span>Correo electrónico</span>
-        <strong>{{ usuario.email }}</strong>
-      </div>
-    </div>
-
-    <form method="post" class="edit-profile-form" id="edit-profile-form" {% if not profile_form.errors %}hidden{% endif %}>
-      {% csrf_token %}
-      <div class="edit-profile-fields">
-        <label for="{{ profile_form.nombre.id_for_label }}">Nombre</label>
-        <input id="{{ profile_form.nombre.id_for_label }}" name="{{ profile_form.nombre.html_name }}"
-               value="{{ profile_form.nombre.value|default:'' }}" maxlength="255" autocomplete="given-name" required>
-        {% for error in profile_form.nombre.errors %}<span class="profile-form-error">{{ error }}</span>{% endfor %}
-
-        <label for="{{ profile_form.apellido.id_for_label }}">Apellido</label>
-        <input id="{{ profile_form.apellido.id_for_label }}" name="{{ profile_form.apellido.html_name }}"
-               value="{{ profile_form.apellido.value|default:'' }}" maxlength="255" autocomplete="family-name" required>
-        {% for error in profile_form.apellido.errors %}<span class="profile-form-error">{{ error }}</span>{% endfor %}
-
-        <label for="{{ profile_form.email.id_for_label }}">Correo electrónico</label>
-        <input id="{{ profile_form.email.id_for_label }}" type="email" name="{{ profile_form.email.html_name }}"
-               value="{{ profile_form.email.value|default:'' }}" maxlength="254" autocomplete="email" required>
-        {% for error in profile_form.email.errors %}<span class="profile-form-error">{{ error }}</span>{% endfor %}
-      </div>
-      {% for error in profile_form.non_field_errors %}<p class="profile-form-error">{{ error }}</p>{% endfor %}
-      <div class="edit-profile-actions">
-        <button class="profile-cancel-button" id="cancel-profile-edit" type="button">Cancelar</button>
-        <button class="profile-save-button" type="submit">Guardar cambios</button>
-      </div>
-    </form>
-  </section>
-
-  <section class="settings-card">
-    <h2 class="card-header">Notificaciones</h2>
-    <p class="preference-help">Elige qué alertas ves en la web y en la app, y cuáles te avisan en el teléfono.</p>
-    {% for notif in usuario.notificaciones %}
-      <div class="toggle-row">
-        <span class="toggle-label">
-          <i class="ti ti-{{ notif.icono }} toggle-icon" aria-hidden="true"></i>
-          <span>{{ notif.nombre }}<small class="toggle-hint">{{ notif.descripcion }}</small></span>
-        </span>
-        <button class="toggle preference-toggle {% if not notif.activo %}off{% endif %}"
-                type="button" role="switch" aria-checked="{% if notif.activo %}true{% else %}false{% endif %}"
-                data-field="{{ notif.campo }}" aria-label="{{ notif.nombre }}"></button>
-      </div>
-    {% endfor %}
-  </section>
-
-  <section class="settings-card">
-    <h2 class="card-header">Preferencias</h2>
-    <div class="toggle-row">
-      <span class="toggle-label"><i class="ti ti-moon toggle-icon" aria-hidden="true"></i> Modo oscuro</span>
-      <button class="toggle preference-toggle {% if not prefs.modo_oscuro %}off{% endif %}" id="dark-mode-toggle" type="button" role="switch"
-              aria-label="Modo oscuro" aria-checked="{% if prefs.modo_oscuro %}true{% else %}false{% endif %}" data-field="modo_oscuro"></button>
-    </div>
-    <div class="toggle-row">
-      <span class="toggle-label"><i class="ti ti-language toggle-icon" aria-hidden="true"></i>
-        <span>Idioma español<small class="toggle-hint">Apágalo para usar SmartDrop en inglés</small></span></span>
-      <button class="toggle preference-toggle {% if prefs.idioma != 'es' %}off{% endif %}" id="language-toggle" type="button" role="switch"
-              aria-label="Idioma español" aria-checked="{% if prefs.idioma == 'es' %}true{% else %}false{% endif %}" data-field="idioma"></button>
-    </div>
-    <div class="toggle-row">
-      <span class="toggle-label"><i class="ti ti-chart-bar toggle-icon" aria-hidden="true"></i>
-        <span>Reportes semanales<small class="toggle-hint">Resumen de tu consumo cada 7 días</small></span></span>
-      <button class="toggle preference-toggle {% if not prefs.reportes_semanales %}off{% endif %}" type="button" role="switch"
-              aria-label="Reportes semanales" aria-checked="{% if prefs.reportes_semanales %}true{% else %}false{% endif %}"
-              data-field="reportes_semanales"></button>
-    </div>
-    <div class="weekly-report" id="weekly-report" {% if not reporte_semanal %}hidden{% endif %}>
-      <strong>Último reporte semanal</strong>
-      <span id="weekly-report-text">{{ reporte_semanal.mensaje }}</span>
-    </div>
-    <p class="preference-status" id="preference-status" role="status" aria-live="polite"></p>
-  </section>
-
-  <section class="settings-card account-card">
+<div class="perfil">
+  <header class="page-head">
     <div>
-      <h2 class="card-header">Cuenta</h2>
-      <p>Tu información personal está protegida según nuestra política de privacidad. Estas acciones no se pueden deshacer.</p>
+      <h1 class="page-title">Mi perfil</h1>
+      <p class="page-lede">Revisa tus datos, tu vivienda y cómo quieres que SmartDrop te avise.</p>
     </div>
-    <a class="danger-button" href="{% url 'logout' %}">Cerrar sesión</a>
+  </header>
+
+  {% if messages %}
+    <div class="perfil-mensajes stack stack--sm">
+      {% for message in messages %}
+        {% if 'error' in message.tags %}
+          <div class="notice notice--bad" role="alert">
+            <i class="ti ti-alert-triangle" aria-hidden="true"></i>
+            <div><p>{{ message }}</p></div>
+          </div>
+        {% elif 'warning' in message.tags %}
+          <div class="notice notice--warn" role="status">
+            <i class="ti ti-alert-triangle" aria-hidden="true"></i>
+            <div><p>{{ message }}</p></div>
+          </div>
+        {% elif 'success' in message.tags %}
+          <div class="notice notice--ok" role="status">
+            <svg class="icon" aria-hidden="true"><use href="#i-circle-check"></use></svg>
+            <div><p>{{ message }}</p></div>
+          </div>
+        {% else %}
+          <div class="notice notice--info" role="status">
+            <i class="ti ti-info-circle" aria-hidden="true"></i>
+            <div><p>{{ message }}</p></div>
+          </div>
+        {% endif %}
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <div class="perfil-id">
+    <span class="avatar avatar--lg perfil-avatar" aria-hidden="true">{{ usuario.iniciales }}</span>
+    <div class="perfil-id-main">
+      <p class="perfil-nombre">{{ usuario.nombre }}</p>
+      <p class="perfil-correo">{{ usuario.email }}</p>
+    </div>
+    <dl class="kv perfil-id-datos">
+      <div>
+        <dt>Tipo de cuenta</dt>
+        <dd>{% if user.rol_id == 2 %}Administrador{% else %}Residente{% endif %}</dd>
+      </div>
+      <div>
+        <dt>Cuenta activa desde</dt>
+        <dd>{{ usuario.miembro_desde }}</dd>
+      </div>
+    </dl>
+  </div>
+
+  <div class="perfil-fila perfil-fila--cuenta">
+    <section class="panel" aria-labelledby="perfil-info-titulo">
+      <div class="panel-head">
+        <h2 class="panel-title" id="perfil-info-titulo">Información personal</h2>
+        <button class="btn btn--secondary perfil-editar" id="edit-profile-button" type="button"
+                aria-expanded="{% if profile_form.errors %}true{% else %}false{% endif %}"
+                aria-controls="edit-profile-form">Editar perfil</button>
+      </div>
+
+      <dl class="kv kv--inline perfil-datos" id="profile-info-fields" {% if profile_form.errors %}hidden{% endif %}>
+        <div>
+          <dt>Nombre</dt>
+          <dd>{{ usuario.nombre }}</dd>
+        </div>
+        <div>
+          <dt>Correo electrónico</dt>
+          <dd>{{ usuario.email }}</dd>
+        </div>
+        <div>
+          <dt>Teléfono</dt>
+          <dd>{{ usuario.telefono }}</dd>
+        </div>
+      </dl>
+
+      <form method="post" class="perfil-form" id="edit-profile-form" {% if not profile_form.errors %}hidden{% endif %}>
+        {% csrf_token %}
+        {% if profile_form.non_field_errors %}
+          <div class="notice notice--bad perfil-form-aviso" role="alert">
+            <i class="ti ti-alert-triangle" aria-hidden="true"></i>
+            <div>
+              {% for error in profile_form.non_field_errors %}<p>{{ error }}</p>{% endfor %}
+            </div>
+          </div>
+        {% endif %}
+        <div class="stack">
+          <div class="field{% if profile_form.nombre.errors %} field--error{% endif %}">
+            <label class="field-label" for="{{ profile_form.nombre.id_for_label }}">Nombre</label>
+            <input id="{{ profile_form.nombre.id_for_label }}" name="{{ profile_form.nombre.html_name }}"
+                   value="{{ profile_form.nombre.value|default:'' }}" maxlength="255" autocomplete="given-name" required
+                   {% if profile_form.nombre.errors %}aria-invalid="true" aria-describedby="{{ profile_form.nombre.id_for_label }}-error"{% endif %}>
+            {% if profile_form.nombre.errors %}
+              <p class="field-error" id="{{ profile_form.nombre.id_for_label }}-error">{% for error in profile_form.nombre.errors %}{{ error }} {% endfor %}</p>
+            {% endif %}
+          </div>
+
+          <div class="field{% if profile_form.apellido.errors %} field--error{% endif %}">
+            <label class="field-label" for="{{ profile_form.apellido.id_for_label }}">Apellido</label>
+            <input id="{{ profile_form.apellido.id_for_label }}" name="{{ profile_form.apellido.html_name }}"
+                   value="{{ profile_form.apellido.value|default:'' }}" maxlength="255" autocomplete="family-name" required
+                   {% if profile_form.apellido.errors %}aria-invalid="true" aria-describedby="{{ profile_form.apellido.id_for_label }}-error"{% endif %}>
+            {% if profile_form.apellido.errors %}
+              <p class="field-error" id="{{ profile_form.apellido.id_for_label }}-error">{% for error in profile_form.apellido.errors %}{{ error }} {% endfor %}</p>
+            {% endif %}
+          </div>
+
+          <div class="field{% if profile_form.email.errors %} field--error{% endif %}">
+            <label class="field-label" for="{{ profile_form.email.id_for_label }}">Correo electrónico</label>
+            <input id="{{ profile_form.email.id_for_label }}" type="email" name="{{ profile_form.email.html_name }}"
+                   value="{{ profile_form.email.value|default:'' }}" maxlength="254" autocomplete="email" required
+                   {% if profile_form.email.errors %}aria-invalid="true" aria-describedby="{{ profile_form.email.id_for_label }}-error"{% endif %}>
+            {% if profile_form.email.errors %}
+              <p class="field-error" id="{{ profile_form.email.id_for_label }}-error">{% for error in profile_form.email.errors %}{{ error }} {% endfor %}</p>
+            {% endif %}
+          </div>
+
+          <p class="field-hint">El teléfono y la dirección vienen del registro de tu vivienda.</p>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn--secondary" id="cancel-profile-edit" type="button">Cancelar</button>
+          <button class="btn btn--primary" type="submit">Guardar cambios</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel" aria-labelledby="perfil-vivienda-titulo">
+      <div class="panel-head">
+        <h2 class="panel-title" id="perfil-vivienda-titulo">Tu vivienda</h2>
+      </div>
+      {% if usuario.direccion %}
+        <div class="perfil-vivienda">
+          <span class="icon-chip icon-chip--agua" aria-hidden="true"><i class="ti ti-home"></i></span>
+          <div class="perfil-vivienda-main">
+            <p class="perfil-vivienda-dir">{{ usuario.direccion }}</p>
+            <p class="status status--ok"><span class="status-dot" aria-hidden="true"></span>Vivienda vinculada</p>
+          </div>
+        </div>
+      {% else %}
+        <div class="empty perfil-vivienda-vacia">
+          {% include 'App/_ilustracion.html' with tipo='vivienda' %}
+          <h3>Sin vivienda vinculada</h3>
+          <p>Para monitorear tu consumo necesitas vincular tu vivienda con tu número de cuenta y el nombre del titular.</p>
+          <a class="btn btn--primary" href="{% url 'vincular_vivienda' %}">Vincular vivienda</a>
+        </div>
+      {% endif %}
+    </section>
+  </div>
+
+  <div class="perfil-fila perfil-fila--avisos">
+    <section class="panel panel--flush" aria-labelledby="perfil-notif-titulo">
+      <div class="panel-head">
+        <div>
+          <h2 class="panel-title" id="perfil-notif-titulo">Notificaciones</h2>
+          <p class="perfil-panel-lede">Elige qué alertas ves en la web y en la app, y cuáles te avisan en el teléfono.</p>
+        </div>
+      </div>
+      <ul class="pref-list">
+        {% for notif in usuario.notificaciones %}
+          <li>
+            <button class="switch pref-switch preference-toggle {% if not notif.activo %}off{% endif %}"
+                    type="button" role="switch" aria-checked="{% if notif.activo %}true{% else %}false{% endif %}"
+                    data-field="{{ notif.campo }}" aria-label="{{ notif.nombre }}" aria-describedby="pref-hint-{{ notif.campo }}">
+              <span class="icon-chip" aria-hidden="true"><i class="ti ti-{{ notif.icono }}"></i></span>
+              <span class="switch-label pref-text">
+                <span class="pref-name">{{ notif.nombre }}</span>
+                <span class="pref-hint" id="pref-hint-{{ notif.campo }}">{{ notif.descripcion }}</span>
+              </span>
+              <span class="switch-track" aria-hidden="true"></span>
+            </button>
+          </li>
+        {% endfor %}
+      </ul>
+    </section>
+
+    <section class="panel panel--flush" aria-labelledby="perfil-pref-titulo">
+      <div class="panel-head">
+        <div>
+          <h2 class="panel-title" id="perfil-pref-titulo">Preferencias</h2>
+          <p class="perfil-panel-lede">Se guardan al instante y también se aplican en la app móvil.</p>
+        </div>
+      </div>
+      <ul class="pref-list">
+        <li>
+          <button class="switch pref-switch preference-toggle {% if not prefs.modo_oscuro %}off{% endif %}" id="dark-mode-toggle" type="button" role="switch"
+                  aria-label="Modo oscuro" aria-checked="{% if prefs.modo_oscuro %}true{% else %}false{% endif %}" data-field="modo_oscuro"
+                  aria-describedby="pref-hint-modo_oscuro">
+            <span class="icon-chip" aria-hidden="true"><i class="ti ti-moon"></i></span>
+            <span class="switch-label pref-text">
+              <span class="pref-name">Modo oscuro</span>
+              <span class="pref-hint" id="pref-hint-modo_oscuro">Colores oscuros en la app y la web</span>
+            </span>
+            <span class="switch-track" aria-hidden="true"></span>
+          </button>
+        </li>
+        <li>
+          <button class="switch pref-switch preference-toggle {% if prefs.idioma != 'es' %}off{% endif %}" id="language-toggle" type="button" role="switch"
+                  aria-label="Idioma español" aria-checked="{% if prefs.idioma == 'es' %}true{% else %}false{% endif %}" data-field="idioma"
+                  aria-describedby="pref-hint-idioma">
+            <span class="icon-chip" aria-hidden="true"><i class="ti ti-language"></i></span>
+            <span class="switch-label pref-text">
+              <span class="pref-name">Idioma español</span>
+              <span class="pref-hint" id="pref-hint-idioma">Apágalo para usar SmartDrop en inglés</span>
+            </span>
+            <span class="switch-track" aria-hidden="true"></span>
+          </button>
+        </li>
+        <li>
+          <button class="switch pref-switch preference-toggle {% if not prefs.reportes_semanales %}off{% endif %}" type="button" role="switch"
+                  aria-label="Reportes semanales" aria-checked="{% if prefs.reportes_semanales %}true{% else %}false{% endif %}"
+                  data-field="reportes_semanales" aria-describedby="pref-hint-reportes_semanales">
+            <span class="icon-chip" aria-hidden="true"><i class="ti ti-chart-bar"></i></span>
+            <span class="switch-label pref-text">
+              <span class="pref-name">Reportes semanales</span>
+              <span class="pref-hint" id="pref-hint-reportes_semanales">Resumen de tu consumo cada 7 días</span>
+            </span>
+            <span class="switch-track" aria-hidden="true"></span>
+          </button>
+        </li>
+      </ul>
+      <div class="notice notice--info pref-reporte" id="weekly-report" {% if not reporte_semanal %}hidden{% endif %}>
+        <i class="ti ti-file-invoice" aria-hidden="true"></i>
+        <div>
+          <p class="notice-title">Último reporte semanal</p>
+          <p id="weekly-report-text">{{ reporte_semanal.mensaje }}</p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <section class="perfil-sesion" aria-labelledby="perfil-sesion-titulo">
+    <div>
+      <h2 class="panel-title" id="perfil-sesion-titulo">Sesión</h2>
+      <p class="perfil-sesion-texto">Cierra tu sesión en este equipo. Tus datos y preferencias se quedan guardados.</p>
+    </div>
+    <a class="btn btn--secondary" href="{% url 'logout' %}"><svg class="icon" aria-hidden="true"><use href="#i-logout"></use></svg><span>Cerrar sesión</span></a>
   </section>
+
+  <div class="toast-stack">
+    <p class="toast pref-status" id="preference-status" role="status" aria-live="polite"></p>
+  </div>
 </div>
 {% endblock %}
 
@@ -158,6 +265,7 @@
     const reportText = document.getElementById('weekly-report-text');
     const root = document.documentElement;
     const body = document.body;
+    let statusTimer = null;
 
     function csrf() {
       const match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
@@ -177,22 +285,35 @@
       button.classList.toggle('off', !on);
     }
 
+    // Aviso flotante (#preference-status): data-estado da el color y el ícono; se oculta solo tras unos segundos.
+    function showStatus(text, estado) {
+      clearTimeout(statusTimer);
+      status.dataset.estado = estado;
+      status.textContent = text;
+      if (estado !== 'guardando') {
+        statusTimer = setTimeout(() => { status.textContent = ''; }, estado === 'error' ? 8000 : 4000);
+      }
+    }
+
     function setEditMode(editing) {
       editForm.hidden = !editing;
       infoFields.hidden = editing;
       editButton.setAttribute('aria-expanded', String(editing));
-      if (editing) editForm.querySelector('input').focus();
+      if (editing) editForm.querySelector('input:not([type="hidden"])').focus();
     }
 
     editButton.addEventListener('click', () => setEditMode(true));
-    cancelButton.addEventListener('click', () => setEditMode(false));
+    cancelButton.addEventListener('click', () => {
+      setEditMode(false);
+      editButton.focus();
+    });
 
     async function save(field, on, button) {
       const value = field === 'idioma' ? (on ? 'es' : 'en') : on;
       setToggle(button, on);
       if (field === 'modo_oscuro') applyTheme(on);
       button.disabled = true;
-      status.textContent = 'Guardando…';
+      showStatus('Guardando…', 'guardando');
       try {
         const response = await fetch(PREFS_URL, {
           method: 'POST', credentials: 'same-origin',
@@ -201,7 +322,7 @@
         });
         const data = await response.json();
         if (!response.ok || !data.ok) throw new Error('save');
-        status.textContent = 'Preferencia guardada. También se aplica en la app móvil.';
+        showStatus('Preferencia guardada. También se aplica en la app móvil.', 'ok');
         if (data.reporte_semanal) {
           report.hidden = false;
           reportText.textContent = data.reporte_semanal.mensaje;
@@ -213,7 +334,7 @@
       } catch (error) {
         setToggle(button, !on);
         if (field === 'modo_oscuro') applyTheme(!on);
-        status.textContent = 'No se pudo guardar. Revisa tu conexión e inténtalo de nuevo.';
+        showStatus('No se pudo guardar. Revisa tu conexión e inténtalo de nuevo.', 'error');
       } finally {
         button.disabled = false;
       }

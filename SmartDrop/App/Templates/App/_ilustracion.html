@@ -1,0 +1,94 @@
+{% comment %}
+  Ilustraciones pequeñas para estados vacíos y secciones (mismo estilo que el tanque de la zona).
+  Uso:  {% include 'App/_ilustracion.html' with tipo='alertas' %}
+  tipo: reportes | alertas | comunidad | valvula | vivienda | buscar | ok
+  Siempre decorativas (aria-hidden): el texto de al lado dice lo mismo. Colores y movimiento en
+  smartdrop.css (.ilus-*); el movimiento se apaga con "reducir movimiento".
+{% endcomment %}<svg class="ilus ilus--{{ tipo }}" viewBox="0 0 200 140" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+  <ellipse class="ilus-sombra" cx="100" cy="128" rx="62" ry="6"/>
+  {% if tipo == 'reportes' %}
+  <g class="ilus-flota">
+    <rect class="ilus-hoja" x="62" y="22" width="76" height="98" rx="11"/>
+    <rect class="ilus-trazo" x="62" y="22" width="76" height="98" rx="11"/>
+    <rect class="ilus-anil" x="82" y="13" width="36" height="16" rx="6"/>
+    <rect class="ilus-trazo" x="82" y="13" width="36" height="16" rx="6"/>
+    <path class="ilus-linea" d="M78 52h44M78 68h30M78 84h38"/>
+  </g>
+  <g class="ilus-pulso">
+    <circle class="ilus-agua-soft" cx="138" cy="100" r="24"/>
+    <circle class="ilus-trazo" cx="138" cy="100" r="24"/>
+    <path class="ilus-agua" d="M138 86c-6.5 7.5-9.4 11.4-9.4 15.4a9.4 9.4 0 0 0 18.8 0c0-4-2.9-7.9-9.4-15.4z"/>
+  </g>
+  {% elif tipo == 'alertas' %}
+  <circle class="ilus-onda" cx="100" cy="64" r="34"/>
+  <circle class="ilus-onda ilus-onda--2" cx="100" cy="64" r="34"/>
+  <g class="ilus-campana">
+    <path class="ilus-agua-soft" d="M100 28c-19 0-32 15-32 34v20l-11 15h86l-11-15V62c0-19-13-34-32-34z"/>
+    <path class="ilus-trazo" d="M100 28c-19 0-32 15-32 34v20l-11 15h86l-11-15V62c0-19-13-34-32-34z"/>
+    <path class="ilus-trazo" d="M100 28V21"/>
+    <circle class="ilus-sol" cx="100" cy="109" r="7.5"/>
+    <circle class="ilus-trazo" cx="100" cy="109" r="7.5"/>
+  </g>
+  {% elif tipo == 'comunidad' %}
+  <g class="ilus-pulso">
+    <path class="ilus-agua" d="M100 14c-8 9.2-11.6 14-11.6 19a11.6 11.6 0 0 0 23.2 0c0-5-3.6-9.8-11.6-19z"/>
+  </g>
+  <g class="ilus-flota">
+    <circle class="ilus-sol" cx="52" cy="70" r="13"/>
+    <path class="ilus-sol" d="M30 118a22 22 0 0 1 44 0z"/>
+    <circle class="ilus-trazo" cx="52" cy="70" r="13"/>
+    <path class="ilus-trazo" d="M30 118a22 22 0 0 1 44 0z"/>
+  </g>
+  <g class="ilus-flota ilus-flota--2">
+    <circle class="ilus-anil" cx="100" cy="62" r="15"/>
+    <path class="ilus-anil" d="M74 118a26 26 0 0 1 52 0z"/>
+    <circle class="ilus-trazo" cx="100" cy="62" r="15"/>
+    <path class="ilus-trazo" d="M74 118a26 26 0 0 1 52 0z"/>
+  </g>
+  <g class="ilus-flota ilus-flota--3">
+    <circle class="ilus-agua-fuerte" cx="148" cy="70" r="13"/>
+    <path class="ilus-agua-fuerte" d="M126 118a22 22 0 0 1 44 0z"/>
+    <circle class="ilus-trazo" cx="148" cy="70" r="13"/>
+    <path class="ilus-trazo" d="M126 118a22 22 0 0 1 44 0z"/>
+  </g>
+  {% elif tipo == 'valvula' %}
+  <path class="ilus-tubo" d="M14 84H186"/>
+  <path class="ilus-flujo" d="M14 84H186"/>
+  <g class="ilus-pulso">
+    <rect class="ilus-agua-soft" x="78" y="60" width="44" height="48" rx="12"/>
+    <rect class="ilus-trazo" x="78" y="60" width="44" height="48" rx="12"/>
+    <path class="ilus-trazo" d="M100 60V38"/>
+    <rect class="ilus-sol" x="78" y="28" width="44" height="11" rx="5.5"/>
+    <rect class="ilus-trazo" x="78" y="28" width="44" height="11" rx="5.5"/>
+    <path class="ilus-agua" d="M100 71c-6 6.9-8.6 10.5-8.6 14.1a8.6 8.6 0 0 0 17.2 0c0-3.6-2.6-7.2-8.6-14.1z"/>
+  </g>
+  {% elif tipo == 'vivienda' %}
+  <path class="ilus-tubo" d="M92 92H150"/>
+  <path class="ilus-flujo" d="M92 92H150"/>
+  <g class="ilus-flota">
+    <rect class="ilus-hoja" x="32" y="30" width="62" height="86" rx="14"/>
+    <clipPath id="ilus-viv-clip"><rect x="32" y="30" width="62" height="86" rx="14"/></clipPath>
+    <g clip-path="url(#ilus-viv-clip)"><rect class="ilus-agua" x="32" y="66" width="62" height="52"/></g>
+    <rect class="ilus-trazo" x="32" y="30" width="62" height="86" rx="14"/>
+  </g>
+  <g class="ilus-pulso">
+    <rect class="ilus-agua-soft" x="148" y="70" width="34" height="44" rx="11"/>
+    <rect class="ilus-trazo" x="148" y="70" width="34" height="44" rx="11"/>
+    <path class="ilus-agua" d="M165 82c-5 5.8-7.2 8.8-7.2 11.8a7.2 7.2 0 0 0 14.4 0c0-3-2.2-6-7.2-11.8z"/>
+    <path class="ilus-linea" d="M155 106h20"/>
+  </g>
+  {% elif tipo == 'buscar' %}
+  <g class="ilus-flota">
+    <circle class="ilus-agua-soft" cx="90" cy="64" r="36"/>
+    <circle class="ilus-trazo ilus-trazo--grueso" cx="90" cy="64" r="36"/>
+    <path class="ilus-trazo ilus-trazo--grueso" d="M116 90l30 30"/>
+    <path class="ilus-agua" d="M90 44c-7.5 8.6-10.8 13-10.8 17.6a10.8 10.8 0 0 0 21.6 0c0-4.6-3.3-9-10.8-17.6z"/>
+  </g>
+  {% else %}
+  <g class="ilus-pulso">
+    <path class="ilus-agua" d="M100 14c-17 19.5-34 38-34 58a34 34 0 0 0 68 0c0-20-17-38.5-34-58z"/>
+    <path class="ilus-trazo" d="M100 14c-17 19.5-34 38-34 58a34 34 0 0 0 68 0c0-20-17-38.5-34-58z"/>
+    <path class="ilus-check" d="M84 74l11 11 22-24"/>
+  </g>
+  {% endif %}
+</svg>

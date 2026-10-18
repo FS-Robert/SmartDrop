@@ -1,0 +1,236 @@
+/* ==========================================================================
+   SmartDrop — páginas de acceso: iniciar sesión, crear cuenta, vincular vivienda.
+   Pantalla dividida (≥ 960px): formulario sobre surface a la izquierda y, a la
+   derecha, la escena cálida (sol-soft) con el tanque de la zona. En pantallas
+   menores la escena se vuelve una franja pequeña arriba del formulario.
+   Solo tokens de smartdrop.css; una clase por regla.
+   ========================================================================== */
+
+.auth-body {
+  background: var(--c-surface);
+}
+
+.auth {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* ── Columna del formulario ─────────────────────────────────────────────── */
+.auth-main {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  padding: var(--s-7) var(--gutter) var(--s-9);
+}
+
+.auth-inner {
+  width: 100%;
+  max-width: 420px;
+  margin-inline: auto;
+}
+
+/* La marca no es enlace aquí: se queda en añil también al pasar el puntero. */
+.auth-brand {
+  display: flex;
+  width: fit-content;
+  margin-bottom: var(--s-8);
+}
+
+.auth-brand:hover {
+  color: var(--c-anil);
+}
+
+.auth-form {
+  display: grid;
+  gap: var(--s-5);
+  margin-top: var(--s-7);
+}
+
+.auth-submit {
+  margin-top: var(--s-2);
+}
+
+/* Nombre y apellido lado a lado cuando la columna da para ambos */
+.auth-pair {
+  display: grid;
+  gap: var(--s-5);
+}
+
+@media (min-width: 480px) {
+  .auth-pair {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--s-4);
+  }
+}
+
+/* Camino alternativo (crear cuenta / iniciar sesión / cerrar sesión) */
+.auth-alt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0 var(--s-3);
+  margin-top: var(--s-7);
+  padding-top: var(--s-4);
+  border-top: 1px solid var(--c-line);
+  color: var(--c-ink-2);
+}
+
+.auth-alt-text {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.auth-alt-text > strong {
+  color: var(--c-ink);
+  font-weight: 600;
+}
+
+.auth-alt-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: 44px;
+  font-weight: 600;
+}
+
+.auth-alt-link > .icon {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+/* ── Contraseña con botón para mostrarla ────────────────────────────────── */
+.auth-pw {
+  position: relative;
+}
+
+.auth-pw > input {
+  padding-right: 52px;
+}
+
+/* Edge dibuja su propio "ojo": se oculta para no tener dos botones. */
+.auth-pw > input::-ms-reveal,
+.auth-pw > input::-ms-clear {
+  display: none;
+}
+
+.auth-pw-toggle {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  border-radius: var(--r-xs);
+  color: var(--c-ink-3);
+}
+
+.auth-pw-toggle:focus-visible {
+  outline-offset: -3px;
+}
+
+.auth-pw-toggle[aria-pressed="true"] {
+  color: var(--c-anil);
+}
+
+.auth-pw-hide {
+  display: none;
+}
+
+.auth-pw-toggle[aria-pressed="true"] > .auth-pw-show {
+  display: none;
+}
+
+.auth-pw-toggle[aria-pressed="true"] > .auth-pw-hide {
+  display: inline-block;
+}
+
+/* ── Escena cálida: franja pequeña en pantallas menores ─────────────────── */
+.auth-scene {
+  order: -1;
+  min-width: 0;
+  padding: var(--s-4) var(--gutter) 0;
+}
+
+.auth-scene-card {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  padding: var(--s-3) var(--s-5) var(--s-3) var(--s-3);
+  border-radius: var(--r-lg);
+  background: var(--c-sol-soft);
+}
+
+.auth-scene-text {
+  max-width: 24ch;
+  margin: 0;
+  color: var(--c-ink);
+  font-family: var(--font-display);
+  font-size: var(--t-md);
+  font-weight: 800;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+.auth-zona {
+  order: -1;
+  flex: none;
+  width: clamp(112px, 30vw, 176px);
+}
+
+/* El tanque aquí es ambiente, no un dato: sin la marca de porcentaje. */
+.auth-scene .zona-nivel,
+.auth-scene .zona-nivel-guia {
+  display: none;
+}
+
+@media (min-width: 640px) {
+  .auth-scene-text {
+    font-size: var(--t-xl);
+  }
+}
+
+/* ── ≥ 960px: pantalla dividida ─────────────────────────────────────────── */
+@media (min-width: 960px) {
+  .auth {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  }
+
+  .auth-main {
+    padding: var(--s-9) var(--s-8);
+  }
+
+  .auth-scene {
+    position: sticky;
+    top: 0;
+    order: 0;
+    align-self: start;
+    height: 100vh;
+    height: 100dvh;
+    padding: var(--s-4) var(--s-4) var(--s-4) 0;
+  }
+
+  .auth-scene-card {
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: space-between;
+    gap: var(--s-7);
+    height: 100%;
+    padding: var(--s-9) var(--s-8) var(--s-8);
+    border-radius: var(--r-xl);
+  }
+
+  .auth-scene-text {
+    max-width: 18ch;
+    font-size: var(--t-2xl);
+    line-height: 1.25;
+  }
+
+  .auth-zona {
+    order: 0;
+    align-self: center;
+    width: min(100%, 500px);
+  }
+}

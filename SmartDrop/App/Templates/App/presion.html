@@ -1,158 +1,79 @@
 {% extends 'App/base.html' %}
-{% block title %}Presión del Agua{% endblock %}
+{% load static sd_ui %}
+{% block title %}Presión del agua{% endblock %}
 {% block nav_presion %}active{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/sensores.css' %}?v=20261011-zona1">{% endblock %}
 
 {% block content %}
-<div class="presion-heading">
-  <h1 class="page-title">PRESIÓN DEL AGUA</h1>
-  <p class="page-subtitle">Monitorea la presión actual del suministro de agua.</p>
-</div>
-
-<div class="presion-layout">
-  <!-- Gauge visual -->
-  <div class="presion-main card">
-    <div class="card-label">
-      <span>
-        <i class="ti ti-gauge"></i>
-      </span>
-      <div>Medidor de presión</div>
-    </div>
-    <p>Lectura en tiempo real del sensor de presión</p>
-    
-    <div class="valve-row">
-      <span class="valve-label">Válvula:</span>
-      <span class="badge valve-badge {% if presion.valvula == 'ABIERTA' %}badge-open{% elif presion.valvula == 'CERRADA' %}badge-closed{% else %}badge-unknown{% endif %}"
-            data-valve-badge>
-        <i class="ti {% if presion.valvula == 'ABIERTA' %}ti-lock-open{% else %}ti-lock{% endif %}" aria-hidden="true"></i>
-        <span data-valve-text>{% if presion.valvula == 'ABIERTA' %}Abierta{% elif presion.valvula == 'CERRADA' %}Cerrada{% else %}Sin datos{% endif %}</span>
-      </span>
-    </div>
-    <p class="valve-updated" data-valve-updated>{% if presion.valvula == 'ABIERTA' and presion.valvula_actualizada %}Abierta {{ presion.valvula_actualizada }}{% endif %}</p>
-
-    <!-- SVG Gauge -->
-    <div class="gauge-wrap">
-      <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" class="gauge-svg">
-        <!-- Fondo del arco -->
-        <path d="M 30 150 A 80 80 0 0 1 170 150"
-              fill="none" stroke="#f0e8ff" stroke-width="18" stroke-linecap="round"/>
-        <!-- Arco de progreso -->
-        <path d="M 30 150 A 80 80 0 0 1 170 150"
-              id="pressure-gauge-progress" fill="none" stroke="#7c3aed" stroke-width="18" stroke-linecap="round"
-              stroke-dasharray="{{ presion.gauge_dash }} 251"
-              style="transition: stroke-dasharray 1s ease;"/>
-        <!-- Marcas -->
-        <text x="22"  y="162" font-size="11" fill="#aaa" font-weight="700" font-family="Inter">0</text>
-        <text x="90"  y="58"  font-size="11" fill="#aaa" font-weight="700" font-family="Inter">2.5</text>
-        <text x="163" y="162" font-size="11" fill="#aaa" font-weight="700" font-family="Inter">5</text>
-        <!-- Icono central -->
-        <text x="100" y="130" text-anchor="middle" font-size="40" fill="#7c3aed">💧</text>
-      </svg>
-      <div class="gauge-value-text">
-        <span id="pressure-gauge-value" class="gauge-num">{{ presion.valor }}</span>
-        <span class="gauge-unit">kPa</span>
-      </div>
-    </div>
-    
-    <div class="current-pressure">
-      <span id="pressure-current-badge" class="badge {{ presion.badge_class }} pressure-badge">{{ presion.estado }}: {{ presion.valor }} kPa</span>
-      <div class="update-chip"><i class="ti ti-refresh"></i> {{ presion.actualizado }}</div>
-    </div>
+<header class="page-head">
+  <div>
+    <h1 class="page-title">Presión del agua</h1>
+    <p class="page-lede">Qué tan fuerte llega el agua a las llaves de tu casa.</p>
   </div>
+  <div class="page-actions">
+    <p class="updated">{{ presion.actualizado }}</p>
+  </div>
+</header>
 
-  <div class="presion-range-block card">
-        <div class="presion-range-label">Rango de referencia</div>
-        <div class="presion-bar-labels"><span>0 kPa (Baja)</span><span>5 kPa (Alta)</span></div>
-        <div class="presion-bar-wrap">
-          <div class="presion-bar"></div>
-          <div id="pressure-range-needle" class="presion-bar-needle" style="left: {{ presion.needle_pos }}%;"></div>
-        </div>
-        <div class="presion-bar-labels"><span>Baja</span><span>Normal</span><span>Alta</span></div>
-        
-        <div class="detail-row">
-          <div>
-            <p class="pressure-details">Mínimo normal</p>
-          </div>
-          <span id="pressure-status-badge" class="pressure-badge">0.5 kPa</span>
-        </div>
-        
-        <div class="detail-row">
-          <p class="pressure-details">Máximo normal</p>
-          <span id="pressure-status-badge" class="pressure-badge">3.5 kPa</span>
-        </div>
+<div class="sensor-layout">
+  <section class="panel sensor-state" aria-labelledby="presion-estado">
+    <div class="sensor-state-head">
+      <span id="pressure-status-badge" class="status status--lg status--{{ presion.badge_class|estado_css }}"><span class="status-dot" aria-hidden="true"></span>{{ presion.estado }}</span>
     </div>
+    <h2 class="sensor-message" id="presion-estado">{{ presion.mensaje|default:presion.nota }}</h2>
 
-  <div class="pressure-summary card">
-      <div class="presion-card-title">Resumen de presión</div>
+    <p class="sensor-value" aria-live="polite">
+      <span id="pressure-gauge-value" class="num">{{ presion.valor|floatformat:2 }}</span>
+      <span class="sensor-unit">kPa</span>
+    </p>
+    <p id="pressure-current-badge" class="sr-only" aria-live="polite">{{ presion.estado }}: {{ presion.valor|floatformat:2 }} kPa</p>
 
-      <div class="detail-row">
-        <div>
-          <p class="pressure-details">Presión actual</p>
-        </div>
-        <span id="pressure-status-badge" class="pressure-badge {{ presion.badge_class }}">{{ presion.estado }}</span>
+    <div class="range-scale" aria-hidden="true">
+      <div class="range-track range-track--presion">
+        <span class="range-zone range-zone--warn" style="flex-basis: 40%;"></span>
+        <span class="range-zone range-zone--ok" style="flex-basis: 30%;"></span>
+        <span class="range-zone range-zone--warn" style="flex-basis: 30%;"></span>
+        <span id="pressure-range-needle" class="range-needle" style="left: {% if presion.valor > 5 %}100{% else %}{% widthratio presion.valor 5 100 %}{% endif %}%;"></span>
       </div>
+      <div class="range-labels">
+        <span style="flex-basis: 40%;">Baja</span>
+        <span style="flex-basis: 30%;">Normal</span>
+        <span style="flex-basis: 30%;">Alta</span>
+      </div>
+      <div class="range-ticks num"><span>0</span><span style="left: 40%;">2</span><span style="left: 70%;">3.5</span><span style="left: 100%;">5 kPa</span></div>
+    </div>
+    <p class="sr-only">Rango normal: de 2 a 3.5 kPa. Por debajo de 2 kPa la presión es baja y por encima de 3.5 kPa es alta.</p>
+  </section>
 
-      <div class="detail-row">
-        <div>
-          <p class="pressure-details">Válvula</p>
-        </div>
-        <span class="pressure-badge {% if presion.valvula == 'ABIERTA' %}badge-open{% elif presion.valvula == 'CERRADA' %}badge-closed{% else %}badge-unknown{% endif %}"
-              data-valve-badge>
-          <span data-valve-text>{% if presion.valvula == 'ABIERTA' %}Abierta{% elif presion.valvula == 'CERRADA' %}Cerrada{% else %}Sin datos{% endif %}</span>
+  <div class="sensor-aside">
+    <section class="panel" aria-labelledby="presion-hoy">
+      <h2 class="panel-title" id="presion-hoy">Hoy</h2>
+      <dl class="kv kv--inline">
+        <div><dt>Mínima</dt><dd class="num">{{ presion.min_dia|floatformat:2 }} kPa</dd></div>
+        <div><dt>Máxima</dt><dd class="num">{{ presion.max_dia|floatformat:2 }} kPa</dd></div>
+        <div><dt>Promedio</dt><dd class="num">{{ presion.prom_dia|floatformat:2 }} kPa</dd></div>
+      </dl>
+    </section>
+
+    <section class="panel" aria-labelledby="presion-valvula">
+      <h2 class="panel-title" id="presion-valvula">Válvula de tu zona</h2>
+      <div class="sensor-valve">
+        <span class="status {% if presion.valvula == 'ABIERTA' %}status--ok badge-open{% elif presion.valvula == 'CERRADA' %}status--warn badge-closed{% else %}status--none badge-unknown{% endif %}" data-valve-badge>
+          <span class="status-dot" aria-hidden="true"></span><span data-valve-text>{% if presion.valvula == 'ABIERTA' %}Abierta{% elif presion.valvula == 'CERRADA' %}Cerrada{% else %}Sin datos{% endif %}</span>
         </span>
+        <p class="sensor-valve-note valve-updated" data-valve-updated>{% if presion.valvula == 'ABIERTA' and presion.valvula_actualizada %}Abierta {{ presion.valvula_actualizada }}{% endif %}</p>
       </div>
-
-      <div class="detail-row">
-        <div>
-          <p class="pressure-details">Rango</p>
-        </div>
-        <span class="pressure-badge">{{ presion.valor }} kPa</span>
-      </div>
-    </div>
-</div>
-
-
-<div class="pressure-panel">
-  <div class="presion-side">
-
-     <div class="pressure-note card">
-      <div class="presion-card-title">Nota</div>
-      <p class="presion-note-text">
-        {{ presion.nota }}
-      </p>
-    </div>
-
-    <div class="card">
-      <div class="presion-card-title">Historial del día</div>
-      <div class="detail-row">
-        <div>
-            <p class="pressure-details">Mínima</p>
-        </div>
-        <span class="pressure-details detail-val">{{ presion.min_dia }} kPa</span>
-      </div>
-      
-        <div class="detail-row">
-          <div>
-            <p class="pressure-details">Máxima</p>
-          </div>
-          <span class="pressure-details detail-val">{{ presion.max_dia }} kPa</span>
-        </div>
-      
-        <div class="detail-row">
-          <div>
-            <p class="pressure-details">Promedio</p>
-          </div>
-          <span class="pressure-details detail-val">{{ presion.prom_dia }} kPa</span></div>
-    </div>
-
-    <div class="pressure-info card">
-      <div class="presion-card-title">Información</div>
-      <div class="presion-info-description">La presión del agua se mide en kPa (kilopascales). Una presión entre 0.5 y 3.5 kPa se considera normal para uso doméstico. 
-      Valores fuera de este rango pueden indicar problemas en el suministro o en la red de distribución.</div>
-    </div>
-
+    </section>
   </div>
 </div>
-  
+
+<section class="panel panel--tint sensor-help" aria-labelledby="presion-ayuda">
+  <h2 class="panel-title" id="presion-ayuda">Qué significa</h2>
+  <div class="prose">
+    <p>La presión se mide en kilopascales (kPa). Entre 2 y 3.5 kPa el agua llega con fuerza normal. Si baja de 2 kPa notarás un chorro débil; si pasa de 3.5 kPa conviene revisar las tuberías y las llaves.</p>
+    <p class="muted">{{ presion.nota }}</p>
+  </div>
+</section>
 {% endblock %}
 
 {% block extra_js %}
@@ -164,10 +85,9 @@
     function paint(valve) {
       const state = valve && valve.disponible ? valve.estado : 'SIN DATOS';
       document.querySelectorAll('[data-valve-badge]').forEach((badge) => {
-        badge.classList.remove('badge-open', 'badge-closed', 'badge-unknown');
+        badge.classList.remove('status--ok', 'status--warn', 'status--none', 'badge-open', 'badge-closed', 'badge-unknown');
+        badge.classList.add(state === 'ABIERTA' ? 'status--ok' : state === 'CERRADA' ? 'status--warn' : 'status--none');
         badge.classList.add(state === 'ABIERTA' ? 'badge-open' : state === 'CERRADA' ? 'badge-closed' : 'badge-unknown');
-        const icon = badge.querySelector('i.ti');
-        if (icon) icon.className = 'ti ' + (state === 'ABIERTA' ? 'ti-lock-open' : 'ti-lock');
         badge.querySelector('[data-valve-text]').textContent = LABELS[state] || 'Sin datos';
       });
       const updated = document.querySelector('[data-valve-updated]');
@@ -186,6 +106,7 @@
 </script>
 
 <script>
+  // Lecturas en vivo del sensor de presión (mismos umbrales que el servidor: normal de 2 a 3.5 kPa).
   window.addEventListener('smartdrop:sensor-reading', function (event) {
     const reading = event.detail || {};
     const sensorType = String(reading.tipo_sensor || '').toLowerCase();
@@ -195,21 +116,17 @@
     if (!Number.isFinite(value)) return;
 
     const percentage = Math.min(Math.max((value / 5) * 100, 0), 100);
-    const dash = Math.round((percentage / 100) * 251);
-    const status = value < 1 ? 'Baja' : value < 2 ? 'Baja' : value <= 3.5 ? 'Estable' : value <= 5 ? 'Alta' : 'Muy alta';
-    const badgeClass = status === 'Estable' ? 'badge-normal' : status === 'Baja' || status === 'Alta' ? 'badge-high' : 'badge-closed';
+    const status = value < 2 ? 'Baja' : value <= 3.5 ? 'Estable' : value <= 5 ? 'Alta' : 'Muy alta';
+    const mod = status === 'Estable' ? 'ok' : status === 'Muy alta' ? 'bad' : 'warn';
 
-    document.getElementById('pressure-gauge-progress').setAttribute('stroke-dasharray', `${dash} 251`);
     document.getElementById('pressure-range-needle').style.left = `${percentage}%`;
     document.getElementById('pressure-gauge-value').textContent = value.toFixed(2);
-
-    const currentBadge = document.getElementById('pressure-current-badge');
-    currentBadge.textContent = `${status}: ${value.toFixed(2)} kPa`;
-    currentBadge.className = `badge ${badgeClass} pressure-badge`;
+    document.getElementById('pressure-current-badge').textContent = `${status}: ${value.toFixed(2)} kPa`;
 
     const statusBadge = document.getElementById('pressure-status-badge');
-    statusBadge.textContent = status;
-    statusBadge.className = `badge ${badgeClass}`;
+    statusBadge.className = `status status--lg status--${mod}`;
+    statusBadge.innerHTML = '<span class="status-dot" aria-hidden="true"></span>';
+    statusBadge.append(status);
   });
 </script>
 {% endblock %}

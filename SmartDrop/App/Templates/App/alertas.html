@@ -1,51 +1,57 @@
 {% extends 'App/base.html' %}
+{% load static sd_ui %}
 {% block title %}Historial de alertas{% endblock %}
 {% block nav_alertas %}active{% endblock %}
 {% block nav_admin_alertas %}active{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/comunidad.css' %}?v=20261011-zona1">{% endblock %}
 
 {% block content %}
-<div class="reportes-heading">
-  <h1 class="page-title">HISTORIAL DE ALERTAS</h1>
-  <p class="page-subtitle">Alertas generadas por el sistema: fugas detectadas, calidad del agua, nivel de tanque y predicciones de desabasto.</p>
-</div>
+<header class="page-head reportes-heading">
+  <div>
+    <h1 class="page-title">{% if es_admin %}Historial de alertas{% else %}Alertas{% endif %}</h1>
+    <p class="page-lede">Avisos del sistema: fugas detectadas, calidad del agua, nivel del tanque y riesgo de desabasto.</p>
+  </div>
+  {% if es_admin %}
+  <div class="page-actions">
+    <a class="btn btn--secondary reportes-link" href="{% url 'alertas_export' %}?estado={{ filtro_estado }}"><i class="ti ti-download" aria-hidden="true"></i>Descargar CSV</a>
+  </div>
+  {% endif %}
+</header>
 
 {% if messages %}
+  <div class="page-messages">
   {% for message in messages %}
-    <div class="alert-box full-width card msg-{{ message.tags }}">
-      <i class="ti ti-info-circle alert-icon"></i>
-      <div class="alert-text">{{ message }}</div>
+    <div class="notice notice--info msg-{{ message.tags }}" role="status">
+      <i class="ti ti-info-circle" aria-hidden="true"></i>
+      <div><p>{{ message }}</p></div>
     </div>
   {% endfor %}
+  </div>
 {% endif %}
 
-<div class="card">
-  <form method="get" class="filtros-row">
-    <select name="estado" class="field-input">
+<form method="get" class="filtros-row" aria-label="Filtrar alertas">
+  <div class="field field--inline">
+    <label class="field-label" for="filtro-estado">Estado</label>
+    <select name="estado" id="filtro-estado" class="field-input">
       <option value="">Todos los estados</option>
       <option value="pendiente" {% if filtro_estado == 'pendiente' %}selected{% endif %}>Pendiente</option>
       <option value="confirmada" {% if filtro_estado == 'confirmada' %}selected{% endif %}>Confirmada</option>
       <option value="descartada" {% if filtro_estado == 'descartada' %}selected{% endif %}>Descartada</option>
       <option value="resuelta" {% if filtro_estado == 'resuelta' %}selected{% endif %}>Resuelta</option>
     </select>
-    <button type="submit" class="btn-primary btn-filtrar"><i class="ti ti-filter"></i> Filtrar</button>
-    {% if es_admin %}
-    <a class="reportes-link" href="{% url 'alertas_export' %}?estado={{ filtro_estado }}">
-      <i class="ti ti-download"></i> Exportar CSV
-    </a>
-    {% endif %}
-  </form>
+  </div>
+  <button type="submit" class="btn btn--secondary btn-filtrar"><i class="ti ti-filter" aria-hidden="true"></i>Filtrar</button>
+  {% if filtro_estado %}<a class="btn btn--ghost" href="{% url 'alertas_historial' %}">Quitar filtro</a>{% endif %}
+</form>
 
-  {% if alertas %}
-  <ul class="alertas-list">
+{% if alertas %}
+<div class="panel panel--flush">
+  <ul class="list alertas-list">
     {% for alerta in alertas %}
-    <li class="alerta-row prioridad-{{ alerta.prioridad|default:'media' }}">
-      <span class="alerta-icon"><i class="ti {{ alerta.icon }}"></i></span>
-      <div class="alerta-body">
-        <div class="alerta-titulo">
-          <strong>{{ alerta.titulo }}</strong>
-          <span class="badge badge-prio-{{ alerta.prioridad|default:'media' }}">{{ alerta.prioridad|default:'media'|title }}</span>
-          <span class="badge badge-estado-{{ alerta.estado_confirmacion }}">{{ alerta.estado_texto }}</span>
-        </div>
+    <li class="list-row alerta-row prioridad-{{ alerta.prioridad|default:'media' }}">
+      <span class="icon-chip {% if alerta.prioridad == 'critica' or alerta.prioridad == 'alta' %}icon-chip--bad{% elif alerta.prioridad == 'baja' %}icon-chip--none{% else %}icon-chip--warn{% endif %} alerta-icon"><i class="ti {{ alerta.icon }}" aria-hidden="true"></i></span>
+      <div class="list-row-main alerta-body">
+        <p class="list-row-title alerta-titulo">{{ alerta.titulo }}</p>
         <p class="alerta-msg">{{ alerta.resumen }}</p>
         {% if alerta.detalle %}
         <details class="alerta-detalle">
@@ -53,13 +59,23 @@
           {% for linea in alerta.detalle %}<p class="alerta-msg">{{ linea }}</p>{% endfor %}
         </details>
         {% endif %}
-        <span class="alerta-fecha"><i class="ti ti-clock"></i> {{ alerta.fecha_texto }}</span>
+        <p class="list-row-meta alerta-fecha"><i class="ti ti-clock" aria-hidden="true"></i>{{ alerta.fecha_texto }}</p>
+      </div>
+      <div class="list-row-aside alerta-badges">
+        <span class="status {% if alerta.prioridad == 'critica' or alerta.prioridad == 'alta' %}status--bad{% elif alerta.prioridad == 'baja' %}status--none{% else %}status--warn{% endif %} badge-prio-{{ alerta.prioridad|default:'media' }}"><span class="status-dot" aria-hidden="true"></span>Prioridad {{ alerta.prioridad|default:'media'|lower }}</span>
+        <span class="status status--{{ alerta.estado_confirmacion|estado_css }} badge-estado-{{ alerta.estado_confirmacion }}"><span class="status-dot" aria-hidden="true"></span>{{ alerta.estado_texto }}</span>
       </div>
     </li>
     {% endfor %}
   </ul>
-  {% else %}
-    <p class="reportes-empty">No hay alertas registradas con estos filtros.</p>
-  {% endif %}
 </div>
+{% else %}
+<div class="panel">
+  <div class="empty">
+    {% include 'App/_ilustracion.html' with tipo='alertas' %}
+    <h3>No hay alertas con estos filtros</h3>
+    <p class="reportes-empty">Cuando el sistema detecte algo en tu agua, aparecerá aquí.</p>
+  </div>
+</div>
+{% endif %}
 {% endblock %}

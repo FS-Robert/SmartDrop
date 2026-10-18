@@ -1,127 +1,146 @@
 {% extends 'App/base.html' %}
-{% block title %}Panel administrativo{% endblock %}
+{% load static sd_ui %}
+{% block title %}Panel general{% endblock %}
 {% block nav_admin %}active{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/admin.css' %}?v=20261011-zona1">{% endblock %}
 
 {% block content %}
-<div class="admin-heading">
-  <h1 class="page-title">PANEL ADMINISTRATIVO</h1>
-</div>
-
-
-<div class="metric-grid">
-  <div class="metric">
-    <div class="label">Viviendas registradas</div>
-    <div class="val">{{ viviendas|length }}</div>
+<header class="page-head admin-heading">
+  <div>
+    <h1 class="page-title">Panel general</h1>
+    <p class="page-lede">El estado de la red de agua y lo que necesita tu atención hoy.</p>
   </div>
-  
-  <div class="metric">
-    <div class="label">Sensores</div>
-    <div class="val">{{ sensores|length }}</div>
+  <div class="page-actions">
+    <a href="{% url 'valvulas' %}" class="btn btn--secondary"><i class="ti ti-toggle-left" aria-hidden="true"></i>Electroválvulas</a>
+    <a href="{% url 'admin_reportes' %}" class="btn btn--primary"><i class="ti ti-list-details" aria-hidden="true"></i>Problemas reportados</a>
   </div>
+</header>
 
-  <div class="metric">
-    <div class="label">Lecturas recientes</div>
-    <div class="val">{{ lecturas|length }}</div>
+<!-- ── Necesita atención ── -->
+<section class="panel panel--flush admin-attention" aria-labelledby="atencion-titulo">
+  <div class="panel-head admin-flush-head">
+    <h2 class="panel-title" id="atencion-titulo">Necesita atención</h2>
   </div>
+  <ul class="list">
+    {% if n_reportes_pendientes > 0 %}
+    <li>
+      <a class="list-row" href="{% url 'admin_reportes' %}?estado=pendiente">
+        <span class="icon-chip icon-chip--warn"><i class="ti ti-alert-triangle" aria-hidden="true"></i></span>
+        <div class="list-row-main">
+          <p class="list-row-title">{{ n_reportes_pendientes }} reporte{{ n_reportes_pendientes|pluralize }} pendiente{{ n_reportes_pendientes|pluralize }}</p>
+          <p class="list-row-meta">Residentes esperando respuesta del equipo.</p>
+        </div>
+        <span class="list-row-aside btn btn--secondary btn--sm">Revisar</span>
+      </a>
+    </li>
+    {% endif %}
+    {% for s in sensores %}{% with mod=s.estado|estado_css %}{% if mod != 'ok' %}
+    <li>
+      <a class="list-row" href="{% url 'sensor_detail' s.id_sensor %}">
+        <span class="icon-chip icon-chip--{% if mod == 'bad' %}bad{% elif mod == 'warn' %}warn{% else %}none{% endif %}"><i class="ti ti-devices" aria-hidden="true"></i></span>
+        <div class="list-row-main">
+          <p class="list-row-title">Sensor de {{ s.tipo_sensor|default:'tipo desconocido'|lower }}: {{ s.estado|default:'sin estado'|lower }}</p>
+          <p class="list-row-meta">{{ s.modelo|default:'Sin modelo registrado' }}</p>
+        </div>
+        <span class="list-row-aside btn btn--ghost btn--sm">Ver sensor</span>
+      </a>
+    </li>
+    {% endif %}{% endwith %}{% endfor %}
+  </ul>
+  <div class="admin-attention-ok">
+    <span class="icon-chip icon-chip--ok" aria-hidden="true"><i class="ti ti-check"></i></span>
+    <p>Lo que no aparece en esta lista funciona con normalidad.</p>
+  </div>
+</section>
 
-  <a href="{% url 'admin_reportes' %}" style="text-decoration:none; color:inherit;">
-    <div class="metric" style="cursor:pointer; border-color:#d8b4fe;">
-      <div class="label" style="display:flex; justify-content:space-between; align-items:center;">
-        <span>Reportes pendientes</span>
-        <i class="ti ti-alert-triangle" style="color:#6B21A8; font-size:16px;"></i>
-      </div>
-      <div class="val{% if n_reportes_pendientes > 0 %} val-alert{% endif %}">
-        {{ n_reportes_pendientes }}
-      </div>
-    </div>
+<!-- ── Indicadores ── -->
+<div class="tiles admin-kpis metric-grid">
+  <div class="tile">
+    <div class="tile-head"><span class="icon-chip icon-chip--anil"><i class="ti ti-home" aria-hidden="true"></i></span><span class="tile-label">Viviendas registradas</span></div>
+    <p class="tile-value" data-countup>{{ viviendas|length }}</p>
+  </div>
+  <div class="tile">
+    <div class="tile-head"><span class="icon-chip icon-chip--agua"><i class="ti ti-devices" aria-hidden="true"></i></span><span class="tile-label">Sensores</span></div>
+    <p class="tile-value" data-countup>{{ sensores|length }}</p>
+  </div>
+  <div class="tile">
+    <div class="tile-head"><span class="icon-chip icon-chip--agua"><i class="ti ti-activity-heartbeat" aria-hidden="true"></i></span><span class="tile-label">Lecturas recientes</span></div>
+    <p class="tile-value" data-countup>{{ lecturas|length }}</p>
+  </div>
+  <a class="tile" href="{% url 'admin_reportes' %}">
+    <div class="tile-head"><span class="icon-chip {% if n_reportes_pendientes > 0 %}icon-chip--warn{% else %}icon-chip--ok{% endif %}"><i class="ti ti-alert-triangle" aria-hidden="true"></i></span><span class="tile-label">Reportes pendientes</span><span class="tile-chevron" aria-hidden="true"></span></div>
+    <p class="tile-value{% if n_reportes_pendientes > 0 %} val-alert{% endif %}" data-countup>{{ n_reportes_pendientes }}</p>
   </a>
 </div>
 
-<div class="admin-layout">
-  <section class="admin-sensors">
-    <h3 class="card-header">Todos los sensores</h3>
-    <div class="sensor-grid">
-      {% if sensores %}
-        {% for s in sensores %}
-          <div class="sensor-card">
-            <div class="info">
-              <div class="title">{{ s.tipo_sensor|default:'Sensor'|title }}</div>
-              <div class="meta">{{ s.modelo|default:'—' }} · {{ s.unidad|default:s.unidad_medida|default:'' }}</div>
-            </div>
-            <div class="actions">
-              <div class="status">{{ s.estado|default:'—' }}</div>
-              <a href="{% url 'sensor_detail' s.id_sensor %}" class="btn">Ver más</a>
-            </div>
-          </div>
-        {% endfor %}
-      {% else %}
-        <p class="muted">No hay sensores registrados.</p>
-      {% endif %}
-    </div>
-  </section>
-</div>
-
-<section class="admin-side">
-    <div class="historial-card">
-      <div class="card-header">Sensores</div>
-      <div id="top-sensors">
-        {% if sensores %}
-          {% for s in sensores|slice:":10" %}
-            <div style="padding:10px 0; display:flex; justify-content:space-between; align-items:center; gap:12px;">
-              <div style="display:flex;align-items:center;gap:10px;">
-                <i class="{% if s.tipo_sensor == 'nivel' %}ti ti-droplet{% elif s.tipo_sensor == 'calidad' %}ti ti-test-pipe{% elif s.tipo_sensor == 'flujo' %}ti ti-wave-sine{% elif s.tipo_sensor == 'presion' %}ti ti-gauge{% else %}ti ti-devices{% endif %}" style="font-size:18px;color:#6B21A8"></i>
-                <div>
-                  <div style="font-weight:700">{{ s.tipo_sensor|default:'Sensor'|title }}</div>
-                            <div style="font-size:12px;color:#6f6f7a">{{ s.modelo|default:'—' }} · {{ s.unidad }}</div>
-                </div>
-              </div>
-              <div style="text-align:right;color:#6f6f7a">{{ s.estado|title }}</div>
-            </div>
-          {% endfor %}
-        {% else %}
-          <p class="muted">No hay sensores registrados.</p>
-        {% endif %}
-      </div>
-    </div>
-  </section>
-
-<section class="admin-history">
-  <h3 class="card-header">Últimas lecturas</h3>
-  {% if lecturas %}
-    <table class="table-styled">
+<!-- ── Sensores ── -->
+<section class="section admin-sensors" aria-labelledby="sensores-titulo">
+  <div class="section-head">
+    <h2 class="section-title" id="sensores-titulo">Sensores de la red</h2>
+    <p class="section-lede">Abre un sensor para ver su historial y compararlo con otros.</p>
+  </div>
+  {% if sensores %}
+  <div class="table-wrap">
+    <table class="data-table">
+      <caption>Sensores registrados</caption>
       <thead>
-        <tr><th>#</th><th>Sensor</th><th>Vivienda</th><th>Valor</th><th>Fecha</th></tr>
+        <tr><th scope="col">Sensor</th><th scope="col">Modelo</th><th scope="col">Unidad</th><th scope="col">Estado</th><th scope="col"><span class="sr-only">Acciones</span></th></tr>
+      </thead>
+      <tbody>
+        {% for s in sensores %}
+        <tr>
+          <th scope="row">
+            <span class="admin-sensor-name">
+              <span class="icon-chip icon-chip--agua"><i class="{% if s.tipo_sensor == 'nivel' %}ti ti-droplet{% elif s.tipo_sensor == 'calidad' %}ti ti-test-pipe{% elif s.tipo_sensor == 'flujo' %}ti ti-wave-sine{% elif s.tipo_sensor == 'presion' %}ti ti-gauge{% else %}ti ti-devices{% endif %}" aria-hidden="true"></i></span>
+              {{ s.tipo_sensor|default:'Sensor'|title }}
+            </span>
+          </th>
+          <td>{{ s.modelo|default:'Sin modelo' }}</td>
+          <td>{{ s.unidad|default:s.unidad_medida|default:'—' }}</td>
+          <td><span class="status status--{{ s.estado|estado_css }}"><span class="status-dot" aria-hidden="true"></span>{{ s.estado|default:'Sin estado'|capfirst }}</span></td>
+          <td class="num"><a href="{% url 'sensor_detail' s.id_sensor %}" class="btn btn--ghost btn--sm">Ver historial</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="panel"><div class="empty"><span class="icon-chip icon-chip--lg icon-chip--none" aria-hidden="true"><i class="ti ti-devices"></i></span><h3>No hay sensores registrados</h3><p>Cuando se registre un sensor aparecerá aquí con su estado.</p></div></div>
+  {% endif %}
+</section>
+
+<!-- ── Últimas lecturas ── -->
+<section class="section admin-history" aria-labelledby="lecturas-titulo">
+  <div class="section-head">
+    <h2 class="section-title" id="lecturas-titulo">Últimas lecturas</h2>
+    <p class="section-lede">Se actualizan solas cuando los sensores envían datos.</p>
+  </div>
+  {% if lecturas %}
+  <div class="table-wrap admin-lecturas">
+    <table class="data-table table-styled">
+      <caption>Últimas 100 lecturas</caption>
+      <thead>
+        <tr><th scope="col" class="num">#</th><th scope="col">Sensor</th><th scope="col">Vivienda</th><th scope="col" class="num">Valor</th><th scope="col">Fecha</th></tr>
       </thead>
       <tbody>
       {% for row in lecturas|slice:":100" %}
         <tr data-realtime-sensor="{{ row.id_sensor }}">
-          <td>{{ forloop.counter }}</td>
+          <td class="num muted">{{ forloop.counter }}</td>
           <td>
-            <span style="display:inline-flex;align-items:center;gap:8px;">
-              <i class="{{ row.sensor_icon }}" style="font-size:16px;color:#6B21A8"></i>
-              <strong>{{ row.sensor_tipo|title }}</strong>
-              {% if row.sensor_unidad %}
-                <small style="color:#6f6f7a;margin-left:8px">{{ row.sensor_unidad }}</small>
-              {% endif %}
-            </span>
+            <span class="admin-sensor-name"><i class="{{ row.sensor_icon }}" aria-hidden="true"></i>{{ row.sensor_tipo|title }}</span>
           </td>
           <td>{{ row.id_vivienda }}</td>
-          <td class="realtime-reading-value" style="font-weight:800">
-            {{ row.valor }}
-            {% if row.sensor_unidad %}
-              <small style="color:#6f6f7a;margin-left:8px;font-weight:600">{{ row.sensor_unidad }}</small>
-            {% endif %}
-          </td>
-          <td class="realtime-reading-time">{{ row.fecha_registro }}</td>
+          <td class="num realtime-reading-value">{{ row.valor }} {% if row.sensor_unidad %}<small class="muted">{{ row.sensor_unidad }}</small>{% endif %}</td>
+          <td class="realtime-reading-time">{{ row.fecha_registro|fecha_corta }}</td>
         </tr>
       {% endfor %}
       </tbody>
     </table>
+  </div>
   {% else %}
-    <p class="muted">No hay lecturas disponibles.</p>
+  <div class="panel"><div class="empty"><span class="icon-chip icon-chip--lg icon-chip--none" aria-hidden="true"><i class="ti ti-activity-heartbeat"></i></span><h3>No hay lecturas disponibles</h3><p>Revisa que los sensores estén encendidos y conectados.</p></div></div>
   {% endif %}
 </section>
-
 {% endblock %}
 
 {% block extra_js %}
@@ -131,11 +150,15 @@
     const rows = document.querySelectorAll(
       `[data-realtime-sensor="${CSS.escape(String(reading.id_sensor))}"]`,
     );
+    const when = new Date(reading.fecha_registro || '');
+    const timeText = Number.isNaN(when.getTime())
+      ? (reading.fecha_registro || 'Ahora')
+      : when.toLocaleString('es-SV', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
     rows.forEach(function (row) {
       const value = row.querySelector('.realtime-reading-value');
       const time = row.querySelector('.realtime-reading-time');
       if (value) value.childNodes[0].textContent = `${reading.valor} `;
-      if (time) time.textContent = reading.fecha_registro || 'Ahora';
+      if (time) time.textContent = timeText;
     });
   });
 </script>

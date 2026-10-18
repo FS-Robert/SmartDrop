@@ -300,7 +300,7 @@ class AdminOnlyTests(MlTestCase):
         self.client.force_login(self.admin)
         response = self.client.get(reverse('ml_engine:dashboard'))
         self.assertContains(response, 'Realizar predicciones')
-        self.assertContains(response, 'Predicción de fugas')
+        self.assertContains(response, reverse('ml_engine:leaks'))
         self.assertContains(self.client.get(reverse('ml_engine:leaks')), 'Avisos de fuga')
 
     def test_la_api_rechaza_a_quien_no_es_admin(self):

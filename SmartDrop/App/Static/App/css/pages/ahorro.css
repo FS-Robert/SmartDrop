@@ -1,0 +1,311 @@
+/* ==========================================================================
+   SmartDrop — Ahorro: retroalimentación del consumo y consejos de ahorro.
+   El mensaje humano va primero, en la luz cálida; los números lo acompañan.
+   Solo tokens de smartdrop.css.
+   ========================================================================== */
+
+.ahorro-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s-5);
+  margin-bottom: var(--s-8);
+}
+
+@media (min-width: 1040px) {
+  .ahorro-layout {
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+.ahorro-side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+  min-width: 0;
+}
+
+.ahorro-side .panel-title {
+  margin-bottom: var(--s-3);
+}
+
+/* ── Retroalimentación ──────────────────────────────────────────────────── */
+.retro-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s-6);
+  align-items: center;
+}
+
+@media (min-width: 720px) {
+  .retro-hero {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  }
+}
+
+.retro-hero-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-3);
+  min-width: 0;
+}
+
+.retro-kicker {
+  margin: 0;
+  color: var(--c-ink-2);
+  font-weight: 600;
+}
+
+.retro-message {
+  margin: 0;
+  color: var(--c-ink);
+  font-family: var(--font-display);
+  font-size: var(--t-2xl);
+  font-weight: 800;
+  line-height: 1.25;
+  text-wrap: balance;
+}
+
+.retro-trend-line {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin: 0;
+  color: var(--c-ink-2);
+  font-weight: 600;
+}
+
+.retro-trend-line.is-up,
+.retro-stat-num.is-up {
+  color: var(--c-warn);
+}
+
+.retro-trend-line.is-down,
+.retro-stat-num.is-down {
+  color: var(--c-ok);
+}
+
+.retro-actual {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-2);
+  margin: var(--s-2) 0 0;
+  color: var(--c-ink-2);
+  font-weight: 600;
+}
+
+.retro-actual > .num {
+  color: var(--c-ink);
+  font-family: var(--font-display);
+  font-size: var(--t-4xl);
+  font-weight: 800;
+  line-height: 1;
+}
+
+.drop-indicator > svg {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  margin-inline: auto;
+}
+
+.drop-shell {
+  fill: var(--c-surface);
+  stroke: var(--c-line-strong);
+  stroke-width: 2;
+}
+
+.drop-fill {
+  fill: var(--c-agua);
+}
+
+.drop-guide {
+  stroke: var(--c-ink-3);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+.drop-label {
+  fill: var(--c-ink-2);
+  font-family: var(--font-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.retro-stat-num {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--t-3xl);
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.retro-periodo {
+  margin: var(--s-1) 0 0;
+  font-size: var(--t-sm);
+}
+
+.retro-ahorro {
+  color: var(--c-ok);
+}
+
+.tip-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  margin: 0 0 var(--s-4);
+  padding: 0;
+  list-style: none;
+}
+
+.tip-list > li {
+  display: flex;
+  gap: var(--s-3);
+  align-items: flex-start;
+  color: var(--c-ink);
+}
+
+.tip-list > li > .ti {
+  flex: none;
+  margin-top: 0.15em;
+  color: var(--c-ok);
+}
+
+/* ── Consejos ───────────────────────────────────────────────────────────── */
+.reco-summary {
+  margin-bottom: var(--s-8);
+}
+
+.reco-summary-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s-5) var(--s-8);
+  align-items: center;
+}
+
+@media (min-width: 840px) {
+  .reco-summary-grid {
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  }
+}
+
+.reco-summary-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.reco-summary-title {
+  margin: 0;
+  color: var(--c-ink-2);
+  font-family: var(--font-text);
+  font-size: var(--t-md);
+  font-weight: 600;
+}
+
+.reco-summary-total {
+  margin: 0;
+  color: var(--c-ink-2);
+  font-weight: 600;
+}
+
+.reco-summary-total > .num {
+  color: var(--c-ink);
+  font-family: var(--font-display);
+  font-size: var(--t-3xl);
+  font-weight: 800;
+  margin-right: var(--s-2);
+}
+
+.reco-progress-footer {
+  margin: 0;
+  color: var(--c-ink-2);
+  font-size: var(--t-sm);
+}
+
+.reco-consumption-note {
+  display: flex;
+  gap: var(--s-2);
+  align-items: flex-start;
+  margin: var(--s-5) 0 0;
+  padding-top: var(--s-4);
+  border-top: 1px solid var(--c-line);
+  color: var(--c-ink-2);
+  font-size: var(--t-sm);
+}
+
+.tips-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (min-width: 900px) {
+  .tips-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.tip-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--s-3) var(--s-4);
+  padding: var(--s-5);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  background: var(--c-surface);
+}
+
+.tip-card > .tip-complete-button {
+  grid-column: 2;
+  justify-self: start;
+}
+
+.tip-body {
+  min-width: 0;
+}
+
+.tip-title {
+  margin: 0 0 var(--s-2);
+  color: var(--c-ink);
+  font-family: var(--font-display);
+  font-size: var(--t-lg);
+  font-weight: 700;
+}
+
+.tip-description {
+  margin: 0 0 var(--s-2);
+  color: var(--c-ink-2);
+}
+
+.tip-impact {
+  margin: 0;
+  color: var(--c-ink);
+  font-size: var(--t-sm);
+}
+
+.tip-impact > span {
+  color: var(--c-ink-2);
+  font-weight: 600;
+}
+
+.tip-card.is-completed {
+  border-color: var(--c-ok-dot);
+  background: var(--c-ok-bg);
+}
+
+.tip-card.is-completed .tip-complete-button {
+  --btn-bg: var(--c-ok);
+  --btn-fg: var(--c-surface);
+  --btn-line: var(--c-ok);
+  --btn-bg-hover: var(--c-ok);
+  --btn-fg-hover: var(--c-surface);
+  --btn-line-hover: var(--c-ok);
+}

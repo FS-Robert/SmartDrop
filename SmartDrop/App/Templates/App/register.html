@@ -1,62 +1,89 @@
-{% load static %}
 <!DOCTYPE html>
 <html lang="{{ ui_idioma|default:'es' }}">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>SmartDrop — Registro</title>
-  <link rel="stylesheet" href="{% static 'App/fonts/tabler/tabler-icons-subset.css' %}?v=2.47"/>
-   <link rel="preconnect" href="https://fonts.googleapis.com">
-   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{% static 'App/css/dashboard.css' %}"/>
-  {% include 'App/_i18n_head.html' %}
+  <title>SmartDrop — Crear cuenta</title>
+  {% include 'App/_auth_head.html' %}
 </head>
-<body>
-  <main class="auth-panel">
-    <div class="auth-bg" id="auth-bg" data-bg="{% static 'App/img/fondo1.jpg' %}"></div>
-    <div class="auth-card">
-      <h1>Crear una cuenta</h1>
-      <p>Regístrate para comenzar a utilizar SmartDrop.</p>
-      <form method="post" novalidate>
-        {% csrf_token %}
-        {% if form.non_field_errors %}
-        <div class="form-error">{{ form.non_field_errors }}</div>
-        {% endif %}
 
-        <label for="id_email">Correo</label>
-        {{ form.email }}
-        {{ form.email.errors }}
+<body class="auth-body">
+  {% include 'App/_auth_icons.html' %}
 
-        <label for="id_nombre">Nombre</label>
-        {{ form.nombre }}
-        {{ form.nombre.errors }}
+  <div class="auth">
+    <main class="auth-main" id="contenido">
+      <div class="auth-inner">
+        <p class="brand brand--lg auth-brand"><span class="brand-mark" aria-hidden="true"></span><span>SmartDrop</span></p>
 
-        <label for="id_apellido">Apellido</label>
-        {{ form.apellido }}
-        {{ form.apellido.errors }}
+        <h1 class="page-title">Crea tu cuenta</h1>
+        <p class="page-lede">Con tu cuenta podrás ver el agua de tu zona y recibir avisos cuando algo cambie.</p>
 
-        <label for="id_password1">Contraseña</label>
-        {{ form.password1 }}
-        {{ form.password1.errors }}
+        <form method="post" class="auth-form" novalidate>
+          {% csrf_token %}
+          {% if form.non_field_errors %}
+          <div class="auth-error" role="alert">{{ form.non_field_errors }}</div>
+          {% endif %}
 
-        <label for="id_password2">Confirmar contraseña</label>
-        {{ form.password2 }}
-        {{ form.password2.errors }}
+          <div class="field">
+            <label class="field-label" for="id_email">Correo electrónico</label>
+            {{ form.email }}
+            {{ form.email.errors }}
+          </div>
 
-        <button type="submit" class="btn-primary">Crear cuenta</button>
-      </form>
-      <p class="auth-footer">¿Ya tienes una cuenta? <a href="{% url 'login' %}">Inicia sesión</a></p>
-    </div>
-  </main>
+          <div class="auth-pair">
+            <div class="field">
+              <label class="field-label" for="id_nombre">Nombre</label>
+              {{ form.nombre }}
+              {{ form.nombre.errors }}
+            </div>
+            <div class="field">
+              <label class="field-label" for="id_apellido">Apellido</label>
+              {{ form.apellido }}
+              {{ form.apellido.errors }}
+            </div>
+          </div>
 
-  <script>
-    document.addEventListener('DOMContentLoaded', function () {
-      var bg = document.getElementById('auth-bg');
-      if (bg) {
-        bg.style.backgroundImage = "url('" + bg.dataset.bg + "')";
-      }
-    });
-  </script>
+          <div class="field">
+            <label class="field-label" for="id_password1">Contraseña</label>
+            <div class="auth-pw">
+              {{ form.password1 }}
+              <button type="button" class="btn-icon auth-pw-toggle" aria-controls="id_password1" aria-pressed="false" aria-label="Mostrar contraseña" title="Mostrar contraseña">
+                <svg class="icon auth-pw-show" aria-hidden="true"><use href="#i-eye"></use></svg>
+                <svg class="icon auth-pw-hide" aria-hidden="true"><use href="#i-eye-off"></use></svg>
+              </button>
+            </div>
+            {{ form.password1.errors }}
+          </div>
+
+          <div class="field">
+            <label class="field-label" for="id_password2">Confirma la contraseña</label>
+            <div class="auth-pw">
+              {{ form.password2 }}
+              <button type="button" class="btn-icon auth-pw-toggle" aria-controls="id_password2" aria-pressed="false" aria-label="Mostrar contraseña" title="Mostrar contraseña">
+                <svg class="icon auth-pw-show" aria-hidden="true"><use href="#i-eye"></use></svg>
+                <svg class="icon auth-pw-hide" aria-hidden="true"><use href="#i-eye-off"></use></svg>
+              </button>
+            </div>
+            <p class="field-hint">Escríbela otra vez para evitar errores.</p>
+            {{ form.password2.errors }}
+          </div>
+
+          <button type="submit" class="btn btn--primary btn--lg btn--block auth-submit"><span>Crear cuenta</span></button>
+        </form>
+
+        <div class="auth-alt">
+          <p class="auth-alt-text">¿Ya tienes una cuenta?</p>
+          <a class="auth-alt-link" href="{% url 'login' %}">Iniciar sesión</a>
+        </div>
+      </div>
+    </main>
+
+    <aside class="auth-scene">
+      <div class="auth-scene-card">
+        <p class="auth-scene-text">El tanque de tu zona y tus avisos en un solo lugar.</p>
+        {% include 'App/_zona_ilustracion.html' with nivel=70 decorativo=True uid='auth' clase='auth-zona' %}
+      </div>
+    </aside>
+  </div>
+
+  {% include 'App/_auth_scripts.html' %}
 </body>
 </html>

@@ -1,0 +1,364 @@
+/* ==========================================================================
+   SmartDrop — páginas de sensores: presión, calidad, tanque, estado del
+   sistema y detalle de sensor. Patrón: estado en palabras → valor exacto →
+   escala de referencia → detalles y ayuda. Solo tokens de smartdrop.css.
+   ========================================================================== */
+
+.sensor-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s-5);
+  margin-bottom: var(--s-8);
+}
+
+@media (min-width: 960px) {
+  .sensor-layout {
+    grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+.sensor-aside {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+  min-width: 0;
+}
+
+/* ── Estado principal ───────────────────────────────────────────────────── */
+.sensor-state {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+
+.sensor-state-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+.sensor-message {
+  max-width: 28ch;
+  margin: 0;
+  color: var(--c-ink);
+  font-family: var(--font-display);
+  font-size: var(--t-2xl);
+  font-weight: 800;
+  line-height: 1.25;
+  text-wrap: balance;
+}
+
+.sensor-value {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s-2);
+  margin: var(--s-2) 0 0;
+  color: var(--c-ink);
+}
+
+.sensor-value > .num {
+  font-family: var(--font-display);
+  font-size: var(--t-4xl);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.sensor-unit {
+  color: var(--c-ink-2);
+  font-size: var(--t-md);
+  font-weight: 600;
+}
+
+.sensor-value-note {
+  margin: 0;
+  color: var(--c-ink-2);
+  font-size: var(--t-sm);
+}
+
+/* ── Escala de referencia con zonas y aguja ─────────────────────────────── */
+.range-scale {
+  margin-top: var(--s-3);
+}
+
+.range-track {
+  position: relative;
+  display: flex;
+  gap: 3px;
+  height: 14px;
+}
+
+.range-zone {
+  flex-grow: 0;
+  flex-shrink: 1;
+  border-radius: var(--r-pill);
+}
+
+.range-zone--ok {
+  background: var(--c-ok-dot);
+}
+
+.range-zone--warn {
+  background: var(--c-warn-dot);
+}
+
+.range-zone--bad {
+  background: var(--c-bad-dot);
+}
+
+.range-needle {
+  position: absolute;
+  top: 50%;
+  width: 24px;
+  height: 24px;
+  margin-left: -12px;
+  border: 4px solid var(--c-surface);
+  border-radius: 50%;
+  background: var(--c-ink);
+  box-shadow: var(--shadow-raise);
+  transform: translateY(-50%);
+  transition: left var(--dur-3) var(--ease);
+}
+
+.range-labels {
+  display: flex;
+  gap: 3px;
+  margin-top: var(--s-3);
+  color: var(--c-ink);
+  font-size: var(--t-sm);
+  font-weight: 600;
+}
+
+.range-labels > span {
+  flex-grow: 0;
+  flex-shrink: 1;
+  text-align: center;
+}
+
+.range-ticks {
+  position: relative;
+  height: 1.4em;
+  margin-top: var(--s-1);
+  color: var(--c-ink-3);
+  font-size: var(--t-xs);
+}
+
+.range-ticks > span {
+  position: absolute;
+  left: 0;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+.range-ticks > span:first-child {
+  transform: none;
+}
+
+.range-ticks > span:last-child {
+  transform: translateX(-100%);
+}
+
+.range-ticks--flat {
+  margin-top: var(--s-2);
+}
+
+/* ── Paneles laterales ──────────────────────────────────────────────────── */
+.sensor-aside .panel-title {
+  margin-bottom: var(--s-3);
+}
+
+.sensor-valve {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-2);
+}
+
+.sensor-valve-note {
+  margin: 0;
+  color: var(--c-ink-3);
+  font-size: var(--t-sm);
+}
+
+.sensor-help {
+  margin-bottom: var(--s-8);
+}
+
+.sensor-help .panel-title {
+  margin-bottom: var(--s-3);
+}
+
+.sensor-help .prose > p {
+  margin: 0 0 var(--s-3);
+}
+
+/* ── Calidad: parámetros ────────────────────────────────────────────────── */
+.param-value {
+  color: var(--c-ink);
+  font-size: var(--t-lg);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.param-unit {
+  color: var(--c-ink-2);
+  font-size: var(--t-sm);
+  font-weight: 500;
+}
+
+/* ── Tanque ─────────────────────────────────────────────────────────────── */
+.tanque-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s-6);
+  align-items: center;
+}
+
+.tanque-hero-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  min-width: 0;
+}
+
+.tanque-svg {
+  display: block;
+  width: 100%;
+  max-width: 300px;
+  margin-inline: auto;
+}
+
+@media (min-width: 720px) {
+  .tanque-hero {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  }
+
+  .tanque-svg {
+    max-width: 360px;
+  }
+}
+
+.tanque-note {
+  margin: var(--s-4) 0 0;
+  font-size: var(--t-sm);
+}
+
+/* ── Estado del sistema y detalle de sensor ─────────────────────────────── */
+.system-summary {
+  margin-bottom: var(--s-6);
+}
+
+.chart-panel {
+  margin-bottom: var(--s-6);
+}
+
+.chart-box {
+  position: relative;
+  width: 100%;
+  height: 320px;
+}
+
+@media (max-width: 640px) {
+  .chart-box {
+    height: 240px;
+  }
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2) var(--s-5);
+  margin: var(--s-3) 0 0;
+  color: var(--c-ink-2);
+  font-size: var(--t-sm);
+}
+
+.chart-legend-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: var(--s-2);
+  border-radius: var(--r-xs);
+  vertical-align: -1px;
+}
+
+.chart-legend-swatch--agua {
+  background: var(--c-agua);
+}
+
+.chart-legend-swatch--anil {
+  background: var(--c-anil);
+}
+
+.chart-legend-swatch--warn {
+  background: var(--c-warn-dot);
+}
+
+.system-supply {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+}
+
+.system-notif-text {
+  margin: var(--s-3) 0 var(--s-4);
+  color: var(--c-ink-2);
+}
+
+.sensor-chart-controls {
+  --cluster-gap: var(--s-3) var(--s-5);
+  align-items: center;
+}
+
+.field--inline {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--s-3);
+}
+
+.field--inline > .field-label {
+  margin: 0;
+  white-space: nowrap;
+}
+
+.field--inline > select {
+  width: auto;
+  min-width: 12rem;
+}
+
+.chart-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-3);
+  border-radius: var(--r-md);
+  background: var(--c-surface);
+  color: var(--c-ink-2);
+  text-align: center;
+}
+
+.chart-overlay > p {
+  max-width: 32ch;
+  margin: 0;
+}
+
+.chart-spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--c-anil-soft);
+  border-top-color: var(--c-anil);
+  border-radius: 50%;
+  animation: sd-spin 0.8s linear infinite;
+}
+
+@keyframes sd-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

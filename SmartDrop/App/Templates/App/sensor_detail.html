@@ -1,74 +1,69 @@
 {% extends 'App/base.html' %}
+{% load static %}
 {% block title %}Sensor: {{ sensor.tipo_sensor|title }}{% endblock %}
 {% block nav_admin %}active{% endblock %}
-
-{% block extra_css %}
-  <style>
-    .sensor-header { display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px }
-    .chart-card { background:var(--panel, #fff);padding:12px 14px;border-radius:12px;border:1px solid #efe5fb; max-width:900px }
-    .chart-box { position:relative; height:260px }
-    .chart-loading { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px;
-      background:rgba(255,255,255,.85); border-radius:10px; color:#6B21A8; font-weight:700; font-size:14px }
-    .chart-loading[hidden] { display:none }
-    .chart-spinner { width:30px; height:30px; border:3px solid #e9d5ff; border-top-color:#6B21A8; border-radius:50%; animation:chart-spin .8s linear infinite }
-    @keyframes chart-spin { to { transform:rotate(360deg) } }
-    .chart-empty { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#6f6f7a; font-size:14px }
-    .chart-empty[hidden] { display:none }
-    /* Range buttons styled to match site */
-    .range-btn { background:transparent; border:1px solid #efe5fb; color:#6B21A8; padding:6px 10px; border-radius:8px; cursor:pointer; font-weight:700; font-size:13px }
-    .range-btn:hover { background:#f6f0fb }
-    .range-btn.active { background:#6B21A8; color:#fff; border-color:#53148f }
-  </style>
-{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/sensores.css' %}?v=20261011-zona1">{% endblock %}
 
 {% block content %}
-  <div class="sensor-header">
-    <div>
-      <h2 style="margin:0">{{ sensor.tipo_sensor|title }}</h2>
-      <div style="color:#6f6f7a">{{ sensor.modelo|default:'—' }} · {{ sensor.unidad|default:sensor.unidad_medida|default:'' }}</div>
-      <div style="color:#6f6f7a;font-size:13px">Promedio de las lecturas de todas las viviendas</div>
-    </div>
-    <div style="text-align:right">
-      <a href="{% url 'admin_panel' %}" class="btn" style="background:#eee;padding:8px 12px;border-radius:8px;color:#333;text-decoration:none;">Volver</a>
-    </div>
-  </div>
+<nav class="breadcrumb" aria-label="Ruta">
+  <a href="{% url 'admin_panel' %}">Panel general</a>
+  <span aria-current="page">{{ sensor.tipo_sensor|title }}</span>
+</nav>
 
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:12px">
-    <div style="display:flex;gap:8px;align-items:center">
-      <div style="font-size:13px;color:#6f6f7a;margin-right:8px">Rango:</div>
-      <div id="rangeBtns" style="display:flex;gap:8px">
-        <button class="btn range-btn" data-range="1h">1h</button>
-        <button class="btn range-btn" data-range="1d">1d</button>
-        <button class="btn range-btn" data-range="1w">1sem</button>
-        <button class="btn range-btn" data-range="1m">1mes</button>
+<header class="page-head sensor-header">
+  <div>
+    <h1 class="page-title">{{ sensor.tipo_sensor|title }}</h1>
+    <p class="page-lede">Promedio de las lecturas de todas las viviendas.</p>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'admin_panel' %}" class="btn btn--secondary"><i class="ti ti-arrow-left" aria-hidden="true"></i>Volver al panel</a>
+  </div>
+</header>
+
+<dl class="kv system-summary">
+  <div><dt>Modelo</dt><dd>{{ sensor.modelo|default:'Sin modelo registrado' }}</dd></div>
+  <div><dt>Unidad</dt><dd>{{ sensor.unidad|default:sensor.unidad_medida|default:'Sin unidad' }}</dd></div>
+  <div><dt>Puntos en la gráfica</dt><dd id="pointsInfo" aria-live="polite">Mostrando 0 puntos</dd></div>
+</dl>
+
+<section class="panel chart-panel" aria-labelledby="historial-titulo">
+  <div class="panel-head">
+    <h2 class="panel-title" id="historial-titulo">Historial</h2>
+    <div class="cluster sensor-chart-controls">
+      <div class="segmented" id="rangeBtns" role="group" aria-label="Periodo de la gráfica">
+        <button type="button" class="segmented-btn range-btn" data-range="1h" aria-pressed="false">1 hora</button>
+        <button type="button" class="segmented-btn range-btn" data-range="1d" aria-pressed="false">1 día</button>
+        <button type="button" class="segmented-btn range-btn" data-range="1w" aria-pressed="false">1 semana</button>
+        <button type="button" class="segmented-btn range-btn" data-range="1m" aria-pressed="false">1 mes</button>
+      </div>
+      <div class="field field--inline">
+        <label class="field-label" for="compare-sensor">Comparar con</label>
+        <select id="compare-sensor" name="compare_id">
+          <option value="">Sin comparación</option>
+          {% for option in sensores_comparacion %}
+          <option value="{{ option.id_sensor }}">{{ option.tipo_sensor|title }}{% if option.unidad_medida %} ({{ option.unidad_medida }}){% endif %}</option>
+          {% endfor %}
+        </select>
       </div>
     </div>
-    <div id="pointsInfo" style="color:#6f6f7a;font-size:13px">Mostrando 0 puntos</div>
   </div>
 
-  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
-    <label style="font-size:13px;font-weight:700">Comparar con
-      <select id="compare-sensor" name="compare_id">
-        <option value="">Sin comparación</option>
-        {% for option in sensores_comparacion %}
-        <option value="{{ option.id_sensor }}">{{ option.tipo_sensor|title }}{% if option.unidad_medida %} ({{ option.unidad_medida }}){% endif %}</option>
-        {% endfor %}
-      </select>
-    </label>
-  </div>
-
-  <div class="chart-card">
-    <div class="chart-box">
-      <canvas id="trendChart"></canvas>
-      <div id="chartEmpty" class="chart-empty" hidden>Sin lecturas en este rango</div>
-      <div id="chartLoading" class="chart-loading" hidden><div class="chart-spinner"></div><span>Recopilando datos…</span></div>
+  <div class="chart-box">
+    <canvas id="trendChart" role="img" aria-label="Gráfica de lecturas de {{ sensor.tipo_sensor }}"></canvas>
+    <div id="chartEmpty" class="chart-overlay" hidden>
+      <p>Sin lecturas en este periodo. Prueba con un periodo más largo.</p>
+    </div>
+    <div id="chartLoading" class="chart-overlay" hidden>
+      <span class="chart-spinner" aria-hidden="true"></span>
+      <p>Recopilando datos…</p>
     </div>
   </div>
-
+</section>
 {% endblock %}
 
 {% block extra_js %}
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="{% static 'App/js/sd_charts.js' %}?v=20261011-zona1"></script>
   <script>
     (function(){
       const sensorId = '{{ sensor.id_sensor }}';
@@ -78,18 +73,22 @@
 
       const chart = new Chart(ctx, {
         type: 'line',
-        data: { labels: [], datasets: [{ label: '{{ sensor.tipo_sensor|title }}', data: [], borderColor: '#6B21A8', backgroundColor: 'rgba(107,33,168,0.08)', fill:true, tension:0.3, pointRadius:0, pointHoverRadius:4, borderWidth:2 }] },
+        data: { labels: [], datasets: [{ label: '{{ sensor.tipo_sensor|title }}', data: [], borderColor: SDCharts.color('agua'), backgroundColor: SDCharts.alpha('agua', 0.12), fill: true }] },
         options: {
           responsive: true,
-          maintainAspectRatio: false,
-          interaction: { mode:'index', intersect:false },
+          interaction: { mode: 'index', intersect: false },
           scales: {
-            x: { display: true, title: { display: false }, ticks: { autoSkip:true, maxTicksLimit:6, maxRotation:0 }, grid: { display:false } },
-            y: { display: true, title: { display: true, text: unitLabel } }
+            x: { ticks: { autoSkip: true, maxTicksLimit: 6, maxRotation: 0 }, grid: { display: false } },
+            y: { title: { display: Boolean(unitLabel), text: unitLabel } }
           },
-          plugins: { legend: { display:true, position:'bottom', labels: { boxWidth:12 } } }
+          plugins: { legend: { display: true, position: 'bottom' } }
         }
       });
+      chart.$sdRecolor = function () {
+        const [main, other] = chart.data.datasets;
+        if (main) { main.borderColor = SDCharts.color('agua'); main.backgroundColor = SDCharts.alpha('agua', 0.12); }
+        if (other) { other.borderColor = SDCharts.color('anil'); }
+      };
 
       const pointsInfo = document.getElementById('pointsInfo');
       const compareSelect = document.getElementById('compare-sensor');
@@ -99,7 +98,7 @@
         return labels.map(l=>{
           const d=new Date(l);
           if (isNaN(d)) return l;
-          return d.toLocaleString(undefined,{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+          return d.toLocaleString('es-SV',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
         });
       }
 
@@ -113,10 +112,11 @@
         const loadingTimer = setTimeout(() => { if (token === loadToken) loading.hidden = false; }, 300);
         try{
           currentRange = range;
-          // highlight active
-          document.querySelectorAll('.range-btn').forEach(b=>b.classList.remove('active'));
-          const btn = document.querySelector('.range-btn[data-range="'+range+'"]');
-          if(btn) btn.classList.add('active');
+          document.querySelectorAll('.range-btn').forEach(b=>{
+            const isActive = b.dataset.range === range;
+            b.classList.toggle('active', isActive);
+            b.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+          });
 
           const params = new URLSearchParams({ range });
           if (compareSelect.value) params.set('compare_id', compareSelect.value);
@@ -134,12 +134,9 @@
             chart.data.datasets.push({
               label: json.compare.sensor_label,
               data: json.compare.data,
-              borderColor: '#0F6E56',
-              backgroundColor: 'rgba(15,110,86,0.08)',
+              borderColor: SDCharts.color('anil'),
               fill: false,
-              tension: 0.3,
-              pointRadius: 0,
-              borderWidth: 2,
+              borderDash: [6, 4],
             });
           }
           chart.update();
@@ -153,11 +150,11 @@
         }
       }
 
-      // attach buttons
       document.querySelectorAll('.range-btn').forEach(b=>{
         b.addEventListener('click', ()=>{ loadRange(b.dataset.range); });
       });
-      compareSelect.addEventListener('change', () => loadRange('1d'));
+      // Al comparar se mantiene el periodo elegido.
+      compareSelect.addEventListener('change', () => loadRange(currentRange));
 
       let reloadTimer = null;
       window.addEventListener('smartdrop:sensor-reading', function (event) {
@@ -169,7 +166,6 @@
         reloadTimer = setTimeout(() => { reloadTimer = null; loadRange(currentRange); }, 60000);
       });
 
-      // load default range
       loadRange('1d');
     })();
   </script>

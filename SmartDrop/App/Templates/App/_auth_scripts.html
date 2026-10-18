@@ -1,0 +1,57 @@
+{% load static %}
+<script src="{% static 'App/js/sd_motion.js' %}?v=20261011-zona2"></script>
+<script>
+    (function () {
+      // Autocompletado que el formulario no trae (se agrega solo si falta).
+      var autocompletar = {
+        id_email: 'email',
+        id_password: 'current-password',
+        id_nombre: 'given-name',
+        id_apellido: 'family-name',
+        id_password1: 'new-password',
+        id_password2: 'new-password'
+      };
+      Object.keys(autocompletar).forEach(function (id) {
+        var campo = document.getElementById(id);
+        if (campo && !campo.hasAttribute('autocomplete')) campo.setAttribute('autocomplete', autocompletar[id]);
+      });
+
+      // Mostrar u ocultar la contraseña: botón de alternar (aria-pressed) que controla su campo.
+      var botones = document.querySelectorAll('.auth-pw-toggle');
+      function ocultarContrasenas() {
+        botones.forEach(function (boton) {
+          var campo = document.getElementById(boton.getAttribute('aria-controls'));
+          if (campo) campo.type = 'password';
+          boton.setAttribute('aria-pressed', 'false');
+        });
+      }
+      botones.forEach(function (boton) {
+        var campo = document.getElementById(boton.getAttribute('aria-controls'));
+        if (!campo) return;
+        campo.setAttribute('autocapitalize', 'none');
+        campo.setAttribute('spellcheck', 'false');
+        boton.addEventListener('click', function () {
+          var mostrar = boton.getAttribute('aria-pressed') !== 'true';
+          campo.type = mostrar ? 'text' : 'password';
+          boton.setAttribute('aria-pressed', mostrar ? 'true' : 'false');
+        });
+      });
+
+      // Al enviar: la contraseña vuelve a ocultarse y el botón indica que está trabajando (sin doble envío).
+      var form = document.querySelector('.auth-form');
+      var enviar = form ? form.querySelector('[type="submit"]') : null;
+      var enviando = false;
+      if (form) {
+        form.addEventListener('submit', function (event) {
+          if (enviando) { event.preventDefault(); return; }
+          enviando = true;
+          ocultarContrasenas();
+          if (enviar) enviar.classList.add('is-loading');
+        });
+      }
+      window.addEventListener('pageshow', function () {
+        enviando = false;
+        if (enviar) enviar.classList.remove('is-loading');
+      });
+    }());
+  </script>

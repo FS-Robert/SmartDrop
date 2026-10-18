@@ -1,116 +1,141 @@
 {% extends 'App/base.html' %}
+{% load static sd_ui %}
 {% block title %}Reporte #{{ reporte.id_reporte }}{% endblock %}
 {% block nav_reportar %}{% if not es_admin %}active{% endif %}{% endblock %}
 {% block nav_admin_reportes %}{% if es_admin %}active{% endif %}{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/comunidad.css' %}?v=20261011-zona1">{% endblock %}
 
 {% block content %}
-<div class="reportes-heading reporte-detalle-heading">
-  <a href="{% if es_admin %}{% url 'admin_reportes' %}{% else %}{% url 'reportes_panel' %}{% endif %}" class="reportes-link">
-    <i class="ti ti-arrow-left"></i>Volver
-  </a>
-  <h1 class="page-title">{{ reporte.tipo_label|upper }}</h1>
-  <p class="page-subtitle">
-    Reporte #{{ reporte.id_reporte }} · {{ reporte.autor_nombre }} · {{ reporte.fecha_reporte|slice:':16' }}
-    · <span class="badge badge-estado-{{ reporte.estado }}">{{ reporte.estado_label }}</span>
-  </p>
-</div>
+<nav class="breadcrumb" aria-label="Ruta">
+  {% if es_admin %}<a href="{% url 'admin_reportes' %}">Problemas reportados</a>{% else %}<a href="{% url 'reportes_panel' %}">Reportar un problema</a>{% endif %}
+  <span aria-current="page">Reporte #{{ reporte.id_reporte }}</span>
+</nav>
+
+<header class="page-head reportes-heading reporte-detalle-heading">
+  <div>
+    <h1 class="page-title">{{ reporte.tipo_label }}</h1>
+    <div class="reporte-meta">
+      <span class="status status--{{ reporte.estado|estado_css }} badge-estado-{{ reporte.estado }}"><span class="status-dot" aria-hidden="true"></span>{{ reporte.estado_label }}</span>
+      <span>Reporte #{{ reporte.id_reporte }}</span>
+      <span>{{ reporte.autor_nombre }}</span>
+      <time datetime="{{ reporte.fecha_reporte }}">{{ reporte.fecha_reporte|fecha_corta }}</time>
+    </div>
+  </div>
+  <div class="page-actions">
+    <a href="{% if es_admin %}{% url 'admin_reportes' %}{% else %}{% url 'reportes_panel' %}{% endif %}" class="btn btn--secondary reportes-link"><i class="ti ti-arrow-left" aria-hidden="true"></i>Volver</a>
+  </div>
+</header>
 
 {% if messages %}
+  <div class="page-messages">
   {% for message in messages %}
-    <div class="alert-box full-width card msg-{{ message.tags }}">
-      <i class="ti ti-{% if message.tags == 'success' %}check{% else %}info-circle{% endif %} alert-icon"></i>
-      <div class="alert-text">{{ message }}</div>
+    <div class="notice {% if message.tags == 'success' %}notice--ok{% elif message.tags == 'error' %}notice--bad{% else %}notice--info{% endif %} msg-{{ message.tags }}" role="status">
+      <i class="ti ti-{% if message.tags == 'success' %}check{% else %}info-circle{% endif %}" aria-hidden="true"></i>
+      <div><p>{{ message }}</p></div>
     </div>
   {% endfor %}
+  </div>
 {% endif %}
 
 <div class="reporte-detalle-layout">
   <div class="reportes-main">
-    <div class="card">
-      <div class="card-header">Descripción</div>
+    <section class="panel" aria-labelledby="desc-titulo">
+      <h2 class="panel-title" id="desc-titulo">Descripción</h2>
       <p class="reporte-descripcion">{{ reporte.descripcion|linebreaksbr }}</p>
       {% if reporte.ubicacion %}
-        <p class="reportes-hint"><i class="ti ti-map-pin"></i> {{ reporte.ubicacion }}</p>
+        <p class="comunidad-lugar"><i class="ti ti-map-pin" aria-hidden="true"></i>{{ reporte.ubicacion }}</p>
       {% endif %}
-    </div>
+    </section>
 
-    <div class="card">
-      <div class="card-header">Evidencia adjunta ({{ adjuntos|length }})</div>
+    {% if not es_admin and reporte.respuesta_admin %}
+    <section class="panel panel--tint respuesta-oficial" aria-labelledby="respuesta-titulo">
+      <h2 class="panel-title" id="respuesta-titulo"><i class="ti ti-shield-check" aria-hidden="true"></i> Respuesta del equipo</h2>
+      <p class="reporte-descripcion">{{ reporte.respuesta_admin|linebreaksbr }}</p>
+    </section>
+    {% endif %}
+
+    <section class="panel" aria-labelledby="evidencia-titulo">
+      <div class="panel-head">
+        <h2 class="panel-title" id="evidencia-titulo">Fotos y videos <span class="muted">({{ adjuntos|length }})</span></h2>
+        {% if not es_admin %}
+        <form method="post" action="{% url 'reporte_adjuntar' reporte.id_reporte %}" enctype="multipart/form-data" class="adjuntar-mas">
+          {% csrf_token %}
+          <label class="btn btn--secondary btn--sm adjuntos-btn">
+            <i class="ti ti-plus" aria-hidden="true"></i>Agregar fotos o videos
+            <input type="file" name="adjuntos" multiple accept="image/*,video/*" class="adjuntos-input" onchange="this.form.submit()"/>
+          </label>
+        </form>
+        {% endif %}
+      </div>
       {% if adjuntos %}
         <div class="evidencia-grid">
           {% for adj in adjuntos %}
             {% if adj.tipo == 'video' %}
               <video class="evidencia-item" controls preload="metadata" src="{{ adj.url }}"></video>
             {% else %}
-              <a href="{{ adj.url }}" target="_blank" rel="noopener">
+              <a href="{{ adj.url }}" target="_blank" rel="noopener" class="evidencia-link">
                 <img class="evidencia-item" src="{{ adj.url }}" alt="{{ adj.nombre|default:'Evidencia' }}" loading="lazy"/>
               </a>
             {% endif %}
           {% endfor %}
         </div>
       {% else %}
-        <p class="reportes-empty">Sin evidencia adjunta.</p>
+        <p class="reportes-empty muted">Este reporte no tiene fotos ni videos.</p>
       {% endif %}
-
-      {% if not es_admin %}
-      <form method="post" action="{% url 'reporte_adjuntar' reporte.id_reporte %}" enctype="multipart/form-data" class="adjuntar-mas">
-        {% csrf_token %}
-        <label class="adjuntos-btn">
-          <i class="ti ti-plus"></i> Agregar evidencia
-          <input type="file" name="adjuntos" multiple accept="image/*,video/*" hidden onchange="this.form.submit()"/>
-        </label>
-      </form>
-      {% endif %}
-    </div>
+    </section>
 
     {% if es_admin %}
-    <div class="card">
-      <div class="card-header">Gestión del reporte</div>
-      <form method="post" action="{% url 'admin_reporte_update' reporte.id_reporte %}" class="admin-gestion">
+    <section class="panel" aria-labelledby="gestion-titulo">
+      <h2 class="panel-title" id="gestion-titulo">Gestión del reporte</h2>
+      <form method="post" action="{% url 'admin_reporte_update' reporte.id_reporte %}" class="admin-gestion stack">
         {% csrf_token %}
-        <div class="admin-gestion-row">
-          <label>Estado
-            <select name="estado" class="field-input">
+        <div class="form-grid admin-gestion-row">
+          <div class="field">
+            <label class="field-label" for="gestion-estado">Estado</label>
+            <select name="estado" id="gestion-estado" class="field-input">
               <option value="pendiente" {% if reporte.estado == 'pendiente' %}selected{% endif %}>Pendiente</option>
               <option value="en_proceso" {% if reporte.estado == 'en_proceso' %}selected{% endif %}>En proceso</option>
               <option value="resuelto" {% if reporte.estado == 'resuelto' %}selected{% endif %}>Resuelto</option>
             </select>
-          </label>
-          <label>Prioridad
-            <select name="prioridad" class="field-input">
+          </div>
+          <div class="field">
+            <label class="field-label" for="gestion-prioridad">Prioridad</label>
+            <select name="prioridad" id="gestion-prioridad" class="field-input">
               <option value="baja" {% if reporte.prioridad == 'baja' %}selected{% endif %}>Baja</option>
               <option value="media" {% if reporte.prioridad == 'media' %}selected{% endif %}>Media</option>
               <option value="alta" {% if reporte.prioridad == 'alta' %}selected{% endif %}>Alta</option>
             </select>
-          </label>
+          </div>
         </div>
-        <label class="field-label" for="respuesta_admin">Respuesta oficial (visible para el usuario)</label>
-        <textarea name="respuesta_admin" rows="3" class="field-input"
-          placeholder="Ej: Cuadrilla enviada a la zona, se estima solución en 24h...">{{ reporte.respuesta_admin|default:'' }}</textarea>
-        <button type="submit" class="btn-primary"><i class="ti ti-check"></i> Guardar y notificar</button>
+        <div class="field">
+          <label class="field-label" for="respuesta_admin">Respuesta oficial</label>
+          <p class="field-hint">La verá la persona que hizo el reporte.</p>
+          <textarea name="respuesta_admin" id="respuesta_admin" rows="3" class="field-input"
+            placeholder="Ej: Cuadrilla enviada a la zona, se estima solución en 24 h.">{{ reporte.respuesta_admin|default:'' }}</textarea>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn--primary"><i class="ti ti-check" aria-hidden="true"></i>Guardar y notificar</button>
+        </div>
       </form>
-    </div>
-    {% elif reporte.respuesta_admin %}
-    <div class="card respuesta-oficial">
-      <div class="card-header"><i class="ti ti-shield-check"></i> Respuesta del equipo</div>
-      <p class="reporte-descripcion">{{ reporte.respuesta_admin|linebreaksbr }}</p>
-    </div>
+    </section>
     {% endif %}
   </div>
 
-  <!-- Chat -->
-  <div class="reportes-side">
-    <div class="card chat-card">
-      <div class="card-header"><i class="ti ti-messages"></i> Conversación</div>
-      <div class="chat-messages" id="chat-messages" data-reporte="{{ reporte.id_reporte }}">
+  <aside class="reportes-side" aria-labelledby="chat-titulo">
+    <section class="panel panel--flush chat-card">
+      <div class="chat-head">
+        <h2 class="panel-title" id="chat-titulo"><i class="ti ti-messages" aria-hidden="true"></i> Conversación</h2>
+        <p class="muted chat-head-note">{% if es_admin %}Responde a la persona que reportó.{% else %}Habla con el equipo de SmartDrop.{% endif %}</p>
+      </div>
+      <div class="chat-messages" id="chat-messages" data-reporte="{{ reporte.id_reporte }}" aria-live="polite">
         {% for mensaje in mensajes_chat %}
         <div class="chat-msg {% if mensaje.propio %}propio{% endif %}" data-id="{{ mensaje.id_mensaje }}">
           <div class="chat-msg-autor">
-            {% if mensaje.es_admin_emisor %}<i class="ti ti-shield-check"></i>{% endif %}
+            {% if mensaje.es_admin_emisor %}<i class="ti ti-shield-check" aria-hidden="true"></i>{% endif %}
             {{ mensaje.autor_nombre }}
           </div>
           <div class="chat-msg-texto">{{ mensaje.mensaje }}</div>
-          <div class="chat-msg-fecha">{{ mensaje.fecha_envio|slice:'5:16' }}</div>
+          <div class="chat-msg-fecha">{{ mensaje.fecha_envio|fecha_corta }}</div>
         </div>
         {% empty %}
         <p class="reportes-empty" id="chat-vacio">Aún no hay mensajes. {% if not es_admin %}Escribe aquí si necesitas dar más detalles.{% endif %}</p>
@@ -118,12 +143,13 @@
       </div>
       <form method="post" class="chat-form">
         {% csrf_token %}
+        <label class="sr-only" for="chat-input">Mensaje</label>
         <input type="text" name="mensaje" id="chat-input" class="field-input"
-          placeholder="Escribe un mensaje..." maxlength="1000" autocomplete="off" required/>
-        <button type="submit" class="chat-send" title="Enviar" aria-label="Enviar"><i class="ti ti-send"></i></button>
+          placeholder="Escribe un mensaje…" maxlength="1000" autocomplete="off" required/>
+        <button type="submit" class="btn btn--primary btn-icon chat-send" title="Enviar mensaje" aria-label="Enviar mensaje"><i class="ti ti-send" aria-hidden="true"></i></button>
       </form>
-    </div>
-  </div>
+    </section>
+  </aside>
 </div>
 {% endblock %}
 
@@ -141,6 +167,12 @@
     lastId = Math.max(lastId, parseInt(m.dataset.id || '0', 10));
   });
 
+  function formatFecha(value) {
+    const d = new Date(value || '');
+    if (Number.isNaN(d.getTime())) return (value || '').slice(5, 16);
+    return d.toLocaleString('es-SV', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  }
+
   function appendMessage(m) {
     if (m.id_mensaje && document.querySelector(`.chat-msg[data-id="${m.id_mensaje}"]`)) {
       return;
@@ -157,6 +189,7 @@
     if (m.es_admin_emisor) {
       const shield = document.createElement('i');
       shield.className = 'ti ti-shield-check';
+      shield.setAttribute('aria-hidden', 'true');
       autor.appendChild(shield);
       autor.appendChild(document.createTextNode(' '));
     }
@@ -168,7 +201,7 @@
 
     const fecha = document.createElement('div');
     fecha.className = 'chat-msg-fecha';
-    fecha.textContent = (m.fecha_envio || '').slice(5, 16);
+    fecha.textContent = formatFecha(m.fecha_envio);
 
     div.append(autor, texto, fecha);
     box.appendChild(div);
@@ -231,8 +264,11 @@
           if (data.ok && data.mensaje) {
             appendMessage(data.mensaje);
             if (data.mensaje.id_mensaje) lastId = Math.max(lastId, data.mensaje.id_mensaje);
+          } else if (!chatInput.value) {
+            chatInput.value = texto;  // No se envió: se devuelve el texto para reintentar.
           }
         } catch (err) {
+          if (!chatInput.value) chatInput.value = texto;
           console.error('Error enviando mensaje:', err);
         }
       }

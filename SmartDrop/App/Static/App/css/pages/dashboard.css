@@ -1,0 +1,191 @@
+/* ==========================================================================
+   SmartDrop — Inicio del residente.
+   El único momento audaz del producto: el tanque de la zona, en luz cálida,
+   junto a una frase que resume el agua de la zona. Todo lo demás, sereno.
+   Solo tokens de smartdrop.css.
+   ========================================================================== */
+
+.dash-messages {
+  margin-bottom: var(--s-5);
+}
+
+/* ── Héroe: el tanque de la zona ─────────────────────────────────────────────────────── */
+.home-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s-6);
+  align-items: center;
+  margin-bottom: var(--s-8);
+  padding: var(--s-6) var(--s-6) var(--s-5);
+  border-radius: var(--r-xl);
+  background: var(--c-sol-soft);
+  box-shadow: var(--shadow-raise);
+}
+
+.home-hero-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  min-width: 0;
+}
+
+.home-hero-saludo {
+  margin: 0;
+  color: var(--c-ink-2);
+  font-size: var(--t-lg);
+  font-weight: 600;
+}
+
+.home-hero-title {
+  max-width: 18ch;
+  margin: 0;
+  color: var(--c-ink);
+  font-family: var(--font-display);
+  font-size: var(--t-3xl);
+  font-weight: 800;
+  line-height: 1.12;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+
+.home-hero-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3) var(--s-7);
+  margin: var(--s-3) 0 0;
+}
+
+.home-hero-facts > div {
+  min-width: 0;
+}
+
+.home-hero-facts dt {
+  color: var(--c-ink-2);
+  font-size: var(--t-sm);
+  font-weight: 500;
+}
+
+.home-hero-facts dd {
+  margin: 0;
+  color: var(--c-ink);
+  font-size: var(--t-lg);
+  font-weight: 700;
+}
+
+.home-hero-facts .overview-action {
+  font-size: var(--t-md);
+}
+
+.home-hero-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-3) var(--s-6);
+  margin-top: var(--s-3);
+  padding-top: var(--s-4);
+  border-top: 1px solid var(--c-line);
+}
+
+.home-hero-zona {
+  min-width: 0;
+}
+
+.home-hero-svg {
+  display: block;
+  width: 100%;
+  max-width: 260px;
+  margin-inline: auto;
+}
+
+@media (min-width: 760px) {
+  .home-hero-svg {
+    max-width: 440px;
+  }
+}
+
+@media (min-width: 760px) {
+  .home-hero {
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    gap: var(--s-7);
+    padding: var(--s-8) var(--s-8) var(--s-6);
+  }
+
+  .home-hero-zona {
+    align-self: end;
+  }
+}
+
+/* ── Lecturas ───────────────────────────────────────────────────────────── */
+.vital {
+  gap: var(--s-3);
+}
+
+.vital-msg {
+  margin: 0;
+  color: var(--c-ink);
+  font-size: var(--t-md);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.vital > .meter {
+  margin-top: auto;
+}
+
+/* El valor exacto alterna con el mensaje; el script lo muestra como flex. */
+.vital > .exact-value {
+  align-items: baseline;
+  gap: var(--s-1);
+  margin: 0;
+}
+
+/* ── Válvula y detalles ─────────────────────────────────────────────────── */
+.dash-pair {
+  margin-bottom: var(--s-8);
+}
+
+.dash-valve {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+}
+
+.dash-valve-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.dash-valve-state {
+  margin: 0;
+  color: var(--c-ink);
+  font-size: var(--t-lg);
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.valve-last-update {
+  margin: var(--s-5) 0 0;
+}
+
+/* ── En tu zona ─────────────────────────────────────────────────────────── */
+.dash-flush-head {
+  padding: var(--s-5) var(--s-6) var(--s-3);
+  margin: 0;
+}
+
+.mini-link {
+  font-size: var(--t-sm);
+  font-weight: 600;
+}
+
+.dash-empty {
+  padding: var(--s-6) var(--s-6) var(--s-7);
+}
+
+.dash-empty > p {
+  margin: 0;
+  color: var(--c-ink-2);
+}

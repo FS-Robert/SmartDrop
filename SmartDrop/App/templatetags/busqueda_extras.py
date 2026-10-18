@@ -20,7 +20,7 @@ def resaltar(texto, busqueda):
     patron = re.compile(busqueda_escapada, re.IGNORECASE)
     marcado = patron.sub(
         lambda coincidencia: (
-            '<mark class="bg-warning text-dark px-1 rounded">'
+            '<mark class="global-search-highlight">'
             f'{coincidencia.group(0)}'
             '</mark>'
         ),

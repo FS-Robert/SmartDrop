@@ -1,0 +1,22 @@
+{% load static %}<meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="{% static 'App/fonts/tabler/tabler-icons-subset.css' %}?v=2.47"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;500;600;700&family=Nunito:wght@700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'App/css/smartdrop.css' %}?v=20261011-zona1"/>
+  <link rel="stylesheet" href="{% static 'App/css/pages/auth.css' %}?v=20261011-zona1"/>
+  <script>
+    (function () {
+      // Mismo tema que el resto de la app: preferencia del servidor con sesión, la del navegador sin ella.
+      var theme = null;
+      {% if ui_prefs %}theme = '{{ ui_prefs.tema }}';
+      try { localStorage.setItem('theme', theme); } catch (e) {}
+      {% else %}try { theme = localStorage.getItem('theme'); } catch (e) {}{% endif %}
+      if (theme === 'dark') {
+        document.documentElement.dataset.theme = 'dark';
+        document.documentElement.classList.add('dark-mode');
+      }
+    }());
+  </script>
+  {% include 'App/_i18n_head.html' %}

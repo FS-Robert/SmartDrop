@@ -1,0 +1,169 @@
+/* ==========================================================================
+   SmartDrop — Consumo de agua. Gráfica de barras del periodo a la izquierda,
+   historial, comparación y resumen a la derecha. Solo tokens.
+   ========================================================================== */
+
+.consumo-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s-5);
+  margin-bottom: var(--s-8);
+}
+
+@media (min-width: 1100px) {
+  .consumo-layout {
+    grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+.consumo-side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+  min-width: 0;
+}
+
+.consumo-side .panel-title {
+  margin-bottom: var(--s-3);
+}
+
+/* ── Total del periodo ──────────────────────────────────────────────────── */
+.consumo-total {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-3);
+  margin-bottom: var(--s-5);
+}
+
+.consumo-total-label {
+  margin: 0;
+  color: var(--c-ink-2);
+  font-family: var(--font-text);
+  font-size: var(--t-sm);
+  font-weight: 600;
+}
+
+.consumo-total-value {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s-2);
+  margin: var(--s-1) 0 0;
+}
+
+.consumo-total-value > .num {
+  color: var(--c-ink);
+  font-family: var(--font-display);
+  font-size: var(--t-4xl);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.consumo-total-unit {
+  color: var(--c-ink-2);
+  font-weight: 600;
+}
+
+.chart-canvas-wrap {
+  position: relative;
+  width: 100%;
+  height: 320px;
+}
+
+@media (max-width: 640px) {
+  .chart-canvas-wrap {
+    height: 240px;
+  }
+}
+
+.consumo-detail {
+  margin: var(--s-4) 0 0;
+  color: var(--c-ink-2);
+  font-size: var(--t-sm);
+  font-weight: 600;
+}
+
+/* ── Historial ──────────────────────────────────────────────────────────── */
+.period-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--s-1);
+}
+
+.period-nav-label {
+  min-width: 7ch;
+  color: var(--c-ink);
+  font-size: var(--t-sm);
+  font-weight: 600;
+  text-align: center;
+}
+
+.history-list {
+  max-height: 340px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.history-item {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s-3);
+  width: 100%;
+  min-height: 44px;
+  padding: var(--s-2) var(--s-3);
+  border: 0;
+  border-bottom: 1px solid var(--c-line);
+  background: transparent;
+  color: var(--c-ink-2);
+  font: inherit;
+  font-size: var(--t-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-1) var(--ease);
+}
+
+.history-item > .num {
+  color: var(--c-ink);
+  font-weight: 700;
+}
+
+.history-item:hover {
+  background: var(--c-surface-2);
+}
+
+.history-item.is-selected {
+  background: var(--c-surface-tint);
+  color: var(--c-anil);
+  font-weight: 600;
+}
+
+/* ── Comparación ────────────────────────────────────────────────────────── */
+.comparison-val {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin: 0;
+  color: var(--c-ink);
+  font-family: var(--font-display);
+  font-size: var(--t-xl);
+  font-weight: 800;
+}
+
+.comparison-val.is-up {
+  color: var(--c-warn);
+}
+
+.comparison-val.is-down {
+  color: var(--c-ok);
+}
+
+.comparison-note {
+  margin: var(--s-2) 0 0;
+  font-size: var(--t-sm);
+}

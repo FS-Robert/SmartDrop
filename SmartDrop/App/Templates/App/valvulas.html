@@ -1,142 +1,183 @@
 {% extends 'App/base.html' %}
+{% load static sd_ui %}
 {% block title %}Electroválvulas{% endblock %}
 {% block nav_valvulas %}active{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/valvulas.css' %}?v=20261011-zona1">{% endblock %}
 
 {% block content %}
 <div class="valves-page">
-  <h1 class="page-title">ELECTROVÁLVULAS</h1>
-  <p class="page-subtitle">Control administrativo de todas las válvulas conectadas</p>
+<header class="page-head">
+  <div>
+    <h1 class="page-title">Electroválvulas</h1>
+    <p class="page-lede">Abre o cierra el paso de agua de cada válvula conectada. Cada cambio pide confirmación y queda registrado.</p>
+  </div>
+</header>
 
 {% if error %}
-  <div class="valve-message valve-message-error" role="alert">
-    <i class="ti ti-alert-triangle"></i>{{ error }}
+  <div class="notice notice--bad valve-message valve-message-error" role="alert">
+    <i class="ti ti-alert-triangle" aria-hidden="true"></i><div><p>{{ error }}</p></div>
   </div>
 {% endif %}
 
 {% if alerta_actividad %}
-  <div class="valve-message valve-message-error" role="alert">
-    <i class="ti ti-alert-triangle"></i>
-    <span>{{ alerta_actividad }}. Revisar sistema - posible mal funcionamiento.</span>
+  <div class="notice notice--warn valve-message valve-message-error" role="alert">
+    <i class="ti ti-alert-triangle" aria-hidden="true"></i>
+    <div><p class="notice-title">{{ alerta_actividad }}</p><p>Revisa el sistema: puede haber un mal funcionamiento.</p></div>
   </div>
 {% endif %}
+
+<p class="valve-live-message" id="valve-live-message" role="status" aria-live="polite"></p>
 
 {% if valvulas %}
   <section class="valves-grid" aria-label="Electroválvulas disponibles">
     {% for valvula in valvulas %}
-      <article class="valve-card">
+      <article class="panel valve-card" data-valve-name="{{ valvula.nombre }}" aria-labelledby="valvula-{{ valvula.id_valvula }}">
         <div class="valve-card-header">
-          <div class="icon-wrap teal"><i class="ti ti-toggle-left"></i></div>
-          <div>
-            <h2>{{ valvula.nombre }}</h2>
-            <p>GPIO {{ valvula.ping_gpio }} · {{ valvula.estado_operativo|default:'Estado no indicado'|capfirst }}</p>
+          <span class="icon-chip icon-chip--lg {% if valvula.estado_actual|lower == 'abierta' %}icon-chip--ok{% else %}icon-chip--none{% endif %}"><i class="ti ti-toggle-left" aria-hidden="true"></i></span>
+          <div class="valve-card-title">
+            <h2 id="valvula-{{ valvula.id_valvula }}">{{ valvula.nombre }}</h2>
+            <dl class="valve-meta">
+              <div><dt>GPIO</dt><dd class="num">{{ valvula.ping_gpio }}</dd></div>
+              <div><dt>Operación</dt><dd>{{ valvula.estado_operativo|default:'Estado no indicado'|capfirst }}</dd></div>
+            </dl>
           </div>
         </div>
+
         <div class="valve-status-row" data-valve-status="{{ valvula.id_valvula }}">
-          <span>Estado actual</span>
+          <span class="valve-status-label">Estado actual</span>
           {% if valvula.estado_actual|lower == 'abierta' %}
-            <span class="badge badge-open">ABIERTA</span>
+            <span class="status status--lg status--ok badge"><span class="status-dot" aria-hidden="true"></span>Abierta</span>
+          {% elif valvula.estado_actual|lower == 'cerrada' %}
+            <span class="status status--lg status--none badge"><span class="status-dot" aria-hidden="true"></span>Cerrada</span>
           {% else %}
-            <span class="badge badge-closed">{{ valvula.estado_actual|default:'DESCONOCIDA'|upper }}</span>
+            <span class="status status--lg status--none badge"><span class="status-dot" aria-hidden="true"></span>{{ valvula.estado_actual|default:'Desconocida'|sentence }}</span>
           {% endif %}
         </div>
+
         <div class="valve-actions">
           <form class="valve-command-form" method="post" action="{% url 'valvula_comando' valvula.id_valvula %}">
             {% csrf_token %}
-            <button class="valve-button valve-button-open" type="submit" name="comando" value="abrir" data-valve-action="abrir" {% if valvula.estado_actual|lower == 'abierta' %}disabled{% endif %}>
-              <i class="ti ti-lock-open"></i> Abrir
+            <button class="btn btn--primary btn--block valve-button valve-button-open" type="submit" name="comando" value="abrir" data-valve-action="abrir" {% if valvula.estado_actual|lower == 'abierta' %}disabled{% endif %}>
+              <i class="ti ti-lock-open" aria-hidden="true"></i><span>Abrir válvula</span>
             </button>
           </form>
           <form class="valve-command-form" method="post" action="{% url 'valvula_comando' valvula.id_valvula %}">
             {% csrf_token %}
-            <button class="valve-button valve-button-close" type="submit" name="comando" value="cerrar" data-valve-action="cerrar" {% if valvula.estado_actual|lower == 'cerrada' %}disabled{% endif %}>
-              <i class="ti ti-lock"></i> Cerrar
+            <button class="btn btn--secondary btn--block valve-button valve-button-close" type="submit" name="comando" value="cerrar" data-valve-action="cerrar" {% if valvula.estado_actual|lower == 'cerrada' %}disabled{% endif %}>
+              <i class="ti ti-lock" aria-hidden="true"></i><span>Cerrar válvula</span>
             </button>
           </form>
         </div>
 
-        <div class="valve-timer-panel">
-          <label class="valve-timer-label">Temporizador</label>
-          <div class="valve-timer-buttons">
-            <button type="button" class="valve-timer-button" data-duration="10">10s</button>
-            <button type="button" class="valve-timer-button" data-duration="30">30s</button>
-            <button type="button" class="valve-timer-button" data-duration="60">60s</button>
-            <button type="button" class="valve-timer-button" data-duration="120">120s</button>
+        <fieldset class="valve-timer-panel">
+          <legend class="valve-timer-label">Abrir por un tiempo</legend>
+          <p class="field-hint">Se cierra sola al terminar. Máximo 120 segundos.</p>
+          <div class="chip-row valve-timer-buttons">
+            <button type="button" class="chip valve-timer-button" data-duration="10">10 s</button>
+            <button type="button" class="chip valve-timer-button" data-duration="30">30 s</button>
+            <button type="button" class="chip valve-timer-button" data-duration="60">60 s</button>
+            <button type="button" class="chip valve-timer-button" data-duration="120">120 s</button>
           </div>
           <div class="valve-timer-custom">
-            <input type="number" class="valve-custom-duration" min="1" max="120" placeholder="Segundos">
-            <button type="button" class="valve-button valve-button-open valve-timer-apply" data-valve-action="abrir">Aplicar</button>
+            <label class="sr-only" for="duracion-{{ valvula.id_valvula }}">Segundos personalizados</label>
+            <input type="number" id="duracion-{{ valvula.id_valvula }}" class="valve-custom-duration" min="1" max="120" inputmode="numeric" placeholder="Segundos">
+            <button type="button" class="btn btn--secondary valve-button valve-button-open valve-timer-apply" data-valve-action="abrir">Abrir con temporizador</button>
           </div>
-        </div>
+        </fieldset>
 
-        <div class="valve-timer-status" data-valve-timer-status="{{ valvula.id_valvula }}" data-timer-end-at="{{ valvula.timer_end_at|default:'' }}" data-duration="{{ valvula.duracion_seg|default:0 }}">
+        <div class="valve-timer-status{% if valvula.timer_activo %} is-active{% endif %}" data-valve-timer-status="{{ valvula.id_valvula }}" data-timer-end-at="{{ valvula.timer_end_at|default:'' }}" data-duration="{{ valvula.duracion_seg|default:0 }}">
           <div class="valve-timer-status-header">
-            <span class="valve-timer-status-label">Temporizador</span>
-            <span class="valve-timer-countdown"><span class="valve-timer-countdown-value">{% if valvula.timer_activo %}{{ valvula.timer_remaining }}{% else %}0{% endif %}</span>s</span>
+            <span class="valve-timer-status-label"><i class="ti ti-clock" aria-hidden="true"></i>Temporizador</span>
+            <span class="valve-timer-countdown num"><span class="valve-timer-countdown-value">{% if valvula.timer_activo %}{{ valvula.timer_remaining }}{% else %}0{% endif %}</span> s restantes</span>
           </div>
-          <button type="button" class="valve-timer-cancel {% if not valvula.timer_activo %}is-hidden{% endif %}" data-valve-id="{{ valvula.id_valvula }}">Cancelar temporizador</button>
+          <div class="meter valve-timer-meter" aria-hidden="true"><span class="meter-fill meter-fill--agua valve-timer-meter-fill"></span></div>
+          <button type="button" class="btn btn--danger btn--sm valve-timer-cancel {% if not valvula.timer_activo %}is-hidden{% endif %}" data-valve-id="{{ valvula.id_valvula }}">Cancelar temporizador y cerrar</button>
         </div>
 
-        <p class="valve-topic">Topic: {{ valvula.topic_mqtt_comando }}</p>
+        <details class="valve-tech">
+          <summary>Detalles técnicos</summary>
+          <p class="valve-topic">Tópico MQTT: <code>{{ valvula.topic_mqtt_comando }}</code></p>
+        </details>
       </article>
     {% endfor %}
   </section>
 {% elif not error %}
-  <div class="card empty-state"><i class="ti ti-toggle-left"></i><h2>No hay electroválvulas registradas</h2><p>Registra una válvula en la tabla valvula para verla aquí.</p></div>
+  <div class="panel">
+    <div class="empty empty-state">
+      {% include 'App/_ilustracion.html' with tipo='valvula' %}
+      <h2>No hay electroválvulas registradas</h2>
+      <p>Registra una válvula en la tabla valvula para verla aquí.</p>
+    </div>
+  </div>
 {% endif %}
 
-<div id="timer-confirm-modal" class="timer-confirm-modal is-hidden" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="timer-confirm-title">
-  <div class="timer-confirm-dialog">
-    <h3 id="timer-confirm-title">Confirmar ajuste</h3>
-    <p>Tiempo máximo permitido: 120 seg (2 min). La duración se ajustará a 120 seg. ¿Deseas continuar?</p>
-    <div class="timer-confirm-actions">
-      <button type="button" class="timer-confirm-button timer-confirm-button-cancel" id="timer-confirm-cancel">Cancelar</button>
-      <button type="button" class="timer-confirm-button timer-confirm-button-confirm" id="timer-confirm-accept">Continuar</button>
+<!-- Confirmación de cualquier comando físico (abrir, cerrar, temporizador) -->
+<div id="valve-confirm-dialog" class="dialog" role="dialog" aria-modal="true" aria-labelledby="valve-confirm-title" aria-describedby="valve-confirm-body" hidden>
+  <div class="dialog-scrim" data-dialog-cancel></div>
+  <div class="dialog-card">
+    <h3 class="dialog-title" id="valve-confirm-title">Confirmar</h3>
+    <p class="dialog-body" id="valve-confirm-body"></p>
+    <div class="dialog-actions">
+      <button type="button" class="btn btn--secondary" id="valve-confirm-cancel" data-dialog-cancel>Cancelar</button>
+      <button type="button" class="btn btn--primary" id="valve-confirm-accept">Confirmar</button>
     </div>
   </div>
 </div>
 
-<section class="movement-panel" aria-labelledby="movement-title">
-  <div class="movement-panel-header">
-    <h2 id="movement-title">Movimientos recientes</h2>
-    <p>Últimas aperturas y cierres registrados para todas las electroválvulas.</p>
+<div id="timer-confirm-modal" class="dialog timer-confirm-modal is-hidden" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="timer-confirm-title">
+  <div class="dialog-scrim"></div>
+  <div class="dialog-card timer-confirm-dialog">
+    <h3 class="dialog-title" id="timer-confirm-title">Ajustar a 120 segundos</h3>
+    <p class="dialog-body">El tiempo máximo es de 120 segundos (2 minutos). La válvula se abrirá durante 120 segundos. ¿Quieres continuar?</p>
+    <div class="dialog-actions timer-confirm-actions">
+      <button type="button" class="btn btn--secondary timer-confirm-button timer-confirm-button-cancel" id="timer-confirm-cancel">Cancelar</button>
+      <button type="button" class="btn btn--primary timer-confirm-button timer-confirm-button-confirm" id="timer-confirm-accept">Abrir 120 segundos</button>
+    </div>
   </div>
-  <p class="valve-live-message" id="valve-live-message" role="status" aria-live="polite"></p>
-  <form method="get" class="history-toolbar">
-    <div class="history-field">
-      <label for="history-date">Fecha</label>
+</div>
+
+<section class="section movement-panel" aria-labelledby="movement-title">
+  <div class="section-head movement-panel-header">
+    <h2 class="section-title" id="movement-title">Movimientos recientes</h2>
+    <p class="section-lede">Últimas aperturas y cierres de todas las electroválvulas.</p>
+  </div>
+  <form method="get" class="history-toolbar" aria-label="Filtrar movimientos">
+    <div class="field history-field">
+      <label class="field-label" for="history-date">Fecha</label>
       <input id="history-date" type="date" name="fecha" value="{{ filtros.fecha }}">
     </div>
-    <div class="history-field">
-      <label for="history-user">Usuario</label>
-      <input id="history-user" type="search" name="usuario" value="{{ filtros.usuario }}" placeholder="Buscar usuario">
+    <div class="field history-field">
+      <label class="field-label" for="history-user">Usuario</label>
+      <input id="history-user" type="search" name="usuario" value="{{ filtros.usuario }}" placeholder="Nombre del usuario">
     </div>
-    <div class="history-field">
-      <label for="history-origin">Origen</label>
-      <input id="history-origin" type="search" name="origen" value="{{ filtros.origen }}" placeholder="Web, app, automático">
+    <div class="field history-field">
+      <label class="field-label" for="history-origin">Origen</label>
+      <input id="history-origin" type="search" name="origen" value="{{ filtros.origen }}" placeholder="Web, app o automático">
     </div>
     <div class="history-actions">
-      <button class="history-button" type="submit"><i class="ti ti-filter"></i>Filtrar</button>
-      <a class="history-export" href="?{% if filtros.fecha %}fecha={{ filtros.fecha }}&{% endif %}{% if filtros.usuario %}usuario={{ filtros.usuario }}&{% endif %}{% if filtros.origen %}origen={{ filtros.origen }}&{% endif %}formato=csv"><i class="ti ti-download"></i>CSV</a>
-      <a class="history-reset" href="{% url 'valvulas' %}">Limpiar</a>
+      <button class="btn btn--secondary history-button" type="submit"><i class="ti ti-filter" aria-hidden="true"></i>Filtrar</button>
+      <a class="btn btn--ghost history-reset" href="{% url 'valvulas' %}">Quitar filtros</a>
+      <a class="btn btn--ghost history-export" href="?{% if filtros.fecha %}fecha={{ filtros.fecha }}&{% endif %}{% if filtros.usuario %}usuario={{ filtros.usuario }}&{% endif %}{% if filtros.origen %}origen={{ filtros.origen }}&{% endif %}formato=csv"><i class="ti ti-download" aria-hidden="true"></i>Descargar CSV</a>
     </div>
   </form>
   {% if movimientos %}
-    <div class="movement-table-wrap">
-      <table class="movement-table">
+    <div class="table-wrap movement-table-wrap">
+      <table class="data-table movement-table">
+        <caption>Movimientos de las electroválvulas</caption>
         <thead>
           <tr>
-            <th>Fecha</th>
-            <th>Electroválvula</th>
-            <th>Acción</th>
-            <th>Tipo</th>
-            <th>Responsable</th>
-            <th>Estado</th>
+            <th scope="col">Fecha</th>
+            <th scope="col">Electroválvula</th>
+            <th scope="col">Acción</th>
+            <th scope="col">Tipo</th>
+            <th scope="col">Responsable</th>
+            <th scope="col">Estado</th>
           </tr>
         </thead>
         <tbody id="valve-history-body">
           {% for movimiento in movimientos %}
             <tr>
-              <td>{{ movimiento.fecha_hora }}</td>
+              <td class="nowrap">{{ movimiento.fecha_hora }}</td>
               <td>{{ movimiento.valvula_mostrar }}</td>
               <td>{{ movimiento.accion|capfirst }}</td>
               <td>
@@ -158,20 +199,24 @@
       </table>
     </div>
   {% else %}
-    <p class="movement-empty">Todavía no hay movimientos registrados.</p>
+    <div class="panel"><p class="movement-empty muted">Todavía no hay movimientos registrados.</p></div>
   {% endif %}
 </section>
 
-<section class="movement-panel" aria-labelledby="stats-title">
-  <div class="movement-panel-header">
-    <h2 id="stats-title">Estadísticas de uso</h2>
+<section class="section movement-panel" aria-labelledby="stats-title">
+  <div class="section-head movement-panel-header">
+    <h2 class="section-title" id="stats-title">Estadísticas de uso</h2>
   </div>
-  <div class="stats-grid">
-    <div class="stat-tile stat-tile-accent">Aperturas este mes<strong>{{ estadisticas.total_aperturas_mes }}</strong></div>
-    <div class="stat-tile">Tiempo promedio abierta<strong>{{ estadisticas.tiempo_promedio_abierta }} h</strong></div>
-    <div class="stat-tile">Distribución de activaciones<strong>{{ estadisticas.porcentaje_manual }}% manual · {{ estadisticas.porcentaje_automatico }}% automático</strong></div>
+  <div class="tiles stats-grid">
+    <div class="tile stat-tile stat-tile-accent"><span class="tile-label">Aperturas este mes</span><p class="tile-value" data-countup>{{ estadisticas.total_aperturas_mes }}</p></div>
+    <div class="tile stat-tile"><span class="tile-label">Tiempo promedio abierta</span><p class="tile-value" data-countup>{{ estadisticas.tiempo_promedio_abierta }} <span class="tile-unit">h</span></p></div>
+    <div class="tile stat-tile"><span class="tile-label">Activación manual</span><p class="tile-value" data-countup>{{ estadisticas.porcentaje_manual }} <span class="tile-unit">%</span></p></div>
+    <div class="tile stat-tile"><span class="tile-label">Activación automática</span><p class="tile-value" data-countup>{{ estadisticas.porcentaje_automatico }} <span class="tile-unit">%</span></p></div>
   </div>
-  <div class="stats-chart"><canvas id="aperturasPorDia" aria-label="Aperturas por día en los últimos 7 días"></canvas></div>
+  <div class="panel stats-chart-panel">
+    <h3 class="panel-title">Aperturas por día</h3>
+    <div class="stats-chart"><canvas id="aperturasPorDia" role="img" aria-label="Aperturas por día en los últimos 7 días"></canvas></div>
+  </div>
 </section>
 </div>
 {% endblock %}
@@ -180,6 +225,7 @@
 {{ estadisticas.labels_dias|json_script:"valvulas-labels-dias" }}
 {{ estadisticas.aperturas_dias|json_script:"valvulas-aperturas-dias" }}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="{% static 'App/js/sd_charts.js' %}?v=20261011-zona1"></script>
 <script>
   const TIMER_MIN_SECONDS = 5;
   const TIMER_MAX_SECONDS = 120;
@@ -187,6 +233,62 @@
   const timerConfirmAccept = document.getElementById('timer-confirm-accept');
   const timerConfirmCancel = document.getElementById('timer-confirm-cancel');
   let timerConfirmResolver = null;
+
+  // ── Confirmación de comandos físicos ──
+  const confirmDialog = document.getElementById('valve-confirm-dialog');
+  const confirmTitle = document.getElementById('valve-confirm-title');
+  const confirmBody = document.getElementById('valve-confirm-body');
+  const confirmAccept = document.getElementById('valve-confirm-accept');
+  const confirmCancel = document.getElementById('valve-confirm-cancel');
+  let confirmResolver = null;
+  let confirmReturnFocus = null;
+
+  function closeConfirm(result) {
+    confirmDialog.hidden = true;
+    document.removeEventListener('keydown', onConfirmKey);
+    if (confirmReturnFocus) confirmReturnFocus.focus();
+    if (confirmResolver) { confirmResolver(result); confirmResolver = null; }
+  }
+
+  function onConfirmKey(event) {
+    if (event.key === 'Escape') { event.preventDefault(); closeConfirm(false); return; }
+    if (event.key === 'Tab') {
+      // Foco atrapado entre los dos botones del diálogo.
+      const items = [confirmCancel, confirmAccept];
+      const index = items.indexOf(document.activeElement);
+      if (event.shiftKey && index <= 0) { event.preventDefault(); items[items.length - 1].focus(); }
+      else if (!event.shiftKey && index === items.length - 1) { event.preventDefault(); items[0].focus(); }
+    }
+  }
+
+  function confirmValveAction(trigger, comando, duracionSeg) {
+    const card = trigger.closest('.valve-card');
+    const nombre = (card && card.dataset.valveName) || 'la válvula';
+    if (comando === 'cerrar') {
+      confirmTitle.textContent = `¿Cerrar ${nombre}?`;
+      confirmBody.textContent = `Se cortará el paso de agua de ${nombre}. Las viviendas conectadas se quedarán sin suministro hasta que vuelvas a abrirla.`;
+      confirmAccept.textContent = 'Cerrar válvula';
+      confirmAccept.className = 'btn btn--danger';
+    } else if (duracionSeg) {
+      confirmTitle.textContent = `¿Abrir ${nombre} por ${duracionSeg} segundos?`;
+      confirmBody.textContent = `Se abrirá el paso de agua de ${nombre} y se cerrará sola después de ${duracionSeg} segundos.`;
+      confirmAccept.textContent = `Abrir ${duracionSeg} s`;
+      confirmAccept.className = 'btn btn--primary';
+    } else {
+      confirmTitle.textContent = `¿Abrir ${nombre}?`;
+      confirmBody.textContent = `Se abrirá el paso de agua de ${nombre} hasta que alguien la cierre.`;
+      confirmAccept.textContent = 'Abrir válvula';
+      confirmAccept.className = 'btn btn--primary';
+    }
+    confirmReturnFocus = trigger;
+    confirmDialog.hidden = false;
+    document.addEventListener('keydown', onConfirmKey);
+    confirmCancel.focus();
+    return new Promise((resolve) => { confirmResolver = resolve; });
+  }
+
+  confirmAccept.addEventListener('click', () => closeConfirm(true));
+  confirmDialog.querySelectorAll('[data-dialog-cancel]').forEach((el) => el.addEventListener('click', () => closeConfirm(false)));
 
   function showLiveMessage(message, isError = false) {
     const liveMessage = document.getElementById('valve-live-message');
@@ -199,6 +301,7 @@
     if (timerConfirmModal) {
       timerConfirmModal.classList.remove('is-hidden');
       timerConfirmModal.setAttribute('aria-hidden', 'false');
+      if (timerConfirmCancel) timerConfirmCancel.focus();
     }
   }
 
@@ -251,7 +354,7 @@
     if (!trimmedValue) {
       return {
         ok: false,
-        message: 'Introduce una duración personalizada antes de aplicar el temporizador.',
+        message: 'Escribe cuántos segundos debe quedar abierta antes de usar el temporizador.',
       };
     }
 
@@ -259,7 +362,7 @@
     if (!Number.isFinite(parsedValue) || !Number.isInteger(parsedValue)) {
       return {
         ok: false,
-        message: 'La duración programada debe ser un número entero válido.',
+        message: 'La duración debe ser un número entero de segundos.',
       };
     }
 
@@ -285,13 +388,22 @@
     };
   }
 
-  function updateValveStatus(card, result) {
+  function setStatusPill(card, isOpen, text) {
     const status = card.querySelector('[data-valve-status]');
+    if (!status) return;
+    status.querySelector('.badge')?.remove();
+    const pill = document.createElement('span');
+    pill.className = `status status--lg ${isOpen ? 'status--ok' : 'status--none'} badge`;
+    pill.innerHTML = '<span class="status-dot" aria-hidden="true"></span>';
+    pill.append(text);
+    status.appendChild(pill);
+    const chip = card.querySelector('.valve-card-header .icon-chip');
+    if (chip) chip.className = `icon-chip icon-chip--lg ${isOpen ? 'icon-chip--ok' : 'icon-chip--none'}`;
+  }
+
+  function updateValveStatus(card, result) {
     const isOpen = result.estado_nuevo === 'abierta';
-    if (status) {
-      status.querySelector('.badge')?.remove();
-      status.insertAdjacentHTML('beforeend', `<span class="badge ${isOpen ? 'badge-open' : 'badge-closed'}">${result.estado_nuevo.toUpperCase()}</span>`);
-    }
+    setStatusPill(card, isOpen, isOpen ? 'Abierta' : 'Cerrada');
 
     const openButton = card.querySelector('.valve-button-open');
     const closeButton = card.querySelector('.valve-button-close');
@@ -314,6 +426,7 @@
       if (timerStatus) {
         timerStatus.dataset.timerEndAt = '';
         timerStatus.dataset.duration = '0';
+        timerStatus.classList.remove('is-active');
       }
       if (cancelButton) cancelButton.classList.add('is-hidden');
       if (countdownValue) countdownValue.textContent = '0';
@@ -331,6 +444,7 @@
 
     timerStatus.dataset.timerEndAt = '';
     timerStatus.dataset.duration = '0';
+    timerStatus.classList.remove('is-active');
 
     const countdownValue = timerStatus.querySelector('.valve-timer-countdown-value');
     if (countdownValue) countdownValue.textContent = '0';
@@ -345,16 +459,19 @@
     const endAt = timerStatus.dataset.timerEndAt;
     const countdownValue = timerStatus.querySelector('.valve-timer-countdown-value');
     const cancelButton = timerStatus.querySelector('.valve-timer-cancel');
+    const meterFill = timerStatus.querySelector('.valve-timer-meter-fill');
     if (!endAt || !countdownValue) {
       if (timerStatus._countdownInterval) {
         clearInterval(timerStatus._countdownInterval);
         timerStatus._countdownInterval = null;
       }
+      timerStatus.classList.remove('is-active');
       if (cancelButton) cancelButton.classList.add('is-hidden');
       if (countdownValue) countdownValue.textContent = '0';
       return;
     }
 
+    timerStatus.classList.add('is-active');
     if (cancelButton) cancelButton.classList.remove('is-hidden');
 
     timerStatus.dataset.countdownExpired = 'false';
@@ -362,14 +479,12 @@
     const updateCountdown = () => {
       const remainingSeconds = Math.max(0, Math.ceil((new Date(endAt).getTime() - Date.now()) / 1000));
       countdownValue.textContent = remainingSeconds;
+      const total = Number(timerStatus.dataset.duration) || 0;
+      if (meterFill) meterFill.style.width = total ? `${Math.min(100, (remainingSeconds / total) * 100)}%` : '0%';
 
       if (remainingSeconds <= 0) {
         const card = timerStatus.closest('.valve-card');
-        const statusBadge = card?.querySelector('[data-valve-status] .badge');
-        if (statusBadge) {
-          statusBadge.className = 'badge badge-closed';
-          statusBadge.textContent = 'CERRADA';
-        }
+        if (card) setStatusPill(card, false, 'Cerrada');
 
         const openButton = card?.querySelector('.valve-button-open');
         const closeButton = card?.querySelector('.valve-button-close');
@@ -378,12 +493,17 @@
 
         timerStatus.dataset.timerEndAt = '';
         timerStatus.dataset.duration = '0';
+        timerStatus.classList.remove('is-active');
         if (cancelButton) cancelButton.classList.add('is-hidden');
         countdownValue.textContent = '0';
 
         if (timerStatus.dataset.countdownExpired !== 'true') {
           timerStatus.dataset.countdownExpired = 'true';
           refreshRecentMovements();
+        }
+        if (timerStatus._countdownInterval) {
+          clearInterval(timerStatus._countdownInterval);
+          timerStatus._countdownInterval = null;
         }
       }
     };
@@ -393,7 +513,9 @@
     if (timerStatus._countdownInterval) {
       clearInterval(timerStatus._countdownInterval);
     }
-    timerStatus._countdownInterval = setInterval(updateCountdown, 1000);
+    if (timerStatus.dataset.timerEndAt) {
+      timerStatus._countdownInterval = setInterval(updateCountdown, 1000);
+    }
   }
 
   async function sendValveCommand(button, comando, duracionSeg = null) {
@@ -415,7 +537,7 @@
       params.append('duracion_seg', duracionSeg);
     }
 
-    showLiveMessage('Enviando comando...');
+    showLiveMessage('Enviando comando…');
 
     try {
       const response = await fetch(form.action, {
@@ -447,7 +569,7 @@
       showLiveMessage(
         result.tipo_activacion === 'temporizado'
           ? `Temporizador activado: ${result.duracion_programada} segundos`
-          : `Cambio guardado: ${result.estado_nuevo.toUpperCase()}`
+          : (result.estado_nuevo === 'abierta' ? 'Válvula abierta.' : 'Válvula cerrada.')
       );
     } catch (error) {
       showLiveMessage(error.message, true);
@@ -456,6 +578,13 @@
         item.disabled = false;
         item.classList.remove('is-loading');
       });
+      // Los botones de abrir/cerrar vuelven a reflejar el estado actual de la válvula.
+      const pill = card.querySelector('[data-valve-status] .badge');
+      const isOpen = pill ? pill.classList.contains('status--ok') : false;
+      const openButton = card.querySelector('.valve-button-open:not(.valve-timer-apply)');
+      const closeButton = card.querySelector('.valve-button-close');
+      if (pill && openButton) openButton.disabled = isOpen;
+      if (pill && closeButton) closeButton.disabled = !isOpen;
     }
   }
 
@@ -464,13 +593,15 @@
       event.preventDefault();
       const button = event.submitter;
       const command = button.value;
+      if (!(await confirmValveAction(button, command))) return;
       sendValveCommand(button, command);
     });
   });
 
   document.querySelectorAll('.valve-timer-button').forEach(button => {
-    button.addEventListener('click', () => {
+    button.addEventListener('click', async () => {
       const duration = button.dataset.duration;
+      if (!(await confirmValveAction(button, 'abrir', duration))) return;
       sendValveCommand(button, 'abrir', duration);
     });
   });
@@ -483,24 +614,25 @@
 
       if (!durationConfig.ok) {
         showLiveMessage(durationConfig.message, true);
+        customInput.focus();
         return;
       }
 
       if (durationConfig.requiresConfirmation) {
         const confirmed = await askTimerConfirmation();
-        if (!confirmed) {
-          closeTimerConfirmModal();
-          return;
-        }
+        closeTimerConfirmModal();
+        if (!confirmed) return;
+      } else if (!(await confirmValveAction(button, 'abrir', String(durationConfig.duration)))) {
+        return;
       }
 
-      closeTimerConfirmModal();
       sendValveCommand(button, 'abrir', String(durationConfig.duration));
     });
   });
 
   document.querySelectorAll('.valve-timer-cancel').forEach(button => {
-    button.addEventListener('click', () => {
+    button.addEventListener('click', async () => {
+      if (!(await confirmValveAction(button, 'cerrar'))) return;
       sendValveCommand(button, 'cerrar');
     });
   });
@@ -513,21 +645,25 @@
     }
   });
 
-  timerConfirmCancel?.addEventListener('click', () => {
+  function cancelTimerConfirm() {
     closeTimerConfirmModal();
     if (timerConfirmResolver) {
       timerConfirmResolver(false);
       timerConfirmResolver = null;
     }
-  });
+  }
+
+  timerConfirmCancel?.addEventListener('click', cancelTimerConfirm);
 
   timerConfirmModal?.addEventListener('click', (event) => {
-    if (event.target === timerConfirmModal) {
-      closeTimerConfirmModal();
-      if (timerConfirmResolver) {
-        timerConfirmResolver(false);
-        timerConfirmResolver = null;
-      }
+    if (event.target === timerConfirmModal || event.target.classList.contains('dialog-scrim')) {
+      cancelTimerConfirm();
+    }
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && timerConfirmModal && !timerConfirmModal.classList.contains('is-hidden')) {
+      cancelTimerConfirm();
     }
   });
 
@@ -535,10 +671,11 @@
     setupTimerCountdown(timerStatus);
   });
 
-  new Chart(document.getElementById('aperturasPorDia'), {
+  const aperturasChart = new Chart(document.getElementById('aperturasPorDia'), {
     type: 'bar',
-    data: { labels: JSON.parse(document.getElementById('valvulas-labels-dias').textContent), datasets: [{ label: 'Aperturas', data: JSON.parse(document.getElementById('valvulas-aperturas-dias').textContent), backgroundColor: '#0f766e' }] },
-    options: { responsive: true, plugins: { legend: { display: false } } }
+    data: { labels: JSON.parse(document.getElementById('valvulas-labels-dias').textContent), datasets: [{ label: 'Aperturas', data: JSON.parse(document.getElementById('valvulas-aperturas-dias').textContent), backgroundColor: SDCharts.color('agua'), maxBarThickness: 40 }] },
+    options: { responsive: true, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false } }, y: { beginAtZero: true, ticks: { precision: 0 } } } }
   });
+  aperturasChart.$sdRecolor = () => { aperturasChart.data.datasets[0].backgroundColor = SDCharts.color('agua'); };
 </script>
 {% endblock %}

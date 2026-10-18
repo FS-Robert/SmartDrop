@@ -1,0 +1,376 @@
+/* ==========================================================================
+   SmartDrop — Predicción (administración): suministro por tanque, fugas y
+   detalle de cada tanque, más la pantalla de progreso de ml_predictions.js.
+   Solo tokens de smartdrop.css.
+   ========================================================================== */
+
+#ml-banner:not(:empty),
+#ml-feedback:not(:empty) {
+  margin-bottom: var(--s-5);
+}
+
+.ml-loading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-5);
+}
+
+.ml-loading > .skeleton {
+  display: block;
+  height: 64px;
+  border-radius: var(--r-md);
+}
+
+.ml-excluded {
+  margin: var(--s-2) 0 0;
+  padding-left: var(--s-5);
+}
+
+/* ── Suministro: filas de tanques ───────────────────────────────────────── */
+.zone-list {
+  margin: 0;
+}
+
+.zone-card {
+  align-items: flex-start;
+}
+
+.zone-nic {
+  margin-left: var(--s-2);
+  color: var(--c-ink-3);
+  font-weight: 500;
+}
+
+.zone-level {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  max-width: 22rem;
+  margin-top: var(--s-2);
+}
+
+.zone-level > .meter {
+  flex: 1;
+}
+
+.zone-level-text {
+  color: var(--c-ink-2);
+  font-size: var(--t-sm);
+  white-space: nowrap;
+}
+
+.zone-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--s-2);
+  max-width: 18rem;
+  text-align: right;
+}
+
+.zone-note {
+  margin: 0;
+  color: var(--c-ink-2);
+  font-size: var(--t-sm);
+}
+
+.zone-note.warn {
+  color: var(--c-warn);
+}
+
+@media (max-width: 640px) {
+  .zone-side {
+    align-items: flex-start;
+    text-align: left;
+  }
+}
+
+/* ── Fugas ──────────────────────────────────────────────────────────────── */
+.monitor-chip {
+  margin: 0 0 var(--s-5);
+}
+
+.leak-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+
+.leak-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-3) var(--s-5);
+}
+
+.leak-who {
+  min-width: 0;
+}
+
+.leak-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+  margin: 0;
+  color: var(--c-ink);
+  font-family: var(--font-display);
+  font-size: var(--t-xl);
+  font-weight: 800;
+}
+
+.leak-meta {
+  margin: var(--s-1) 0 0;
+  color: var(--c-ink-3);
+  font-size: var(--t-sm);
+}
+
+.leak-row,
+.alert-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.leak-row.alto,
+.alert-item:not(.leida) {
+  border-color: var(--c-bad-dot);
+  box-shadow: inset 4px 0 0 var(--c-bad-dot);
+}
+
+.alert-item.leida {
+  background: var(--c-surface-2);
+}
+
+.alert-item:target {
+  outline: 3px solid var(--c-anil);
+  outline-offset: 2px;
+}
+
+.prob {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: baseline;
+  gap: 0 var(--s-2);
+  min-width: 11rem;
+}
+
+.prob-value {
+  color: var(--c-ink);
+  font-family: var(--font-display);
+  font-size: var(--t-2xl);
+  font-weight: 800;
+}
+
+.prob-label {
+  color: var(--c-ink-3);
+  font-size: var(--t-sm);
+}
+
+.prob-bar {
+  grid-column: 1 / -1;
+  margin-top: var(--s-1);
+}
+
+.leak-summary {
+  margin: 0;
+  color: var(--c-ink);
+  font-weight: 600;
+  max-width: 70ch;
+}
+
+.leak-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.leak-facts > li {
+  padding: var(--s-1) var(--s-3);
+  border-radius: var(--r-pill);
+  background: var(--c-surface-tint);
+  color: var(--c-ink);
+  font-size: var(--t-sm);
+  font-weight: 600;
+}
+
+.leak-action {
+  margin: 0;
+  color: var(--c-ink-2);
+}
+
+.leak-details > summary {
+  min-height: 32px;
+  color: var(--c-anil);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.leak-details-title {
+  margin: var(--s-3) 0 var(--s-1);
+  font-weight: 700;
+}
+
+.leak-causes {
+  margin: 0 0 var(--s-4);
+  padding-left: var(--s-5);
+  color: var(--c-ink-2);
+}
+
+.leak-metrics {
+  margin-top: var(--s-3);
+}
+
+.leak-contact {
+  margin-top: var(--s-3);
+}
+
+.leak-others-title {
+  margin: var(--s-4) 0 0;
+  color: var(--c-ink);
+  font-family: var(--font-display);
+  font-size: var(--t-lg);
+  font-weight: 700;
+}
+
+.leak-compact .list-row-aside {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+}
+
+.leak-compact-pct {
+  min-width: 3.5em;
+  text-align: right;
+}
+
+/* ── Detalle de tanque ──────────────────────────────────────────────────── */
+.zone-banner:not(:empty) {
+  margin-bottom: var(--s-5);
+}
+
+.zone-data {
+  margin-bottom: var(--s-5);
+}
+
+.zone-data .panel-title,
+.chart-wrap .panel-title {
+  margin-bottom: var(--s-4);
+}
+
+.zone-chart-note {
+  margin: calc(var(--s-2) * -1) 0 var(--s-4);
+  font-size: var(--t-sm);
+}
+
+.zone-chart {
+  position: relative;
+  height: 320px;
+}
+
+.chart-wrap {
+  margin-bottom: var(--s-8);
+}
+
+/* ── Pantalla de progreso (ml_predictions.js) ───────────────────────────── */
+.ml-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--s-4);
+  background: var(--c-scrim);
+}
+
+.ml-overlay-card {
+  width: min(26rem, 100%);
+  padding: var(--s-7) var(--s-6) var(--s-6);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-lg);
+  background: var(--c-surface);
+  box-shadow: var(--shadow-overlay);
+  text-align: center;
+}
+
+.ml-overlay-title {
+  margin: var(--s-4) 0 var(--s-1);
+  color: var(--c-ink);
+  font-family: var(--font-display);
+  font-size: var(--t-xl);
+  font-weight: 800;
+}
+
+.ml-overlay-step {
+  min-height: 1.4em;
+  margin: 0 0 var(--s-4);
+  color: var(--c-ink-2);
+}
+
+.ml-progress {
+  height: 10px;
+  overflow: hidden;
+  border-radius: var(--r-pill);
+  background: var(--c-surface-tint);
+}
+
+.ml-progress-bar {
+  width: 0;
+  height: 100%;
+  border-radius: var(--r-pill);
+  background: var(--c-agua);
+  transition: width 0.5s var(--ease);
+}
+
+.ml-overlay-meta {
+  margin: var(--s-3) 0 0;
+  color: var(--c-ink-3);
+  font-size: var(--t-sm);
+  font-weight: 600;
+}
+
+.ml-drops {
+  display: flex;
+  justify-content: center;
+  gap: var(--s-3);
+  height: 34px;
+}
+
+.ml-drops > span {
+  width: 14px;
+  height: 14px;
+  border-radius: 50% 50% 50% 0;
+  background: var(--c-agua);
+  transform: rotate(-45deg);
+  animation: ml-drop 1.2s ease-in-out infinite;
+}
+
+.ml-drops > span:nth-child(2) {
+  animation-delay: 0.2s;
+  background: var(--c-anil);
+}
+
+.ml-drops > span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes ml-drop {
+  0%, 100% { transform: translateY(0) rotate(-45deg); opacity: 0.6; }
+  50% { transform: translateY(16px) rotate(-45deg); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ml-drops > span {
+    animation: none;
+  }
+
+  .ml-progress-bar {
+    transition: none;
+  }
+}

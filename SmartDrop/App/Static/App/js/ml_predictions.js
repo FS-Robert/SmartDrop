@@ -17,12 +17,12 @@
     overlay.innerHTML = `
       <div class="ml-overlay-card">
         <div class="ml-drops" aria-hidden="true"><span></span><span></span><span></span></div>
-        <h2 class="ml-overlay-title">Realizando predicciones…</h2>
+        <h2 class="ml-overlay-title">Calculando predicciones…</h2>
         <p class="ml-overlay-step" id="ml-overlay-step">Iniciando</p>
         <div class="ml-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
           <div class="ml-progress-bar" id="ml-progress-bar"></div>
         </div>
-        <p class="ml-overlay-meta"><span id="ml-overlay-percent">0 %</span> · <span id="ml-overlay-elapsed">0 s</span></p>
+        <p class="ml-overlay-meta"><span id="ml-overlay-percent">0 %</span> completado en <span id="ml-overlay-elapsed">0 s</span></p>
       </div>`;
     document.body.appendChild(overlay);
     return overlay;

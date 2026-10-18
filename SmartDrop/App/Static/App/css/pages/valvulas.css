@@ -1,0 +1,274 @@
+/* ==========================================================================
+   SmartDrop — Electroválvulas. Aquí la confianza lo es todo: estado grande y
+   claro, acciones con nombre, temporizador visible y confirmación antes de
+   cada comando. Solo tokens de smartdrop.css.
+   ========================================================================== */
+
+.valve-message {
+  margin-bottom: var(--s-4);
+}
+
+.valve-live-message {
+  margin: 0 0 var(--s-4);
+  color: var(--c-ink-2);
+  font-weight: 600;
+}
+
+.valve-live-message:empty {
+  display: none;
+}
+
+.valve-live-message.is-error {
+  color: var(--c-bad);
+}
+
+.valves-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s-5);
+  margin-bottom: var(--s-8);
+}
+
+@media (min-width: 900px) {
+  .valves-grid {
+    grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  }
+}
+
+.valve-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+}
+
+.valve-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-4);
+}
+
+.valve-card-title {
+  min-width: 0;
+}
+
+.valve-card-title > h2 {
+  margin: 0;
+  color: var(--c-ink);
+  font-family: var(--font-display);
+  font-size: var(--t-xl);
+  font-weight: 800;
+}
+
+.valve-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1) var(--s-5);
+  margin: var(--s-1) 0 0;
+  color: var(--c-ink-2);
+  font-size: var(--t-sm);
+}
+
+.valve-meta > div {
+  display: flex;
+  gap: var(--s-1);
+}
+
+.valve-meta dt {
+  color: var(--c-ink-3);
+}
+
+.valve-meta dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.valve-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding: var(--s-4);
+  border-radius: var(--r-md);
+  background: var(--c-surface-2);
+}
+
+.valve-status-label {
+  color: var(--c-ink-2);
+  font-weight: 600;
+}
+
+.valve-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-3);
+}
+
+.valve-actions > form {
+  margin: 0;
+}
+
+/* ── Temporizador ───────────────────────────────────────────────────────── */
+.valve-timer-panel {
+  margin: 0;
+  padding: var(--s-4) 0 0;
+  border: 0;
+  border-top: 1px solid var(--c-line);
+  min-width: 0;
+}
+
+.valve-timer-label {
+  padding: 0;
+  color: var(--c-ink);
+  font-weight: 700;
+}
+
+.valve-timer-panel > .field-hint {
+  margin: var(--s-1) 0 var(--s-3);
+}
+
+.valve-timer-custom {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  margin-top: var(--s-3);
+}
+
+.valve-timer-custom > input {
+  flex: 1 1 8rem;
+  width: auto;
+  min-width: 0;
+}
+
+.valve-timer-status {
+  display: none;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-4);
+  border-radius: var(--r-md);
+  background: var(--c-agua-soft);
+}
+
+.valve-timer-status.is-active {
+  display: flex;
+}
+
+.valve-timer-status-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+}
+
+.valve-timer-status-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  color: var(--c-ink);
+  font-weight: 700;
+}
+
+.valve-timer-countdown {
+  color: var(--c-ink);
+  font-weight: 600;
+}
+
+.valve-timer-countdown-value {
+  font-family: var(--font-display);
+  font-size: var(--t-xl);
+  font-weight: 800;
+}
+
+.valve-timer-meter-fill {
+  transition: width 1s linear;
+}
+
+.valve-timer-cancel {
+  align-self: flex-start;
+}
+
+/* ── Detalles técnicos ──────────────────────────────────────────────────── */
+.valve-tech > summary {
+  min-height: 32px;
+  color: var(--c-ink-2);
+  font-size: var(--t-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.valve-topic {
+  margin: var(--s-2) 0 0;
+  color: var(--c-ink-2);
+  font-size: var(--t-sm);
+  overflow-wrap: anywhere;
+}
+
+.valve-topic > code {
+  padding: 2px var(--s-2);
+  border-radius: var(--r-xs);
+  background: var(--c-surface-2);
+  color: var(--c-ink);
+}
+
+/* ── Movimientos ────────────────────────────────────────────────────────── */
+.history-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--s-3) var(--s-4);
+  margin-bottom: var(--s-5);
+}
+
+.history-field {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.history-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+.movement-type {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 var(--s-3);
+  border-radius: var(--r-pill);
+  font-size: var(--t-sm);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.movement-type-auto {
+  background: var(--c-agua-soft);
+  color: var(--c-ink);
+}
+
+.movement-type-manual {
+  background: var(--c-surface-tint);
+  color: var(--c-anil);
+}
+
+.movement-empty {
+  margin: 0;
+}
+
+/* ── Estadísticas ───────────────────────────────────────────────────────── */
+.stats-grid {
+  margin-bottom: var(--s-5);
+}
+
+.stats-chart-panel .panel-title {
+  margin-bottom: var(--s-4);
+}
+
+.stats-chart {
+  position: relative;
+  height: 260px;
+}
+
+.valves-page .movement-panel {
+  margin-bottom: var(--s-8);
+}

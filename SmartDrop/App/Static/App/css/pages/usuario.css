@@ -1,0 +1,197 @@
+/* ==========================================================================
+   SmartDrop — Mi perfil: identidad, datos personales, vivienda, avisos y
+   preferencias (se guardan al instante). Solo tokens de smartdrop.css.
+   ========================================================================== */
+
+.perfil-mensajes {
+  margin-bottom: var(--s-6);
+}
+
+/* ── Identidad ──────────────────────────────────────────────────────────── */
+.perfil-id {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-5) var(--s-6);
+  margin-bottom: var(--s-6);
+  padding: var(--s-6);
+  border-radius: var(--r-lg);
+  background: var(--c-sol-soft);
+}
+
+.perfil-avatar {
+  flex: none;
+}
+
+.perfil-id-main {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+
+.perfil-nombre {
+  margin: 0;
+  color: var(--c-ink);
+  font-family: var(--font-display);
+  font-size: var(--t-2xl);
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.perfil-correo {
+  margin: var(--s-1) 0 0;
+  color: var(--c-ink-2);
+  overflow-wrap: anywhere;
+}
+
+.perfil-id-datos {
+  flex: 1 1 18rem;
+}
+
+/* ── Filas de paneles ───────────────────────────────────────────────────── */
+.perfil-fila {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s-5);
+  margin-bottom: var(--s-5);
+}
+
+@media (min-width: 900px) {
+  .perfil-fila {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+}
+
+.perfil-panel-lede {
+  margin: var(--s-1) 0 0;
+  color: var(--c-ink-2);
+  font-size: var(--t-sm);
+}
+
+.perfil-fila .panel--flush > .panel-head {
+  padding: var(--s-5) var(--s-6) var(--s-3);
+  margin: 0;
+}
+
+.perfil-form {
+  margin-top: var(--s-2);
+}
+
+.perfil-form-aviso {
+  margin-bottom: var(--s-4);
+}
+
+/* ── Vivienda ───────────────────────────────────────────────────────────── */
+.perfil-vivienda {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-4);
+}
+
+.perfil-vivienda-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.perfil-vivienda-dir {
+  margin: 0;
+  color: var(--c-ink);
+  font-weight: 600;
+}
+
+.perfil-vivienda-vacia {
+  padding: var(--s-4) 0;
+}
+
+/* ── Interruptores de avisos y preferencias ─────────────────────────────── */
+.pref-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pref-list > li + li {
+  border-top: 1px solid var(--c-line);
+}
+
+.pref-switch {
+  display: flex;
+  width: 100%;
+  min-height: 64px;
+  padding: var(--s-3) var(--s-6);
+  gap: var(--s-4);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-1) var(--ease);
+}
+
+.pref-switch:hover {
+  background: var(--c-surface-2);
+}
+
+.pref-switch:focus-visible {
+  outline-offset: -3px;
+}
+
+.pref-switch > .icon-chip {
+  flex: none;
+  background: var(--c-surface-tint);
+  color: var(--c-anil);
+}
+
+.pref-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pref-name {
+  color: var(--c-ink);
+  font-size: var(--t-md);
+  font-weight: 600;
+}
+
+.pref-hint {
+  color: var(--c-ink-2);
+  font-size: var(--t-sm);
+  font-weight: 400;
+}
+
+.pref-reporte {
+  margin: var(--s-3) var(--s-6) var(--s-5);
+}
+
+/* ── Sesión ─────────────────────────────────────────────────────────────── */
+.perfil-sesion {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-4);
+  margin: var(--s-7) 0 var(--s-8);
+  padding-top: var(--s-6);
+  border-top: 1px solid var(--c-line);
+}
+
+.perfil-sesion-texto {
+  margin: var(--s-1) 0 0;
+  color: var(--c-ink-2);
+}
+
+/* ── Aviso flotante al guardar ──────────────────────────────────────────── */
+.pref-status:empty {
+  display: none;
+}
+
+.pref-status[data-estado="ok"] {
+  border-color: var(--c-ok-dot);
+}
+
+.pref-status[data-estado="error"] {
+  border-color: var(--c-bad-dot);
+  color: var(--c-bad);
+}

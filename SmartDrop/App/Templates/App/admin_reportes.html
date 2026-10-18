@@ -1,83 +1,112 @@
 {% extends 'App/base.html' %}
+{% load static sd_ui %}
 {% block title %}Problemas reportados{% endblock %}
 {% block nav_admin_reportes %}active{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/admin.css' %}?v=20261011-zona1">{% endblock %}
 
 {% block content %}
-<div class="reportes-heading">
-  <h1 class="page-title">PROBLEMAS REPORTADOS</h1>
-  <p class="page-subtitle">Gestiona los reportes de los usuarios: responde, asigna prioridad y cambia su estado.</p>
-</div>
+<header class="page-head reportes-heading">
+  <div>
+    <h1 class="page-title">Problemas reportados</h1>
+    <p class="page-lede">Responde a los residentes, asigna prioridad y cambia el estado de cada reporte.</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn btn--secondary reportes-link" href="{% url 'admin_reportes_export' %}?estado={{ filtro_estado }}&tipo={{ filtro_tipo }}"><i class="ti ti-download" aria-hidden="true"></i>Descargar CSV</a>
+  </div>
+</header>
 
 {% if messages %}
+  <div class="stack stack--sm admin-messages">
   {% for message in messages %}
-    <div class="alert-box full-width card msg-{{ message.tags }}">
-      <i class="ti ti-{% if message.tags == 'success' %}check{% else %}info-circle{% endif %} alert-icon"></i>
-      <div class="alert-text">{{ message }}</div>
+    <div class="notice {% if message.tags == 'success' %}notice--ok{% else %}notice--info{% endif %} msg-{{ message.tags }}" role="status">
+      <i class="ti ti-{% if message.tags == 'success' %}check{% else %}info-circle{% endif %}" aria-hidden="true"></i>
+      <div><p>{{ message }}</p></div>
     </div>
   {% endfor %}
+  </div>
 {% endif %}
 
-<div class="conteos-row">
-  <div class="stat"><div class="stat-num">{{ conteos.pendiente }}</div><div class="stat-label">Pendientes</div></div>
-  <div class="stat"><div class="stat-num">{{ conteos.en_proceso }}</div><div class="stat-label">En proceso</div></div>
-  <div class="stat"><div class="stat-num">{{ conteos.resuelto }}</div><div class="stat-label">Resueltos</div></div>
+<div class="tiles conteos-row">
+  <a class="tile{% if filtro_estado == 'pendiente' %} is-current{% endif %}" href="?estado=pendiente{% if filtro_tipo %}&tipo={{ filtro_tipo }}{% endif %}">
+    <div class="tile-head"><span class="status status--warn"><span class="status-dot" aria-hidden="true"></span>Pendientes</span><span class="tile-chevron" aria-hidden="true"></span></div>
+    <p class="tile-value" data-countup>{{ conteos.pendiente }}</p>
+  </a>
+  <a class="tile{% if filtro_estado == 'en_proceso' %} is-current{% endif %}" href="?estado=en_proceso{% if filtro_tipo %}&tipo={{ filtro_tipo }}{% endif %}">
+    <div class="tile-head"><span class="status status--info"><span class="status-dot" aria-hidden="true"></span>En proceso</span><span class="tile-chevron" aria-hidden="true"></span></div>
+    <p class="tile-value" data-countup>{{ conteos.en_proceso }}</p>
+  </a>
+  <a class="tile{% if filtro_estado == 'resuelto' %} is-current{% endif %}" href="?estado=resuelto{% if filtro_tipo %}&tipo={{ filtro_tipo }}{% endif %}">
+    <div class="tile-head"><span class="status status--ok"><span class="status-dot" aria-hidden="true"></span>Resueltos</span><span class="tile-chevron" aria-hidden="true"></span></div>
+    <p class="tile-value" data-countup>{{ conteos.resuelto }}</p>
+  </a>
 </div>
 
-<div class="card">
-  <form method="get" class="filtros-row">
-    <select name="estado" class="field-input">
-      <option value="">Todos los estados</option>
+<form method="get" class="filtros-row" aria-label="Filtrar reportes">
+  <div class="field field--inline">
+    <label class="field-label" for="filtro-estado">Estado</label>
+    <select name="estado" id="filtro-estado" class="field-input">
+      <option value="">Todos</option>
       <option value="pendiente" {% if filtro_estado == 'pendiente' %}selected{% endif %}>Pendiente</option>
       <option value="en_proceso" {% if filtro_estado == 'en_proceso' %}selected{% endif %}>En proceso</option>
       <option value="resuelto" {% if filtro_estado == 'resuelto' %}selected{% endif %}>Resuelto</option>
     </select>
-    <select name="tipo" class="field-input">
-      <option value="">Todos los tipos</option>
+  </div>
+  <div class="field field--inline">
+    <label class="field-label" for="filtro-tipo">Tipo</label>
+    <select name="tipo" id="filtro-tipo" class="field-input">
+      <option value="">Todos</option>
       {% for key, meta in tipos_problema.items %}
       <option value="{{ key }}" {% if filtro_tipo == key %}selected{% endif %}>{{ meta.label }}</option>
       {% endfor %}
     </select>
-    <button type="submit" class="btn-primary btn-filtrar"><i class="ti ti-filter"></i> Filtrar</button>
-    <a class="reportes-link" href="{% url 'admin_reportes_export' %}?estado={{ filtro_estado }}&tipo={{ filtro_tipo }}">
-      <i class="ti ti-download"></i> Exportar CSV
-    </a>
-  </form>
-
-  {% if reportes %}
-  <div class="tabla-reportes-wrap">
-    <table class="tabla-reportes">
-      <thead>
-        <tr>
-          <th>#</th><th>Usuario</th><th>Tipo</th><th>Descripción</th>
-          <th>Fecha</th><th>Estado</th><th>Prioridad</th><th>Evid.</th><th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for reporte in reportes %}
-        <tr>
-          <td>{{ reporte.id_reporte }}</td>
-          <td>
-            <div class="autor-nombre">{{ reporte.autor_nombre }}</div>
-            <div class="autor-correo">{{ reporte.autor_correo }}</div>
-          </td>
-          <td>{{ reporte.tipo_label }}</td>
-          <td class="desc-cell">{{ reporte.descripcion|truncatewords:10 }}</td>
-          <td>{{ reporte.fecha_reporte|slice:'5:16' }}</td>
-          <td><span class="badge badge-estado-{{ reporte.estado }}">{{ reporte.estado_label }}</span></td>
-          <td><span class="badge badge-prio-{{ reporte.prioridad|default:'media' }}">{{ reporte.prioridad|default:'media'|title }}</span></td>
-          <td>{% if reporte.n_adjuntos %}<i class="ti ti-paperclip"></i> {{ reporte.n_adjuntos }}{% else %}—{% endif %}</td>
-          <td>
-            <a href="{% url 'reporte_detalle' reporte.id_reporte %}" class="btn-ver">
-              Ver{% if reporte.sin_leer %} <span class="badge-sin-leer">{{ reporte.sin_leer }}</span>{% endif %}
-            </a>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
   </div>
-  {% else %}
-    <p class="reportes-empty">No hay reportes con estos filtros.</p>
-  {% endif %}
+  <button type="submit" class="btn btn--secondary btn-filtrar"><i class="ti ti-filter" aria-hidden="true"></i>Filtrar</button>
+  {% if filtro_estado or filtro_tipo %}<a class="btn btn--ghost" href="{% url 'admin_reportes' %}">Quitar filtros</a>{% endif %}
+</form>
+
+{% if reportes %}
+<div class="table-wrap tabla-reportes-wrap">
+  <table class="data-table tabla-reportes">
+    <caption>Reportes de los residentes</caption>
+    <thead>
+      <tr>
+        <th scope="col" class="num">#</th><th scope="col">Residente</th><th scope="col">Problema</th>
+        <th scope="col">Fecha</th><th scope="col">Estado</th><th scope="col">Prioridad</th><th scope="col" class="num">Adjuntos</th><th scope="col"><span class="sr-only">Acciones</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for reporte in reportes %}
+      <tr>
+        <td class="num muted">{{ reporte.id_reporte }}</td>
+        <td>
+          <p class="autor-nombre">{{ reporte.autor_nombre }}</p>
+          <p class="autor-correo">{{ reporte.autor_correo }}</p>
+        </td>
+        <td class="desc-cell">
+          <p class="reporte-tipo">{{ reporte.tipo_label }}</p>
+          <p class="reporte-desc">{{ reporte.descripcion|truncatewords:10 }}</p>
+        </td>
+        <td class="nowrap"><time datetime="{{ reporte.fecha_reporte }}">{{ reporte.fecha_reporte|fecha_corta }}</time></td>
+        <td><span class="status status--{{ reporte.estado|estado_css }} badge-estado-{{ reporte.estado }}"><span class="status-dot" aria-hidden="true"></span>{{ reporte.estado_label }}</span></td>
+        <td><span class="prio prio--{{ reporte.prioridad|default:'media' }} badge-prio-{{ reporte.prioridad|default:'media' }}">{{ reporte.prioridad|default:'media'|capfirst }}</span></td>
+        <td class="num">{% if reporte.n_adjuntos %}<span class="nowrap"><i class="ti ti-paperclip" aria-hidden="true"></i> {{ reporte.n_adjuntos }}</span>{% else %}<span class="muted">Ninguno</span>{% endif %}</td>
+        <td class="num">
+          <a href="{% url 'reporte_detalle' reporte.id_reporte %}" class="btn btn--secondary btn--sm btn-ver">
+            Abrir{% if reporte.sin_leer %} <span class="count-badge badge-sin-leer" aria-label="{{ reporte.sin_leer }} mensajes sin leer">{{ reporte.sin_leer }}</span>{% endif %}
+          </a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
 </div>
+{% else %}
+<div class="panel">
+  <div class="empty">
+    {% include 'App/_ilustracion.html' with tipo='ok' %}
+    <h3>No hay reportes con estos filtros</h3>
+    <p class="reportes-empty">Prueba con otro estado o tipo de problema.</p>
+  </div>
+</div>
+{% endif %}
 {% endblock %}

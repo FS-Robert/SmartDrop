@@ -1,103 +1,136 @@
 {% extends 'App/base.html' %}
-{% block title %}Reportar problemas{% endblock %}
+{% load static %}
+{% block title %}Reportar un problema{% endblock %}
 {% block nav_reportar %}active{% endblock %}
 
+{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/comunidad.css' %}?v=20261011-zona1">{% endblock %}
+
 {% block content %}
-<div class="reportes-heading">
-  <h1 class="page-title">REPORTAR PROBLEMAS</h1>
-  <p class="page-subtitle">Cuéntanos qué está pasando con tu servicio de agua. Adjunta fotos o videos como evidencia y un administrador te responderá.</p>
-</div>
+<header class="page-head">
+  <div>
+    <h1 class="page-title">Reportar un problema</h1>
+    <p class="page-lede">Cuéntanos qué pasa con tu servicio de agua. Puedes agregar fotos o videos, y el equipo de SmartDrop te responderá aquí mismo.</p>
+  </div>
+</header>
 
 {% if messages %}
-  {% for message in messages %}
-    <div class="alert-box full-width card msg-{{ message.tags }}">
-      <i class="ti ti-{% if message.tags == 'success' %}check{% elif message.tags == 'error' %}x{% else %}info-circle{% endif %} alert-icon"></i>
-      <div class="alert-text">{{ message }}</div>
-    </div>
-  {% endfor %}
+  <div class="page-messages">
+    {% for message in messages %}
+      <div class="notice {% if message.tags == 'success' %}notice--ok{% elif message.tags == 'error' %}notice--bad{% elif message.tags == 'warning' %}notice--warn{% else %}notice--info{% endif %}" role="{% if message.tags == 'error' %}alert{% else %}status{% endif %}">
+        {% if message.tags == 'success' %}<svg class="icon" aria-hidden="true"><use href="#i-circle-check"></use></svg>{% elif message.tags == 'error' %}<svg class="icon" aria-hidden="true"><use href="#i-circle-x"></use></svg>{% elif message.tags == 'warning' %}<i class="ti ti-alert-triangle" aria-hidden="true"></i>{% else %}<i class="ti ti-info-circle" aria-hidden="true"></i>{% endif %}
+        <div><p>{{ message }}</p></div>
+      </div>
+    {% endfor %}
+  </div>
 {% endif %}
 
-<div class="reportes-layout">
-  <div class="reportes-main">
-    <div class="card">
-      <div class="card-header">Problemas más comunes</div>
-      <p class="reportes-hint">Selecciona el tipo de problema para llenar el formulario más rápido.</p>
-      <div class="tipos-grid">
-        {% for key, meta in tipos_problema.items %}
-        <button type="button" class="tipo-card" data-tipo="{{ key }}" data-label="{{ meta.label }}">
-          <i class="ti {{ meta.icon }}"></i>
-          <span class="tipo-label">{{ meta.label }}</span>
-          <span class="tipo-desc">{{ meta.desc }}</span>
-        </button>
-        {% endfor %}
+<div class="reportar-layout">
+  <section class="panel reportar-panel" aria-labelledby="form-title">
+    <h2 class="panel-title reportar-titulo" id="form-title">Nuevo reporte</h2>
+
+    <form method="post" enctype="multipart/form-data" id="reporte-form" class="reportar-form">
+      {% csrf_token %}
+      <input type="hidden" name="tipo_problema" id="tipo_problema" value=""/>
+
+      <fieldset class="reportar-grupo">
+        <legend class="reportar-grupo-titulo">¿Qué tipo de problema es?</legend>
+        <p class="field-hint">Elige el que más se parezca. Los detalles los escribes abajo.</p>
+        <div class="tipos-grid">
+          {% for key, meta in tipos_problema.items %}
+          <button type="button" class="tipo-card" data-tipo="{{ key }}" data-label="{{ meta.label }}" aria-pressed="false">
+            <span class="icon-chip icon-chip--agua tipo-icon"><i class="ti {{ meta.icon }}" aria-hidden="true"></i></span>
+            <span class="tipo-texto">
+              <span class="tipo-label">{{ meta.label }}</span>
+              <span class="tipo-desc">{{ meta.desc }}</span>
+            </span>
+          </button>
+          {% endfor %}
+        </div>
+      </fieldset>
+
+      <div class="field">
+        <label class="field-label" for="descripcion">Describe el problema</label>
+        <p class="field-hint" id="descripcion-hint">Desde cuándo pasa, qué tan seguido y en qué parte de tu casa. Escribe al menos 10 caracteres.</p>
+        <textarea name="descripcion" id="descripcion" rows="4" required aria-describedby="descripcion-hint"></textarea>
       </div>
-    </div>
 
-    <div class="card">
-      <div class="card-header" id="form-title">Nuevo reporte</div>
-      <form method="post" enctype="multipart/form-data" id="reporte-form">
-        {% csrf_token %}
-        <input type="hidden" name="tipo_problema" id="tipo_problema" value=""/>
+      <div class="field">
+        <label class="field-label" for="ubicacion">Ubicación <span class="field-label-optional">(opcional)</span></label>
+        <p class="field-hint" id="ubicacion-hint">Por ejemplo: Casa 14, Colonia La Merced, San Miguel.</p>
+        <input type="text" name="ubicacion" id="ubicacion" autocomplete="street-address" aria-describedby="ubicacion-hint"/>
+      </div>
 
-        <label class="field-label" for="descripcion">Descripción del problema</label>
-        <textarea name="descripcion" id="descripcion" rows="4" required
-          class="field-input" placeholder="Describe con detalle: desde cuándo ocurre, qué tan seguido, en qué parte de la vivienda..."></textarea>
-
-        <label class="field-label" for="ubicacion">Ubicación (opcional)</label>
-        <input type="text" name="ubicacion" id="ubicacion" class="field-input"
-          placeholder="Ej: Casa #14, Colonia La Merced, San Miguel"/>
-
-        <label class="field-label">Evidencia fotográfica / video (opcional, máx. {{ max_adjuntos }})</label>
+      <div class="field">
+        <p class="field-label" id="adjuntos-label">Fotos o videos <span class="field-label-optional">(opcional)</span></p>
+        <p class="field-hint" id="adjuntos-hint">Hasta {{ max_adjuntos }} archivos de 50 MB como máximo cada uno.</p>
         <div class="adjuntos-drop" id="adjuntos-drop">
-          <i class="ti ti-photo"></i>
-          <span>Arrastra imágenes o videos aquí, o</span>
-          <label class="adjuntos-btn">
-            Examinar archivos
-            <input type="file" name="adjuntos" id="adjuntos" multiple
-              accept="image/*,video/*" hidden/>
+          <span class="icon-chip icon-chip--agua" aria-hidden="true"><i class="ti ti-photo"></i></span>
+          <p class="adjuntos-drop-texto">Arrastra tus fotos o videos aquí</p>
+          <label class="btn btn--secondary adjuntos-btn">
+            <i class="ti ti-paperclip" aria-hidden="true"></i><span id="adjuntos-btn-texto">Elegir archivos</span>
+            <input type="file" name="adjuntos" id="adjuntos" class="adjuntos-input" multiple
+              accept="image/*,video/*" aria-labelledby="adjuntos-label adjuntos-btn-texto" aria-describedby="adjuntos-hint"/>
           </label>
         </div>
-        <ul class="adjuntos-preview" id="adjuntos-preview"></ul>
+        <ul class="adjuntos-preview" id="adjuntos-preview" aria-live="polite"></ul>
+      </div>
 
-        <button type="submit" class="btn-primary reportes-submit" id="reporte-submit" disabled>
-          <i class="ti ti-send"></i> Enviar reporte
+      <div class="form-actions reportar-acciones">
+        <p class="reportar-envio-hint">Elige el tipo de problema para poder enviarlo.</p>
+        <button type="submit" class="btn btn--primary btn--lg reportes-submit" id="reporte-submit" disabled>
+          <i class="ti ti-send" aria-hidden="true"></i><span>Enviar reporte</span>
         </button>
-      </form>
-    </div>
-  </div>
+      </div>
+    </form>
+  </section>
 
-  <!-- Columna derecha: historial del usuario -->
-  <div class="reportes-side">
-    <div class="card">
-      <div class="card-header">Mis reportes</div>
+  <aside class="reportar-aside" aria-label="Tus reportes y ayuda">
+    <section class="reportar-historial" aria-labelledby="mis-reportes-titulo">
+      <div class="section-head">
+        <h2 class="section-title" id="mis-reportes-titulo">Tus reportes</h2>
+        {% if mis_reportes %}<span class="count-badge">{{ mis_reportes|length }}</span>{% endif %}
+      </div>
       {% if mis_reportes %}
-        <ul class="reportes-list">
+        <ul class="list panel panel--flush reportes-list">
           {% for reporte in mis_reportes %}
           <li>
-            <a href="{% url 'reporte_detalle' reporte.id_reporte %}" class="reporte-row">
-              <span class="badge badge-estado-{{ reporte.estado }}">{{ reporte.estado_label }}</span>
-              <span class="reporte-row-title">{{ reporte.tipo_label }}</span>
-              <span class="reporte-row-desc">{{ reporte.descripcion|truncatewords:12 }}</span>
-              <span class="reporte-row-meta">
-                <i class="ti ti-clock"></i> {{ reporte.fecha_reporte|slice:':16' }}
-                {% if reporte.n_adjuntos %}· <i class="ti ti-paperclip"></i> {{ reporte.n_adjuntos }}{% endif %}
-              </span>
+            <a href="{% url 'reporte_detalle' reporte.id_reporte %}" class="list-row reporte-row">
+              <div class="list-row-main">
+                <p class="list-row-title">{{ reporte.tipo_label }}</p>
+                <p class="reporte-row-desc">{{ reporte.descripcion|truncatewords:12 }}</p>
+                <p class="list-row-meta reporte-row-meta">
+                  {% with f=reporte.fecha_reporte %}<time datetime="{{ reporte.fecha_reporte }}">{{ f|slice:'8:10' }}/{{ f|slice:'5:7' }}/{{ f|slice:':4' }} {{ f|slice:'11:16' }}</time>{% endwith %}
+                  {% if reporte.n_adjuntos %}<span class="reporte-row-adjuntos"><i class="ti ti-paperclip" aria-hidden="true"></i>{{ reporte.n_adjuntos }} adjunto{{ reporte.n_adjuntos|pluralize }}</span>{% endif %}
+                </p>
+              </div>
+              <div class="list-row-aside">
+                <span class="status {% if reporte.estado == 'resuelto' %}status--ok{% elif reporte.estado == 'en_proceso' %}status--info{% elif reporte.estado == 'pendiente' %}status--warn{% else %}status--none{% endif %}"><span class="status-dot" aria-hidden="true"></span>{{ reporte.estado_label }}</span>
+                <span class="chevron reporte-row-chevron" aria-hidden="true"></span>
+              </div>
             </a>
           </li>
           {% endfor %}
         </ul>
       {% else %}
-        <p class="reportes-empty">Aún no has enviado reportes. Si tienes un problema con tu servicio, repórtalo aquí.</p>
+        <div class="panel reportar-vacio">
+          <div class="empty">
+            {% include 'App/_ilustracion.html' with tipo='reportes' %}
+            <h3>Aún no has reportado problemas</h3>
+            <p>Si ves una fuga o agua turbia, cuéntanos con el formulario.</p>
+          </div>
+        </div>
       {% endif %}
-    </div>
+    </section>
 
-    <div class="card">
-      <div class="card-header">¿Necesitas ayuda inmediata?</div>
-      <p class="reportes-hint">Si es una emergencia (fuga mayor, sin agua en toda la zona), también puedes llamar a la línea de atención.</p>
-      <a href="{% url 'reportes_comunidad' %}" class="reportes-link"><i></i> Ver reportes de la comunidad</a>
-      <a href="{% url 'alertas_historial' %}" class="reportes-link"><i></i> Ver historial de alertas</a>
-    </div>
-  </div>
+    <section class="panel panel--warm reportar-ayuda" aria-labelledby="ayuda-titulo">
+      <h2 class="panel-title" id="ayuda-titulo">¿Es una emergencia?</h2>
+      <p>Si hay una fuga grande o falta el agua en toda la zona, revisa si tus vecinos ya lo reportaron. Cuantos más reportes, más prioridad.</p>
+      <div class="reportar-ayuda-links">
+        <a href="{% url 'reportes_comunidad' %}" class="btn btn--secondary reportes-link"><i class="ti ti-users" aria-hidden="true"></i><span>Ver reportes de la comunidad</span></a>
+        <a href="{% url 'alertas_historial' %}" class="btn btn--ghost reportes-link"><i class="ti ti-bell" aria-hidden="true"></i><span>Ver historial de alertas</span></a>
+      </div>
+    </section>
+  </aside>
 </div>
 {% endblock %}
 
@@ -115,8 +148,12 @@
 
   cards.forEach((card) => {
     card.addEventListener('click', () => {
-      cards.forEach((c) => c.classList.remove('selected'));
+      cards.forEach((c) => {
+        c.classList.remove('selected');
+        c.setAttribute('aria-pressed', 'false');
+      });
       card.classList.add('selected');
+      card.setAttribute('aria-pressed', 'true');
       tipoInput.value = card.dataset.tipo;
       formTitle.textContent = 'Nuevo reporte: ' + card.dataset.label;
       submitBtn.disabled = false;
@@ -126,12 +163,29 @@
 
   function renderPreview() {
     preview.innerHTML = '';
-    Array.from(fileInput.files).slice(0, maxAdjuntos).forEach((file) => {
+    const files = Array.from(fileInput.files);
+    files.slice(0, maxAdjuntos).forEach((file) => {
       const li = document.createElement('li');
+      li.className = 'adjunto-item';
       const isVideo = file.type.startsWith('video/');
-      li.innerHTML = `<i class="ti ti-${isVideo ? 'video' : 'photo'}"></i> ${file.name} <span>(${(file.size / 1024 / 1024).toFixed(1)} MB)</span>`;
+      const icon = document.createElement('i');
+      icon.className = 'ti ' + (isVideo ? 'ti-video' : 'ti-photo');
+      icon.setAttribute('aria-hidden', 'true');
+      const name = document.createElement('span');
+      name.className = 'adjunto-nombre';
+      name.textContent = file.name;
+      const size = document.createElement('span');
+      size.className = 'adjunto-peso';
+      size.textContent = `${(file.size / 1024 / 1024).toFixed(1)} MB`;
+      li.append(icon, name, size);
       preview.appendChild(li);
     });
+    if (files.length > maxAdjuntos) {
+      const aviso = document.createElement('li');
+      aviso.className = 'adjuntos-aviso';
+      aviso.textContent = `Solo se guardarán los primeros ${maxAdjuntos} archivos.`;
+      preview.appendChild(aviso);
+    }
   }
 
   fileInput.addEventListener('change', renderPreview);

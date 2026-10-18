@@ -2,80 +2,40 @@
 {% load static %}
 {% block title %}Predicción de fugas{% endblock %}
 {% block nav_ml_fugas %}active{% endblock %}
-
-{% block extra_css %}
-  <style>
-    .ml-head { display:flex; justify-content:space-between; align-items:flex-end; gap:16px; flex-wrap:wrap; }
-    .ml-run-btn { display:inline-flex; align-items:center; gap:8px; padding:11px 20px; border:0; border-radius:10px; background:#6b2aa5; color:#fff; font-weight:700; cursor:pointer; }
-    .ml-run-btn:disabled { opacity:.6; cursor:wait; }
-    .ml-sub { color:var(--muted); font-size:13px; margin:4px 0 14px; }
-    .monitor-chip { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:999px; font-size:12px; font-weight:700; background:#e6f7ee; color:#1a7a4c; margin-bottom:14px; }
-    .monitor-chip.off { background:#fff4e0; color:#a86a00; }
-    .card { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px 16px; margin-bottom:16px; }
-    .card h3 { margin:0 0 10px; }
-    .leak-row { border:1px solid var(--border); border-left:5px solid #1a7a4c; border-radius:10px; padding:12px 14px; margin-bottom:10px; background:var(--panel); }
-    .leak-row.medio { border-left-color:#d9822b; }
-    .leak-row.alto { border-left-color:#b3261e; background:rgba(179,38,30,.06); }
-    .leak-row.sin_datos { border-left-color:#bbb; }
-    .leak-top { display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:center; }
-    .leak-name { font-weight:800; }
-    .leak-meta { color:var(--muted); font-size:12px; }
-    .prob { min-width:180px; text-align:right; font-weight:800; }
-    .prob-bar { height:7px; border-radius:999px; background:var(--border); margin-top:5px; overflow:hidden; }
-    .prob-bar > i { display:block; height:100%; background:#1a7a4c; }
-    .leak-row.medio .prob-bar > i { background:#d9822b; }
-    .leak-row.alto .prob-bar > i { background:#b3261e; }
-    .leak-detail { margin-top:10px; font-size:13px; }
-    .leak-detail ul { margin:6px 0 0 18px; }
-    .kv { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:8px; margin-top:8px; }
-    .kv div { background:rgba(124,58,237,.08); border-radius:8px; padding:8px 10px; font-size:12px; }
-    .kv b { display:block; font-size:10px; color:var(--muted); text-transform:uppercase; }
-    .tag { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:800; text-transform:uppercase; background:#f0ecf7; color:var(--muted); }
-    .tag.alto { background:#fdeaea; color:#b3261e; } .tag.medio { background:#fff4e0; color:#a86a00; } .tag.bajo { background:#e6f7ee; color:#1a7a4c; }
-    .alert-item { border:1px solid #f5c2c7; border-left:5px solid #b3261e; border-radius:10px; padding:12px 14px; margin-bottom:10px; background:rgba(179,38,30,.06); }
-    .alert-item.leida { opacity:.7; border-color:#efe5fb; border-left-color:#bbb; background:var(--panel); }
-    .alert-item:target { box-shadow:0 0 0 3px rgba(124,58,237,.35); }
-    .alert-msg { white-space:pre-line; font-size:13px; margin-top:8px; }
-    .link-btn { border:0; background:transparent; color:#6b21a8; font-weight:700; cursor:pointer; padding:0; }
-    .leak-summary { margin-top:8px; font-size:14px; font-weight:600; }
-    .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
-    .chip { background:rgba(124,58,237,.10); border-radius:999px; padding:4px 10px; font-size:12px; font-weight:700; }
-    .leak-action { margin-top:8px; font-size:13px; color:var(--muted); }
-    .leak-row details, .alert-item details { margin-top:8px; font-size:13px; }
-    .leak-row summary, .alert-item summary { cursor:pointer; color:#6b21a8; font-weight:700; }
-    .leak-compact { display:flex; justify-content:space-between; gap:10px; align-items:center; padding:8px 12px; border-bottom:1px solid var(--border); font-size:13px; }
-    .leak-compact:last-child { border-bottom:0; }
-    .leak-compact .leak-meta { margin-left:6px; }
-    .banner-err { padding:10px 14px; border-radius:10px; background:#fdeaea; color:#b3261e; font-weight:600; margin-bottom:14px; }
-    .banner-ok { padding:10px 14px; border-radius:10px; background:#e6f7ee; color:#1a7a4c; font-weight:600; margin-bottom:14px; }
-  </style>
-{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/prediccion.css' %}?v=20261011-zona1">{% endblock %}
 
 {% block content %}
-<div class="ml-head">
+<header class="page-head ml-head">
   <div>
-    <h1 class="page-title">PREDICCIÓN DE FUGAS</h1>
-    <p class="ml-sub">El sistema analiza las lecturas de cada vivienda por su cuenta y avisa al administrador cuando detecta una posible fuga.</p>
+    <h1 class="page-title">Predicción de fugas</h1>
+    <p class="page-lede ml-sub">El sistema revisa las lecturas de cada vivienda por su cuenta y te avisa cuando detecta una posible fuga.</p>
   </div>
-  <button type="button" class="ml-run-btn" id="ml-run-btn"><i class="ti ti-refresh"></i> Analizar ahora</button>
-</div>
+  <div class="page-actions">
+    <button type="button" class="btn btn--primary ml-run-btn" id="ml-run-btn"><i class="ti ti-refresh" aria-hidden="true"></i><span>Analizar ahora</span></button>
+  </div>
+</header>
 
-<div id="monitor-chip" class="monitor-chip off">Cargando estado del monitor…</div>
-<div id="ml-feedback"></div>
+<p id="monitor-chip" class="live live--off monitor-chip off" aria-live="polite">Cargando estado del monitor…</p>
+<div id="ml-feedback" aria-live="polite"></div>
 
-<div class="card">
-  <div class="leak-top"><h3>Avisos de fuga</h3><button type="button" class="link-btn" id="mark-read" hidden>Marcar todos como leídos</button></div>
-  <div id="alerts-box"><p class="ml-sub">Cargando…</p></div>
-</div>
+<section class="section" aria-labelledby="avisos-titulo">
+  <div class="section-head leak-top">
+    <h2 class="section-title" id="avisos-titulo">Avisos de fuga</h2>
+    <button type="button" class="btn btn--ghost btn--sm link-btn" id="mark-read" hidden>Marcar todos como leídos</button>
+  </div>
+  <div id="alerts-box" class="leak-stack"><div class="ml-loading"><span class="skeleton"></span><span class="skeleton"></span></div></div>
+</section>
 
-<div class="card">
-  <h3>Estado por vivienda</h3>
-  <div id="leaks-box"><p class="ml-sub">Cargando…</p></div>
-</div>
+<section class="section" aria-labelledby="viviendas-titulo">
+  <div class="section-head">
+    <h2 class="section-title" id="viviendas-titulo">Estado por vivienda</h2>
+  </div>
+  <div id="leaks-box" class="leak-stack"><div class="ml-loading"><span class="skeleton"></span><span class="skeleton"></span></div></div>
+</section>
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'App/js/ml_predictions.js' %}"></script>
+<script src="{% static 'App/js/ml_predictions.js' %}?v=20261011-zona1"></script>
 <script>
 (function () {
   const LEAKS_URL = "{% url 'ml_engine:leak_overview' %}";
@@ -87,25 +47,32 @@
     plana: 'Lecturas constantes: no hay patrón que analizar', insuficiente: 'Historial insuficiente',
     sin_datos: 'Sin lecturas sincronizadas', sin_lecturas_recientes: 'El sensor no está reportando',
   };
-  const RISK_LABEL = { bajo: 'Bajo', medio: 'Medio', alto: 'Alto', sin_datos: 'Sin análisis' };
   const button = document.getElementById('ml-run-btn');
   const feedback = document.getElementById('ml-feedback');
 
   function esc(text) { const d = document.createElement('div'); d.textContent = text == null ? '' : String(text); return d.innerHTML; }
   function csrf() { const m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/); return m ? decodeURIComponent(m[1]) : ''; }
   function fmt(value, unit, digits) { return value == null ? 'sin dato' : `${Number(value).toFixed(digits == null ? 2 : digits)}${unit ? ' ' + unit : ''}`; }
+  function when(value) { return value ? new Date(value).toLocaleString('es-SV', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''; }
+  function pill(mod, text) { return `<span class="status status--${mod}"><span class="status-dot" aria-hidden="true"></span>${text}</span>`; }
+  function place(item) { return [item.direccion, item.zona].filter(Boolean).map(esc).join(', '); }
+
+  function notice(mod, text) {
+    const icon = mod === 'ok' ? 'ti-check' : 'ti-alert-triangle';
+    return `<div class="notice notice--${mod}" role="status"><i class="ti ${icon}" aria-hidden="true"></i><div><p>${text}</p></div></div>`;
+  }
 
   function metricsGrid(m) {
     const unit = m.unidad_presion || '';
-    const onset = m.inicio_estimado ? new Date(m.inicio_estimado).toLocaleString() : 'no determinado';
-    return `<div class="kv">
-      <div><b>Flujo mínimo (6 h)</b>${fmt(m.flujo_minimo_6h_lpm, 'L/min', 3)} (normal ${fmt(m.flujo_minimo_normal_lpm, 'L/min', 3)})</div>
-      <div><b>Pérdida estimada</b>${fmt(m.perdida_estimada_lph, 'L/h', 1)}</div>
-      <div><b>Agua perdida estimada</b>${fmt(m.litros_perdidos_estimados, 'L', 1)}</div>
-      <div><b>Inicio estimado</b>${esc(onset)}</div>
-      <div><b>Presión</b>${fmt(m.presion_actual, unit)} (normal ${fmt(m.presion_normal, unit)}, caída ${fmt(m.caida_presion, unit)})</div>
-      <div><b>Tanque</b>${fmt(m.nivel_tanque_litros, 'L', 1)} (${fmt(m.nivel_tanque_pct, '%', 0)})</div>
-    </div>`;
+    const onset = m.inicio_estimado ? when(m.inicio_estimado) : 'no determinado';
+    return `<dl class="kv leak-metrics">
+      <div><dt>Flujo mínimo (6 h)</dt><dd>${fmt(m.flujo_minimo_6h_lpm, 'L/min', 3)} <span class="muted">(normal ${fmt(m.flujo_minimo_normal_lpm, 'L/min', 3)})</span></dd></div>
+      <div><dt>Pérdida estimada</dt><dd>${fmt(m.perdida_estimada_lph, 'L/h', 1)}</dd></div>
+      <div><dt>Agua perdida estimada</dt><dd>${fmt(m.litros_perdidos_estimados, 'L', 1)}</dd></div>
+      <div><dt>Inicio estimado</dt><dd>${esc(onset)}</dd></div>
+      <div><dt>Presión</dt><dd>${fmt(m.presion_actual, unit)} <span class="muted">(normal ${fmt(m.presion_normal, unit)}, caída ${fmt(m.caida_presion, unit)})</span></dd></div>
+      <div><dt>Tanque</dt><dd>${fmt(m.nivel_tanque_litros, 'L', 1)} <span class="muted">(${fmt(m.nivel_tanque_pct, '%', 0)})</span></dd></div>
+    </dl>`;
   }
 
   async function loadMonitor(data) {
@@ -114,88 +81,105 @@
     if (monitor.ultimo_ciclo) {
       const minutes = Math.max(0, Math.round((Date.now() - new Date(monitor.ultimo_ciclo).getTime()) / 60000));
       const stale = minutes > monitor.cada_minutos * 2 + 1;
-      chip.className = 'monitor-chip' + (monitor.estado === 'ok' && !stale ? '' : ' off');
+      const ok = monitor.estado === 'ok' && !stale;
+      chip.className = 'live monitor-chip' + (ok ? '' : ' live--off off');
       chip.textContent = stale
-        ? `El monitor automático lleva ${minutes} min sin analizar (revisa cada ${monitor.cada_minutos} min mientras el servidor esté encendido).`
-        : `Monitor automático activo · último análisis hace ${minutes} min · revisa cada ${monitor.cada_minutos} min · umbral de aviso ${Math.round(data.umbral_alerta * 100)} %`;
+        ? `El monitor automático lleva ${minutes} min sin analizar. Revisa cada ${monitor.cada_minutos} min mientras el servidor esté encendido.`
+        : `Monitor automático activo. Último análisis hace ${minutes} min; revisa cada ${monitor.cada_minutos} min y avisa desde ${Math.round(data.umbral_alerta * 100)} % de probabilidad.`;
     } else {
-      chip.className = 'monitor-chip off';
-      chip.textContent = `El monitor automático aún no ha completado un ciclo (se ejecuta cada ${monitor.cada_minutos} min mientras el servidor esté encendido).`;
+      chip.className = 'live live--off monitor-chip off';
+      chip.textContent = `El monitor automático aún no ha completado un ciclo. Se ejecuta cada ${monitor.cada_minutos} min mientras el servidor esté encendido.`;
     }
   }
 
-  function keyChips(m, inicio) {
-    const chips = [];
-    if (m.perdida_estimada_lph != null && m.perdida_estimada_lph > 0) chips.push(`Pérdida ≈ ${fmt(m.perdida_estimada_lph, 'L/h', 1)}`);
-    if (inicio) chips.push(`Desde ${esc(inicio)}`);
-    if (m.litros_perdidos_estimados) chips.push(`Agua perdida ≈ ${fmt(m.litros_perdidos_estimados, 'L', 0)}`);
-    if (m.presion_actual != null && m.presion_normal != null) chips.push(`Presión ${fmt(m.presion_actual, '', 2)} (normal ${fmt(m.presion_normal, '', 2)})`);
-    return chips.length ? `<div class="chips">${chips.map((c) => `<span class="chip">${c}</span>`).join('')}</div>` : '';
+  function keyFacts(m, inicio) {
+    const facts = [];
+    if (m.perdida_estimada_lph != null && m.perdida_estimada_lph > 0) facts.push(`Pérdida ≈ ${fmt(m.perdida_estimada_lph, 'L/h', 1)}`);
+    if (inicio) facts.push(`Desde ${esc(inicio)}`);
+    if (m.litros_perdidos_estimados) facts.push(`Agua perdida ≈ ${fmt(m.litros_perdidos_estimados, 'L', 0)}`);
+    if (m.presion_actual != null && m.presion_normal != null) facts.push(`Presión ${fmt(m.presion_actual, '', 2)} (normal ${fmt(m.presion_normal, '', 2)})`);
+    return facts.length ? `<ul class="leak-facts">${facts.map((c) => `<li>${c}</li>`).join('')}</ul>` : '';
   }
 
   function detailsBlock(causas, m, titular, telefono) {
     const causes = (causas || []).map((c) => `<li>${esc(c)}</li>`).join('');
-    return `<details><summary>Ver más detalles</summary>
-      ${causes ? `<strong>Por qué se detectó</strong><ul>${causes}</ul>` : ''}
+    return `<details class="leak-details"><summary>Ver más detalles</summary>
+      ${causes ? `<p class="leak-details-title">Por qué se detectó</p><ul class="leak-causes">${causes}</ul>` : ''}
       ${metricsGrid(m || {})}
-      <div class="leak-meta" style="margin-top:6px">Titular: ${esc(titular || 'sin dato')} · Tel.: ${esc(telefono || 'sin dato')}</div>
+      <p class="leak-meta leak-contact">Titular: ${esc(titular || 'sin dato')}. Teléfono: ${esc(telefono || 'sin dato')}.</p>
     </details>`;
+  }
+
+  function probability(pct, mod) {
+    if (pct == null) return '';
+    const value = Math.max(0, Math.min(100, Number(pct) || 0));
+    return `<div class="prob"><span class="prob-value num">${value.toFixed(0)} %</span><span class="prob-label">probabilidad</span>
+      <div class="meter prob-bar" aria-hidden="true"><span class="meter-fill meter-fill--${mod}" style="width:${value}%"></span></div></div>`;
   }
 
   async function loadLeaks() {
     const response = await fetch(LEAKS_URL, { credentials: 'same-origin' });
     const box = document.getElementById('leaks-box');
-    if (!response.ok) { box.innerHTML = '<p class="ml-sub">No se pudo cargar el estado.</p>'; return; }
+    if (!response.ok) { box.innerHTML = notice('bad', 'No se pudo cargar el estado de las viviendas.'); return; }
     const data = await response.json();
     loadMonitor(data);
-    if (!data.viviendas.length) { box.innerHTML = '<p class="ml-sub">Aún no hay viviendas sincronizadas. Pulsa <strong>Analizar ahora</strong>.</p>'; return; }
+    if (!data.viviendas.length) { box.innerHTML = notice('info', 'Aún no hay viviendas sincronizadas. Pulsa <strong>Analizar ahora</strong>.'); return; }
     const leaking = data.viviendas.filter((v) => v.posible_fuga);
     const others = data.viviendas.filter((v) => !v.posible_fuga);
-    const leakCards = leaking.map((v) => `<div class="leak-row alto">
+    const leakCards = leaking.map((v) => `<article class="panel leak-row alto">
         <div class="leak-top">
-          <div><span class="leak-name">${esc(v.nic)}</span> <span class="tag alto">Posible fuga</span>
-            <div class="leak-meta">${esc(v.direccion)} · ${esc(v.zona)}${v.evaluado ? ' · analizada ' + new Date(v.evaluado).toLocaleString() : ''}</div></div>
-          <div class="prob">${v.porcentaje == null ? '—' : v.porcentaje.toFixed(0) + ' %'}<div class="prob-bar"><i style="width:${v.porcentaje || 0}%"></i></div></div>
+          <div class="leak-who">
+            <p class="leak-name">${esc(v.nic)} ${pill('bad', 'Posible fuga')}</p>
+            <p class="leak-meta">${place(v)}${v.evaluado ? `. Analizada ${when(v.evaluado)}` : ''}</p>
+          </div>
+          ${probability(v.porcentaje, 'bad')}
         </div>
-        <div class="leak-summary">${esc(v.resumen)}</div>
-        ${keyChips(v.metricas || {}, v.inicio)}
-        <div class="leak-action"><strong>Qué hacer:</strong> ${esc(v.accion)}</div>
+        <p class="leak-summary">${esc(v.resumen)}</p>
+        ${keyFacts(v.metricas || {}, v.inicio)}
+        <p class="leak-action"><strong>Qué hacer:</strong> ${esc(v.accion)}</p>
         ${detailsBlock(v.causas, v.metricas, v.titular, v.telefono)}
-      </div>`).join('');
+      </article>`).join('');
     const status = (v) => {
       const issue = DATA_LABEL[v.calidad_datos];
-      if (issue) return `<span class="tag">${esc(issue)}</span>`;
-      if (v.nivel_riesgo === 'medio') return '<span class="tag medio">Vigilar</span>';
-      if (v.nivel_riesgo === 'sin_datos') return '<span class="tag">Sin análisis</span>';
-      return '<span class="tag bajo">Sin fuga</span>';
+      if (issue) return pill('none', esc(issue));
+      if (v.nivel_riesgo === 'medio') return pill('warn', 'Vigilar');
+      if (v.nivel_riesgo === 'sin_datos') return pill('none', 'Sin análisis');
+      return pill('ok', 'Sin fuga');
     };
-    const rows = others.map((v) => `<div class="leak-compact">
-        <div><strong>${esc(v.nic)}</strong><span class="leak-meta">${esc(v.direccion)} · ${esc(v.zona)}</span></div>
-        <div>${status(v)} <strong>${v.porcentaje == null ? '' : v.porcentaje.toFixed(0) + ' %'}</strong></div>
-      </div>`).join('');
-    box.innerHTML = (leaking.length ? leakCards : '<div class="banner-ok">Ninguna vivienda tiene una posible fuga en este momento.</div>')
-      + (others.length ? `<h4 style="margin:14px 0 6px">Otras viviendas (${others.length})</h4><div class="card" style="padding:0">${rows}</div>` : '');
+    const rows = others.map((v) => `<li class="list-row leak-compact">
+        <div class="list-row-main"><p class="list-row-title">${esc(v.nic)}</p><p class="list-row-meta leak-meta">${place(v)}</p></div>
+        <div class="list-row-aside">${status(v)}${v.porcentaje == null ? '' : `<strong class="num leak-compact-pct">${v.porcentaje.toFixed(0)} %</strong>`}</div>
+      </li>`).join('');
+    box.innerHTML = (leaking.length ? leakCards : notice('ok', 'Ninguna vivienda tiene una posible fuga en este momento.'))
+      + (others.length ? `<h3 class="leak-others-title">Otras viviendas (${others.length})</h3><div class="panel panel--flush"><ul class="list">${rows}</ul></div>` : '');
   }
 
   let unreadIds = [];
   async function loadAlerts() {
     const response = await fetch(ALERTS_URL, { credentials: 'same-origin' });
     const box = document.getElementById('alerts-box');
-    if (!response.ok) { box.innerHTML = '<p class="ml-sub">No se pudieron cargar los avisos.</p>'; return; }
+    if (!response.ok) { box.innerHTML = notice('bad', 'No se pudieron cargar los avisos.'); return; }
     const data = await response.json();
     unreadIds = data.alertas.filter((a) => !a.leida).map((a) => a.id_alerta);
     document.getElementById('mark-read').hidden = !unreadIds.length;
-    if (!data.alertas.length) { box.innerHTML = '<p class="ml-sub">Sin avisos de fuga todavía.</p>'; return; }
+    if (!data.alertas.length) {
+      box.innerHTML = '<div class="panel"><div class="empty"><span class="icon-chip icon-chip--lg icon-chip--ok" aria-hidden="true"><i class="ti ti-check"></i></span><h3>Sin avisos de fuga</h3><p>Cuando el monitor detecte una posible fuga, el aviso aparecerá aquí.</p></div></div>';
+      return;
+    }
     box.innerHTML = data.alertas.map((a) => `
-      <div class="alert-item ${a.leida ? 'leida' : ''}" id="alerta-${a.id_alerta}">
-        <div class="leak-top"><div><strong>${esc(a.nic)}</strong> ${a.leida ? '<span class="tag">Leído</span>' : '<span class="tag alto">Nuevo</span>'}
-          <div class="leak-meta">${esc(a.direccion)} · ${esc(a.zona)} · ${new Date(a.fecha).toLocaleString()}</div></div>
-          <div class="prob">${a.probabilidad != null ? Math.round(a.probabilidad * 100) + ' %' : ''}</div></div>
-        <div class="leak-summary">${esc(a.resumen)}</div>
-        ${keyChips(a.metricas || {}, a.inicio)}
-        <div class="leak-action"><strong>Qué hacer:</strong> ${esc(a.accion)}</div>
+      <article class="panel alert-item ${a.leida ? 'leida' : ''}" id="alerta-${a.id_alerta}">
+        <div class="leak-top">
+          <div class="leak-who">
+            <p class="leak-name">${esc(a.nic)} ${a.leida ? pill('none', 'Leído') : pill('bad', 'Nuevo')}</p>
+            <p class="leak-meta">${place(a)}. ${when(a.fecha)}</p>
+          </div>
+          ${a.probabilidad != null ? probability(a.probabilidad * 100, a.leida ? 'anil' : 'bad') : ''}
+        </div>
+        <p class="leak-summary">${esc(a.resumen)}</p>
+        ${keyFacts(a.metricas || {}, a.inicio)}
+        <p class="leak-action"><strong>Qué hacer:</strong> ${esc(a.accion)}</p>
         ${detailsBlock(a.causas, a.metricas, a.titular, a.telefono)}
-      </div>`).join('');
+      </article>`).join('');
     if (location.hash) { const target = document.querySelector(location.hash); if (target) target.scrollIntoView({ block: 'center' }); }
   }
 
@@ -208,18 +192,20 @@
 
   button.addEventListener('click', async () => {
     button.disabled = true;
+    button.classList.add('is-loading');
     feedback.innerHTML = '';
     try {
       const result = await window.SmartDropPredictions.run({ runUrl: RUN_URL, jobUrl: JOB_URL });
       const fugas = result.fugas || {};
-      feedback.innerHTML = `<div class="banner-ok">Análisis terminado: ${fugas.analizados || 0} viviendas, ${fugas.posibles_fugas || 0} posible(s) fuga(s)` +
-        `${fugas.alertas_creadas ? `, ${fugas.alertas_creadas} aviso(s) nuevo(s)` : ''}.</div>`;
+      feedback.innerHTML = notice(fugas.posibles_fugas ? 'warn' : 'ok', `Análisis terminado: ${fugas.analizados || 0} viviendas, ${fugas.posibles_fugas || 0} posible(s) fuga(s)` +
+        `${fugas.alertas_creadas ? `, ${fugas.alertas_creadas} aviso(s) nuevo(s)` : ''}.`);
       await Promise.all([loadLeaks(), loadAlerts()]);
       if (window.SmartDropLeakAlerts) window.SmartDropLeakAlerts.refresh();
     } catch (error) {
-      feedback.innerHTML = `<div class="banner-err">${esc(error.message)}</div>`;
+      feedback.innerHTML = notice('bad', esc(error.message));
     } finally {
       button.disabled = false;
+      button.classList.remove('is-loading');
     }
   });
 
