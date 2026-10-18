@@ -1,0 +1,32 @@
+<aside class="auth-brand">
+  <a class="auth-logo" href="{% url 'login' %}">
+    {% include 'App/_auth_logo.html' with gid='sd-drop-brand' %}
+    SmartDrop
+  </a>
+
+  <div class="auth-brand-copy">
+    <h2>Monitoreo inteligente del agua de tu hogar</h2>
+    <p>Consulta el nivel del tanque, el consumo, la presión y la calidad del agua en tiempo real desde cualquier dispositivo.</p>
+    <ul class="auth-features">
+      <li>
+        <span class="feature-icon"><i class="ti ti-gauge"></i></span>
+        <div><strong>Lecturas en tiempo real</strong><span>Datos de tus sensores actualizados al instante.</span></div>
+      </li>
+      <li>
+        <span class="feature-icon"><i class="ti ti-bell"></i></span>
+        <div><strong>Alertas oportunas</strong><span>Avisos de fugas, nivel bajo y cambios de presión.</span></div>
+      </li>
+      <li>
+        <span class="feature-icon"><i class="ti ti-chart-line"></i></span>
+        <div><strong>Predicción de suministro</strong><span>Anticípate a los cortes de agua en tu zona.</span></div>
+      </li>
+    </ul>
+  </div>
+
+  <p class="auth-brand-foot">&copy; 2026 SmartDrop. Todos los derechos reservados.</p>
+
+  <svg class="auth-brand-waves" viewBox="0 0 600 220" preserveAspectRatio="none" aria-hidden="true">
+    <path d="M0 120 C 120 80, 240 160, 360 120 S 540 70, 600 100 V220 H0Z" fill="rgba(255,255,255,0.05)"/>
+    <path d="M0 160 C 140 120, 260 200, 400 160 S 560 130, 600 150 V220 H0Z" fill="rgba(255,255,255,0.06)"/>
+  </svg>
+</aside>

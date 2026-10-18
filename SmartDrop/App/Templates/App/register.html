@@ -4,59 +4,100 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#3b1a78" />
   <title>SmartDrop — Registro</title>
+  <link rel="icon" type="image/png" href="{% static 'App/img/LogoSmartDrop.png' %}" />
   <link rel="stylesheet" href="{% static 'App/fonts/tabler/tabler-icons-subset.css' %}?v=2.47"/>
-   <link rel="preconnect" href="https://fonts.googleapis.com">
-   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{% static 'App/css/dashboard.css' %}"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'App/css/auth.css' %}"/>
   {% include 'App/_i18n_head.html' %}
 </head>
-<body>
-  <main class="auth-panel">
-    <div class="auth-bg" id="auth-bg" data-bg="{% static 'App/img/fondo1.jpg' %}"></div>
-    <div class="auth-card">
-      <h1>Crear una cuenta</h1>
-      <p>Regístrate para comenzar a utilizar SmartDrop.</p>
-      <form method="post" novalidate>
-        {% csrf_token %}
-        {% if form.non_field_errors %}
-        <div class="form-error">{{ form.non_field_errors }}</div>
-        {% endif %}
 
-        <label for="id_email">Correo</label>
-        {{ form.email }}
-        {{ form.email.errors }}
+<body class="sd-auth">
+  <div class="auth-shell">
+    {% include 'App/_auth_brand.html' %}
 
-        <label for="id_nombre">Nombre</label>
-        {{ form.nombre }}
-        {{ form.nombre.errors }}
+    <main class="auth-main">
+      <div class="auth-main-top">
+        <a class="auth-logo" href="{% url 'login' %}">{% include 'App/_auth_logo.html' with gid='sd-drop-top' %}SmartDrop</a>
+      </div>
 
-        <label for="id_apellido">Apellido</label>
-        {{ form.apellido }}
-        {{ form.apellido.errors }}
+      <div class="auth-form-area">
+        <div class="auth-form-box is-wide">
+          <h1>Crea tu cuenta</h1>
+          <p class="auth-lead">Regístrate para comenzar a utilizar SmartDrop.</p>
 
-        <label for="id_password1">Contraseña</label>
-        {{ form.password1 }}
-        {{ form.password1.errors }}
+          {% if form.non_field_errors %}
+          <div class="auth-alert" role="alert">
+            <i class="ti ti-alert-triangle"></i>
+            <ul>{% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}</ul>
+          </div>
+          {% endif %}
 
-        <label for="id_password2">Confirmar contraseña</label>
-        {{ form.password2 }}
-        {{ form.password2.errors }}
+          <form method="post" class="auth-form" novalidate>
+            {% csrf_token %}
 
-        <button type="submit" class="btn-primary">Crear cuenta</button>
-      </form>
-      <p class="auth-footer">¿Ya tienes una cuenta? <a href="{% url 'login' %}">Inicia sesión</a></p>
-    </div>
-  </main>
+            <div class="auth-row">
+              <div class="field{% if form.nombre.errors %} has-error{% endif %}">
+                <label for="id_nombre">Nombre</label>
+                <div class="field-control">{{ form.nombre }}</div>
+                {% if form.nombre.errors %}<ul class="field-error">{% for error in form.nombre.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+              </div>
+              <div class="field{% if form.apellido.errors %} has-error{% endif %}">
+                <label for="id_apellido">Apellido</label>
+                <div class="field-control">{{ form.apellido }}</div>
+                {% if form.apellido.errors %}<ul class="field-error">{% for error in form.apellido.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+              </div>
+            </div>
 
-  <script>
-    document.addEventListener('DOMContentLoaded', function () {
-      var bg = document.getElementById('auth-bg');
-      if (bg) {
-        bg.style.backgroundImage = "url('" + bg.dataset.bg + "')";
-      }
-    });
-  </script>
+            <div class="field{% if form.email.errors %} has-error{% endif %}">
+              <label for="id_email">Correo electrónico</label>
+              <div class="field-control">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+                {{ form.email }}
+              </div>
+              {% if form.email.errors %}<ul class="field-error">{% for error in form.email.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+            </div>
+
+            <div class="field{% if form.password1.errors %} has-error{% endif %}">
+              <label for="id_password1">Contraseña</label>
+              <div class="field-control has-toggle">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+                {{ form.password1 }}
+                <button type="button" class="toggle-password" aria-controls="id_password1" aria-pressed="false" aria-label="Mostrar contraseña">
+                  <svg class="icon-show" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
+                  <svg class="icon-hide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.6 5.1A10.6 10.6 0 0 1 12 5c6.5 0 10 7 10 7a17.6 17.6 0 0 1-2.4 3.4M6.6 6.6A17.4 17.4 0 0 0 2 12s3.5 7 10 7a10.3 10.3 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/><path d="m3 3 18 18"/></svg>
+                </button>
+              </div>
+              {% if form.password1.errors %}<ul class="field-error">{% for error in form.password1.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+            </div>
+
+            <div class="field{% if form.password2.errors %} has-error{% endif %}">
+              <label for="id_password2">Confirmar contraseña</label>
+              <div class="field-control has-toggle">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+                {{ form.password2 }}
+                <button type="button" class="toggle-password" aria-controls="id_password2" aria-pressed="false" aria-label="Mostrar contraseña">
+                  <svg class="icon-show" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
+                  <svg class="icon-hide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.6 5.1A10.6 10.6 0 0 1 12 5c6.5 0 10 7 10 7a17.6 17.6 0 0 1-2.4 3.4M6.6 6.6A17.4 17.4 0 0 0 2 12s3.5 7 10 7a10.3 10.3 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/><path d="m3 3 18 18"/></svg>
+                </button>
+              </div>
+              {% if form.password2.errors %}<ul class="field-error">{% for error in form.password2.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+            </div>
+
+            <button type="submit" class="auth-submit"><span class="spinner" aria-hidden="true"></span>Crear cuenta</button>
+          </form>
+
+          <p class="auth-switch">¿Ya tienes una cuenta? <a href="{% url 'login' %}">Inicia sesión</a></p>
+        </div>
+      </div>
+
+      <p class="auth-legal">&copy; 2026 SmartDrop. Todos los derechos reservados.</p>
+    </main>
+  </div>
+
+  <script src="{% static 'App/js/auth.js' %}"></script>
 </body>
 </html>

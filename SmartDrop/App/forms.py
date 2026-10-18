@@ -4,6 +4,10 @@ from django.contrib.auth import authenticate
 from . import supabase_client
 from .backends import sync_user_from_supabase
 
+# LANGUAGE_CODE es 'en-us' (no se cambia para no alterar el formato de números y fechas): los formularios de
+# acceso definen sus propios mensajes para mostrarse en español.
+ERRORES_CORREO = {'required': 'El correo es obligatorio.', 'invalid': 'Escribe un correo electrónico válido.'}
+
 
 class UsuarioProfileForm(forms.Form):
     nombre = forms.CharField(
@@ -40,11 +44,26 @@ class VincularViviendaForm(forms.Form):
 
 
 class UsuarioRegisterForm(forms.Form):
-    email = forms.EmailField(label='Correo')
-    nombre = forms.CharField(label='Nombre', max_length=255)
-    apellido = forms.CharField(label='Apellido', max_length=255)
-    password1 = forms.CharField(label='Contraseña', widget=forms.PasswordInput(attrs={'autocomplete': 'new-password'}))
-    password2 = forms.CharField(label='Confirmar contraseña', widget=forms.PasswordInput(attrs={'autocomplete': 'new-password'}))
+    email = forms.EmailField(
+        label='Correo', error_messages=ERRORES_CORREO,
+        widget=forms.EmailInput(attrs={'autocomplete': 'email', 'placeholder': 'nombre@correo.com'}),
+    )
+    nombre = forms.CharField(
+        label='Nombre', max_length=255, error_messages={'required': 'El nombre es obligatorio.'},
+        widget=forms.TextInput(attrs={'autocomplete': 'given-name', 'autofocus': True}),
+    )
+    apellido = forms.CharField(
+        label='Apellido', max_length=255, error_messages={'required': 'El apellido es obligatorio.'},
+        widget=forms.TextInput(attrs={'autocomplete': 'family-name'}),
+    )
+    password1 = forms.CharField(
+        label='Contraseña', error_messages={'required': 'La contraseña es obligatoria.'},
+        widget=forms.PasswordInput(attrs={'autocomplete': 'new-password'}),
+    )
+    password2 = forms.CharField(
+        label='Confirmar contraseña', error_messages={'required': 'Confirma tu contraseña.'},
+        widget=forms.PasswordInput(attrs={'autocomplete': 'new-password'}),
+    )
 
     def clean_password2(self):
         password1 = self.cleaned_data.get('password1')
@@ -75,8 +94,14 @@ class UsuarioRegisterForm(forms.Form):
 
 
 class LoginForm(forms.Form):
-    email = forms.EmailField(label='Correo')
-    password = forms.CharField(label='Contraseña', widget=forms.PasswordInput)
+    email = forms.EmailField(
+        label='Correo', error_messages=ERRORES_CORREO,
+        widget=forms.EmailInput(attrs={'autocomplete': 'email', 'placeholder': 'nombre@correo.com', 'autofocus': True}),
+    )
+    password = forms.CharField(
+        label='Contraseña', error_messages={'required': 'La contraseña es obligatoria.'},
+        widget=forms.PasswordInput(attrs={'autocomplete': 'current-password'}),
+    )
 
     def clean(self):
         cleaned_data = super().clean()
