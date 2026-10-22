@@ -37,7 +37,7 @@ if not SECRET_KEY:
         'Falta DJANGO_SECRET_KEY. Copia .env.example a SmartDrop/.env y genera una clave nueva.'
     )
 
-DEBUG = os.environ.get('DEBUG', 'True').strip().lower() in ('1', 'true', 'yes')
+DEBUG = os.environ.get('DEBUG', 'False').strip().lower() in ('1', 'true', 'yes')
 
 ALLOWED_HOSTS = [
     host.strip()

@@ -287,9 +287,9 @@ class MobileGraficasView(APIView):
         desde = _parse_range_param(request.query_params.get('desde'))
         hasta = _parse_range_param(request.query_params.get('hasta'))
         if desde is None:
-            desde = datetime.utcnow() - timedelta(days=1)
+            desde = datetime.now(dt_timezone.utc).replace(tzinfo=None) - timedelta(days=1)
         if hasta is None:
-            hasta = datetime.utcnow()
+            hasta = datetime.now(dt_timezone.utc).replace(tzinfo=None)
 
         if es_admin:
             # Admin: los sensores se comparten entre todas las viviendas; cada punto es el promedio de

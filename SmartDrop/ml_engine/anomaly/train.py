@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import joblib
@@ -42,7 +42,7 @@ def train_anomaly_model(home_ids: list[int] | None = None, contamination: float 
 
     scores = model.score_samples(x)
     sorted_scores = sorted(scores)
-    version = datetime.utcnow().strftime('%Y%m%d%H%M%S')
+    version = datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')
     out_dir = model_dir() / version
     out_dir.mkdir(parents=True, exist_ok=True)
     joblib.dump(model, out_dir / 'isolation_forest.joblib')

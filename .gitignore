@@ -39,3 +39,6 @@ ml_models/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# SonarQube (temporales del escaner)
+.scannerwork/
