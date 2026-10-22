@@ -15,6 +15,10 @@ class MobileUser:
         self.rol_id = payload.get('id_rol')
         self.nombre_rol = payload.get('nombre_rol')
 
+    @property
+    def pk(self):
+        return self.id_usuario
+
 
 class SupabaseJWTAuthentication(BaseAuthentication):
     def authenticate(self, request):

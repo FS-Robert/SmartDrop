@@ -1,0 +1,42 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="{{ ui_idioma|default:'es' }}">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#E6F4FC" />
+  <title>SmartDrop — Cerrar sesión</title>
+  <link rel="icon" type="image/png" href="{% static 'App/img/LogoSmartDrop.png' %}" />
+  <link rel="stylesheet" href="{% static 'App/fonts/tabler/tabler-icons-subset.css' %}?v=2.47"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'App/css/auth.css' %}"/>
+</head>
+
+<body class="sd-auth">
+  <div class="auth-shell">
+    {% include 'App/_auth_brand.html' %}
+
+    <main class="auth-main">
+      <div class="auth-main-top">
+        <a class="auth-logo" href="{% url 'login' %}">{% include 'App/_auth_logo.html' with gid='sd-drop-top' %}SmartDrop</a>
+      </div>
+
+      <div class="auth-form-area">
+        <div class="auth-form-box">
+          <h1>¿Cerrar sesión?</h1>
+          <p class="auth-lead">Saldrás de SmartDrop en este equipo. Tus datos y preferencias se quedan guardados.</p>
+          <form method="post" action="{% url 'logout' %}" class="auth-form">
+            {% csrf_token %}
+            <button type="submit" class="auth-submit">Cerrar sesión</button>
+          </form>
+          <p class="auth-switch"><a href="{% url 'dashboard' %}">Cancelar y volver al inicio</a></p>
+        </div>
+      </div>
+
+      <p class="auth-legal">&copy; 2026 SmartDrop. Todos los derechos reservados.</p>
+    </main>
+  </div>
+</body>
+</html>

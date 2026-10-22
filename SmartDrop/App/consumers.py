@@ -7,6 +7,8 @@ from rest_framework_simplejwt.tokens import AccessToken
 
 from . import supabase_client
 from .api.authentication import MobileUser
+from .seguridad import consumir
+from .views_reportes import MAX_MENSAJE
 
 logger = logging.getLogger(__name__)
 
@@ -112,13 +114,16 @@ class ReporteChatConsumer(AsyncJsonWebsocketConsumer):
             await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
 
     async def receive_json(self, content):
-        mensaje_texto = (content.get('mensaje') or '').strip()
-        if not mensaje_texto:
+        mensaje_texto = str(content.get('mensaje') or '').strip() if isinstance(content, dict) else ''
+        if not mensaje_texto or len(mensaje_texto) > MAX_MENSAJE:
             return
 
         user = self.scope.get('user')
         user_id = getattr(user, 'supabase_id', None) or getattr(user, 'id_usuario', None)
         es_admin = getattr(user, 'rol_id', None) == 2
+        if consumir('mensajes', f'u:{user_id}'):
+            await self.send_json({'type': 'error', 'error': 'Estás enviando mensajes muy rápido. Espera un momento.'})
+            return
 
         autor_nombre = 'Usuario'
         if hasattr(user, 'get_full_name') and user.get_full_name().strip():

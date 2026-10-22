@@ -386,7 +386,12 @@ La ruta de ingestión acepta:
 ```http
 POST /api/lecturas/
 Content-Type: application/json
+X-Api-Key: <LECTURAS_API_KEY del .env>
 ```
+
+Sin la cabecera `X-Api-Key` correcta la lectura se rechaza con 401 (con `DEBUG=True` y sin
+`LECTURAS_API_KEY` en el `.env` se aceptan, solo para desarrollo). El firmware del ESP32 debe enviar la
+misma clave; `deploy/actualizar.sh` la genera en el servidor si falta.
 
 Ejemplo con PowerShell:
 
@@ -401,6 +406,7 @@ Invoke-RestMethod `
   -Uri "http://127.0.0.1:8000/api/lecturas/" `
   -Method Post `
   -ContentType "application/json" `
+  -Headers @{ "X-Api-Key" = $env:LECTURAS_API_KEY } `
   -Body $body
 ```
 

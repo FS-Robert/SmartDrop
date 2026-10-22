@@ -177,7 +177,7 @@ class LeakAlertsReadView(AdminOnlyAPIView):
 
     def post(self, request):
         user_id = queries.owner_id(request.user)
-        alert_ids = [int(i) for i in request.data.get('ids', []) if str(i).isdigit()]
+        alert_ids = [int(i) for i in request.data.get('ids', []) if str(i).isascii() and str(i).isdigit()]
         if not alert_ids and not request.data.get('todas'):
             return Response({'error': 'Indica ids o todas=true.'}, status=status.HTTP_400_BAD_REQUEST)
         now = timezone.now().isoformat()

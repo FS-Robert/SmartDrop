@@ -67,8 +67,9 @@ class Command(BaseCommand):
         if not row:
             raise CommandError('User not found after update')
 
-        self.stdout.write('Supabase record:')
-        self.stdout.write(str(row))
+        # Solo los datos de la cuenta: la fila completa incluye el hash de la contraseña.
+        resumen = {campo: row.get(campo) for campo in ('id_usuario', 'correo', 'id_rol', 'estado_usuario')}
+        self.stdout.write(f'Supabase record: {resumen}')
         actual_role_id = row.get('id_rol')
         self.stdout.write(f'Actual id_rol: {actual_role_id} (expected {role_id})')
         if actual_role_id == role_id:

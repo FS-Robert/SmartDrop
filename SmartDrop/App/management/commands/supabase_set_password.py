@@ -1,82 +1,69 @@
+import getpass
+
 from django.core.management.base import BaseCommand, CommandError
-from django.contrib.auth.hashers import make_password, check_password
+from passlib.hash import bcrypt
 
 from App import supabase_client
-import requests
+from App.forms import errores_contrasena
 
 
 class Command(BaseCommand):
-    help = 'Set and verify a Supabase user password (stores Django-compatible hash)'
+    help = (
+        'Cambia la contraseña de un usuario de Supabase (hash bcrypt, igual que el registro). '
+        'La contraseña se pide sin mostrarla; no la pases en la línea de comandos.'
+    )
 
     def add_arguments(self, parser):
-        parser.add_argument('email', type=str, help='Email of the user to update')
-        parser.add_argument('password', type=str, help='New plaintext password to set')
-        parser.add_argument('--create', action='store_true', help='Create the user if not found')
+        parser.add_argument('email', type=str, help='Correo del usuario')
+        parser.add_argument(
+            'password', type=str, nargs='?',
+            help='(No recomendado: queda en el historial de la terminal) contraseña nueva',
+        )
+        parser.add_argument('--create', action='store_true', help='Crear el usuario (con rol admin) si no existe')
 
     def handle(self, *args, **options):
         email = options['email'].strip().lower()
         password = options['password']
-        create_if_missing = options['create']
-
-        self.stdout.write(f'Updating password for: {email}')
-
-        hashed = make_password(password)
-
-        url = supabase_client._base_url('usuario')
-        headers = supabase_client._headers()
-        headers['Prefer'] = 'return=representation'
-        params = {'correo': f'eq.{email}'}
-        payload = {'contrasena': hashed}
-
-        try:
-            resp = requests.patch(url, headers=headers, json=payload, params=params, timeout=10)
-        except Exception as exc:
-            raise CommandError(f'HTTP request failed: {exc}')
-
-        if resp.status_code in (200, 201, 204) and resp.ok:
-            self.stdout.write(self.style.SUCCESS('PATCH request succeeded'))
+        if password:
+            self.stdout.write(self.style.WARNING(
+                'Aviso: la contraseña escrita en el comando queda en el historial de la terminal. '
+                'Omítela para que se pida sin mostrarla.'
+            ))
         else:
-            # If no rows updated, maybe user doesn't exist
-            self.stdout.write(self.style.WARNING(f'PATCH returned {resp.status_code}: {resp.text}'))
-            if create_if_missing:
-                self.stdout.write('Attempting to create user...')
-                try:
-                    role_id = supabase_client.get_rol_id('admin')
-                    payload_create = {
-                        'nombre': 'Admin',
-                        'apellido': 'Admin',
-                        'correo': email,
-                        'contrasena': hashed,
-                        'estado_usuario': True,
-                    }
-                    if role_id is not None:
-                        payload_create['id_rol'] = role_id
-                    row = supabase_client.insert('usuario', payload_create)
-                    if row:
-                        self.stdout.write(self.style.SUCCESS('User created in Supabase.'))
-                    else:
-                        raise CommandError('User creation returned no row')
-                except Exception as exc:
-                    raise CommandError(f'Failed to create user: {exc}')
-            else:
-                raise CommandError('No rows updated and --create not provided')
+            password = getpass.getpass('Contraseña nueva: ')
+            if password != getpass.getpass('Repítela: '):
+                raise CommandError('Las contraseñas no coinciden.')
 
-        # Verify
+        errores = errores_contrasena(password, email)
+        if errores:
+            raise CommandError(' '.join(errores))
+
+        hashed = bcrypt.using(rounds=12, ident='2b').hash(password)
+        self.stdout.write(f'Actualizando la contraseña de {email}')
         try:
-            row = supabase_client.get_user_by_email(email)
-        except Exception as exc:
-            raise CommandError(f'Failed to fetch user after update: {exc}')
+            row = supabase_client.update(
+                'usuario', {'contrasena': hashed}, {'correo': f'eq.{email}'}, return_representation=True,
+            )
+        except supabase_client.SupabaseError as exc:
+            raise CommandError(f'Supabase rechazó el cambio: {exc.detalle}') from exc
 
         if not row:
-            raise CommandError('User not found after update')
+            if not options['create']:
+                raise CommandError('No existe un usuario con ese correo (usa --create para crearlo).')
+            role_id = supabase_client.get_rol_id('admin')
+            if role_id is None:
+                raise CommandError("No existe el rol 'admin' en la tabla rol.")
+            try:
+                supabase_client.insert('usuario', {
+                    'nombre': 'Admin', 'apellido': 'Admin', 'correo': email,
+                    'contrasena': hashed, 'estado_usuario': True, 'id_rol': role_id,
+                })
+            except supabase_client.SupabaseError as exc:
+                raise CommandError(f'No se pudo crear el usuario: {exc.detalle}') from exc
+            self.stdout.write(self.style.SUCCESS('Usuario creado en Supabase.'))
 
-        stored = row.get('contrasena')
-        self.stdout.write(f'stored contrasena repr: {repr(stored)}')
-        ok = check_password(password, stored)
-        if ok:
-            self.stdout.write(self.style.SUCCESS('Password verification OK (check_password returned True)'))
+        row = supabase_client.get_user_by_email(email)
+        if row and bcrypt.verify(password, row.get('contrasena') or ''):
+            self.stdout.write(self.style.SUCCESS('Contraseña guardada y verificada.'))
         else:
-            # Provide diagnostics
-            self.stdout.write(self.style.ERROR('Password verification FAILED (check_password returned False)'))
-            self.stdout.write('Possible causes: value truncated, stored in different column, or stored with extra quotes/escaping.')
-            self.stdout.write('Inspect the Supabase record manually in the dashboard if needed.')
+            raise CommandError('La contraseña no quedó guardada; revisa el registro en el panel de Supabase.')

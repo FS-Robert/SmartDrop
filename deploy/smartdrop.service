@@ -14,5 +14,18 @@ ExecStart=__REPO_DIR__/.venv/bin/daphne -b 127.0.0.1 -p 8000 --proxy-headers Sma
 Restart=always
 RestartSec=3
 
+# Endurecimiento: si alguien lograra ejecutar código dentro de la app, no podría usar sudo (NoNewPrivileges),
+# ni tocar el sistema, ni modificar el código o el entorno de Python para quedarse. La app solo escribe en
+# SmartDrop/ (bases SQLite), media/ y ml_models/.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ReadOnlyPaths=__REPO_DIR__/.venv __REPO_DIR__/SmartDrop/App __REPO_DIR__/SmartDrop/ml_engine __REPO_DIR__/SmartDrop/SmartDrop
+
 [Install]
 WantedBy=multi-user.target

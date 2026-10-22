@@ -132,7 +132,7 @@
 
       {% if user.is_authenticated %}
         <div class="sidebar-foot sidebar-foot--mobile">
-          <a href="{% url 'logout' %}" class="nav-link"><svg class="icon" aria-hidden="true"><use href="#i-logout"></use></svg><span>Cerrar sesión</span></a>
+          <a href="{% url 'logout' %}" class="nav-link" data-cerrar-sesion><svg class="icon" aria-hidden="true"><use href="#i-logout"></use></svg><span>Cerrar sesión</span></a>
         </div>
       {% endif %}
     </div>
@@ -173,7 +173,7 @@
                 <span class="account-name" aria-hidden="true">{{ user.get_short_name|default:'' }}</span>
               </a>
             {% endif %}
-            <a href="{% url 'logout' %}" class="topbar-link topbar-link--logout">
+            <a href="{% url 'logout' %}" class="topbar-link topbar-link--logout" data-cerrar-sesion>
               <svg class="icon" aria-hidden="true"><use href="#i-logout"></use></svg><span class="topbar-link-label">Cerrar sesión</span>
             </a>
           {% else %}
@@ -357,6 +357,7 @@
     <script src="{% static 'App/js/admin_leak_alerts.js' %}" data-alerts-url="{% url 'ml_engine:leak_alerts' %}" data-leaks-url="{% url 'ml_engine:leaks' %}"></script>
   {% endif %}
   <script src="{% static 'App/js/sd_motion.js' %}?v=20261011-zona2"></script>
+  {% include 'App/_cerrar_sesion_form.html' %}
   {% block extra_js %}{% endblock %}
 </body>
 </html>

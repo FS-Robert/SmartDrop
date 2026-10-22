@@ -1,8 +1,8 @@
 from datetime import timedelta
 from unittest.mock import patch
 
-from django.core.cache import cache
-from django.test import TestCase as DjangoTestCase
+from django.core.cache import cache, caches
+from django.test import TestCase as DjangoTestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -14,12 +14,16 @@ from .models import Rol, Usuario
 from .views import _supabase_user_id, _valve_statistics
 
 
+# Sin revalidar la sesión contra Supabase en cada prueba (los mocks de supabase_client.select responderían
+# esa consulta extra); RevalidacionSesionTests la prueba aparte.
+@override_settings(REVALIDAR_SESION_SEGUNDOS=0, LECTURAS_API_KEY='clave-de-prueba')
 class TestCase(DjangoTestCase):
 	"""Vacía la caché antes de cada prueba: queries.py cachea viviendas, sensores y alertas."""
 
 	def _pre_setup(self):
 		super()._pre_setup()
 		cache.clear()
+		caches['limites'].clear()
 
 
 def select_by_table(**tables):
@@ -55,7 +59,7 @@ class ConsumoViewTests(TestCase):
 	def test_api_lectura_valida_envia_datos_a_supabase(self, insert):
 		insert.return_value = {'id_lectura': 1}
 		response = self.client.post(
-			reverse('api_lectura'),
+			reverse('api_lectura'), HTTP_X_API_KEY='clave-de-prueba',
 			data={
 				'id_sensor': 4,
 				'fecha_registro': '2026-09-07T10:00:00Z',
@@ -76,7 +80,7 @@ class ConsumoViewTests(TestCase):
 	def test_api_lectura_con_vivienda_la_guarda_y_la_emite(self, insert, broadcast):
 		insert.return_value = {'id_lectura': 7, 'id_sensor': 4, 'id_vivienda': 19, 'valor': 0.2, 'fecha_registro': '2026-09-07T10:00:00Z'}
 		response = self.client.post(
-			reverse('api_lectura'),
+			reverse('api_lectura'), HTTP_X_API_KEY='clave-de-prueba',
 			data={'id_sensor': 4, 'id_vivienda': 19, 'fecha_registro': '2026-09-07T10:00:00Z', 'valor': 0.2},
 			content_type='application/json',
 		)
@@ -87,7 +91,7 @@ class ConsumoViewTests(TestCase):
 
 	def test_api_lectura_rechaza_vivienda_invalida(self):
 		response = self.client.post(
-			reverse('api_lectura'),
+			reverse('api_lectura'), HTTP_X_API_KEY='clave-de-prueba',
 			data={'id_sensor': 4, 'id_vivienda': 'diecinueve', 'fecha_registro': '2026-09-07T10:00:00Z', 'valor': 0.2},
 			content_type='application/json',
 		)
@@ -97,7 +101,7 @@ class ConsumoViewTests(TestCase):
 	def test_api_lectura_rechaza_campos_adicionales(self):
 		with self.assertLogs('App.views', level='WARNING'):
 			response = self.client.post(
-				reverse('api_lectura'),
+				reverse('api_lectura'), HTTP_X_API_KEY='clave-de-prueba',
 				data={
 					'id_sensor': 4,
 					'fecha_registro': '2026-09-07T10:00:00Z',
@@ -113,7 +117,7 @@ class ConsumoViewTests(TestCase):
 	def test_api_lectura_registra_error_de_supabase(self, insert):
 		with self.assertLogs('App.views', level='ERROR'):
 			response = self.client.post(
-				reverse('api_lectura'),
+				reverse('api_lectura'), HTTP_X_API_KEY='clave-de-prueba',
 				data={
 					'id_sensor': 4,
 					'fecha_registro': '2026-09-07T10:00:00Z',
@@ -698,14 +702,17 @@ class VincularViviendaViewTests(TestCase):
 	@patch('App.queries.supabase_client.update')
 	@patch('App.queries.supabase_client.select')
 	def test_rechaza_cuenta_inexistente_titular_distinto_o_vivienda_ocupada(self, select, update):
-		select.return_value = []
-		self.assertContains(self._post(), 'No encontramos ese número de cuenta.')
-
-		select.return_value = [self.vivienda]
-		self.assertContains(self._post(holder='Otra Persona'), 'El nombre no coincide con el titular.')
-
-		select.return_value = [{**self.vivienda, 'id_usuario_propietario': 77}]
-		self.assertContains(self._post(), 'Esta vivienda ya está vinculada.')
+		# Los tres casos dan el mismo mensaje: así no se puede averiguar qué NIC existen o ya están vinculados.
+		casos = [
+			([], {}),
+			([self.vivienda], {'holder': 'Otra Persona'}),
+			([{**self.vivienda, 'id_usuario_propietario': 77}], {}),
+		]
+		for filas, datos in casos:
+			select.return_value = filas
+			with self.assertLogs('App.queries', level='WARNING'):
+				response = self._post(**datos)
+			self.assertContains(response, 'No pudimos vincular una vivienda con esos datos.')
 		update.assert_not_called()
 
 	def test_login_sin_vivienda_redirige_a_vincular(self):
@@ -1100,3 +1107,354 @@ class CatalogoTraduccionTests(TestCase):
 		resultados = matching_sections('pressure', False, 'en')
 		self.assertIn('Water Pressure', [r['titulo'] for r in resultados])
 		self.assertTrue(matching_sections('presión', False, 'en'))
+
+
+# ── Seguridad ──────────────────────────────────────────────────────────────────
+
+import io
+import os
+import shutil
+import tempfile
+
+from asgiref.sync import async_to_sync
+from channels.testing import WebsocketCommunicator
+from django.conf import settings
+from django.contrib.auth import authenticate
+from django.core.files.uploadedfile import SimpleUploadedFile
+from PIL import Image
+from rest_framework_simplejwt.tokens import RefreshToken
+
+from . import seguridad, views_reportes
+from .api.authentication import MobileUser
+
+
+def _limites(**cambios):
+	return override_settings(LIMITES_USO={**settings.LIMITES_USO, **cambios})
+
+
+class LimitesDeUsoTests(TestCase):
+	@_limites(acceso='10/m')
+	@patch('App.forms.authenticate', return_value=None)
+	def test_login_web_responde_429_al_pasar_el_limite_por_ip(self, authenticate_mock):
+		for _ in range(10):
+			self.assertEqual(self.client.post(reverse('login'), {'email': 'x@example.com', 'password': 'mala'}).status_code, 200)
+		with self.assertLogs('App.seguridad', level='WARNING'):
+			response = self.client.post(reverse('login'), {'email': 'x@example.com', 'password': 'mala'})
+		self.assertEqual(response.status_code, 429)
+		self.assertIn('Retry-After', response)
+
+	@_limites(acceso='100/m')
+	@patch('App.forms.authenticate', return_value=None)
+	def test_bloquea_el_correo_tras_10_contrasenas_incorrectas(self, authenticate_mock):
+		for _ in range(10):
+			self.client.post(reverse('login'), {'email': 'victima@example.com', 'password': 'mala'})
+		response = self.client.post(reverse('login'), {'email': 'victima@example.com', 'password': 'la-buena'})
+		self.assertContains(response, 'demasiados intentos fallidos')
+		self.assertEqual(authenticate_mock.call_count, 10)  # el intento 11 ni siquiera prueba la contraseña
+
+	@_limites(acceso='10/m')
+	@patch('App.api.views_auth.authenticate', return_value=None)
+	def test_login_movil_responde_429_en_espanol(self, authenticate_mock):
+		client = APIClient()
+		for _ in range(10):
+			client.post(reverse('mobile_login'), {'correo': f'u{_}@example.com', 'contrasena': 'x'}, format='json')
+		with self.assertLogs('App.seguridad', level='WARNING'):
+			response = client.post(reverse('mobile_login'), {'correo': 'otro@example.com', 'contrasena': 'x'}, format='json')
+		self.assertEqual(response.status_code, 429)
+		self.assertIn('Demasiadas solicitudes', response.json()['error'])
+
+	@_limites(general_anonimo='3/m')
+	def test_limite_general_cubre_cualquier_pagina(self):
+		for _ in range(3):
+			self.client.get(reverse('login'))
+		with self.assertLogs('App.seguridad', level='WARNING'):
+			self.assertEqual(self.client.get(reverse('register')).status_code, 429)
+
+	def test_celdas_csv_que_parecen_formulas_quedan_como_texto(self):
+		self.assertEqual(
+			seguridad.fila_csv(['=HYPERLINK("http://x")', '+1', '-2', '@SUM(A1)', 'normal', 5]),
+			["'=HYPERLINK(\"http://x\")", "'+1", "'-2", "'@SUM(A1)", 'normal', 5],
+		)
+
+
+class LecturasClaveTests(TestCase):
+	def _post(self, **cabeceras):
+		return self.client.post(
+			reverse('api_lectura'),
+			data={'id_sensor': 4, 'fecha_registro': '2026-09-07T10:00:00Z', 'valor': 1.0},
+			content_type='application/json', **cabeceras,
+		)
+
+	@patch('App.views.supabase_client.insert')
+	def test_rechaza_lecturas_sin_clave_o_con_clave_incorrecta(self, insert):
+		with self.assertLogs('App.views', level='WARNING'):
+			self.assertEqual(self._post().status_code, 401)
+		with self.assertLogs('App.views', level='WARNING'):
+			self.assertEqual(self._post(HTTP_X_API_KEY='otra').status_code, 401)
+		insert.assert_not_called()
+
+	@override_settings(LECTURAS_API_KEY='')
+	@patch('App.views.supabase_client.insert')
+	def test_sin_clave_configurada_en_produccion_no_acepta_nada(self, insert):
+		with self.assertLogs('App.views', level='ERROR'):
+			self.assertEqual(self._post(HTTP_X_API_KEY='').status_code, 401)
+		insert.assert_not_called()
+
+
+class ReportesPrivadosTests(TestCase):
+	def setUp(self):
+		rol = Rol.objects.create(id_rol=1, nombre_rol='user')
+		self.user = Usuario.objects.create_user(
+			email='vecino@example.com', nombre='Ana', apellido='Lopez', password='password-segura', rol=rol, supabase_id=40,
+		)
+
+	@patch('App.views_reportes._adjuntos_por_reporte', return_value={})
+	@patch('App.views_reportes._usuarios_por_id', return_value={})
+	@patch('App.views_reportes.supabase_client.select', return_value=[])
+	def test_muro_web_solo_pide_reportes_comunitarios(self, select, *_):
+		self.client.force_login(self.user)
+		self.client.get(reverse('reportes_comunidad'))
+		self.assertEqual(select.call_args.args[2]['es_comunitario'], 'is.true')
+
+	@patch('App.api.views_mobile_reports._feed', return_value=[])
+	@patch('App.api.views_mobile_reports.supabase_client.select', return_value=[])
+	def test_muro_movil_filtra_para_usuarios_y_no_para_admin(self, select, _feed):
+		client = APIClient()
+		client.force_authenticate(MobileUser({'id_usuario': 40, 'id_rol': 1}))
+		client.get(reverse('mobile_reportes_comunidad'))
+		self.assertEqual(select.call_args.args[2]['es_comunitario'], 'is.true')
+		client.force_authenticate(MobileUser({'id_usuario': 1, 'id_rol': 2}))
+		client.get(reverse('mobile_reportes_comunidad'))
+		self.assertNotIn('es_comunitario', select.call_args.args[2])
+
+	@patch('App.views_reportes.supabase_client.insert', return_value={'id_reporte': 3})
+	def test_solo_el_muro_publica_reportes(self, insert):
+		self.client.force_login(self.user)
+		datos = {'tipo_problema': 'fuga', 'descripcion': 'Fuga en la calle principal'}
+		with patch('App.views_reportes.supabase_client.select', return_value=[]):
+			self.client.post(reverse('reportes_panel'), datos)
+			self.assertNotIn('es_comunitario', insert.call_args.args[1])
+			self.client.post(reverse('reportes_comunidad'), datos)
+			self.assertIs(insert.call_args.args[1]['es_comunitario'], True)
+
+
+class AdjuntosProtegidosTests(TestCase):
+	def setUp(self):
+		self.media = tempfile.mkdtemp()
+		self.addCleanup(shutil.rmtree, self.media)
+		self.nombre = 'a' * 32 + '.jpg'
+		os.makedirs(os.path.join(self.media, 'reportes', '5'))
+		with open(os.path.join(self.media, 'reportes', '5', self.nombre), 'wb') as archivo:
+			archivo.write(b'contenido')
+
+	def test_la_ruta_guardada_se_convierte_en_enlace_firmado(self):
+		url = views_reportes.url_adjunto(f'/media/reportes/5/{self.nombre}')
+		self.assertTrue(url.startswith(f'/adjuntos/5/{self.nombre}?firma='))
+		self.assertEqual(views_reportes.url_adjunto('https://otro.sitio/x.jpg'), 'https://otro.sitio/x.jpg')
+
+	def test_entrega_el_archivo_solo_con_firma_valida(self):
+		with override_settings(MEDIA_ROOT=self.media, ADJUNTOS_X_ACCEL=True):
+			url = views_reportes.url_adjunto(f'/media/reportes/5/{self.nombre}')
+			response = self.client.get(url)
+			self.assertEqual(response.status_code, 200)
+			self.assertEqual(response['X-Accel-Redirect'], f'/protegido/reportes/5/{self.nombre}')
+			self.assertEqual(response['Content-Type'], 'image/jpeg')
+			self.assertEqual(self.client.get(f'/adjuntos/5/{self.nombre}').status_code, 404)
+			self.assertEqual(self.client.get(url.replace('/5/', '/6/')).status_code, 404)
+			with override_settings(ADJUNTOS_URL_VIGENCIA_SEGUNDOS=-1):
+				self.assertEqual(self.client.get(url).status_code, 404)
+
+	def test_media_ya_no_es_publico(self):
+		self.assertEqual(self.client.get(f'/media/reportes/5/{self.nombre}').status_code, 404)
+
+	def _foto_con_gps(self):
+		imagen = Image.new('RGB', (40, 30), 'blue')
+		exif = Image.Exif()
+		exif[0x010F] = 'Camara'                   # Make
+		exif[0x8825] = {2: (13.0, 41.0, 0.0)}      # GPSInfo: latitud
+		salida = io.BytesIO()
+		imagen.save(salida, format='JPEG', exif=exif)
+		return SimpleUploadedFile('foto.jpg', salida.getvalue(), content_type='image/jpeg')
+
+	@patch('App.views_reportes.supabase_client.insert', return_value={})
+	def test_quita_metadatos_y_rechaza_archivos_disfrazados(self, insert):
+		falsos = [
+			SimpleUploadedFile('virus.jpg', b'<html>no soy imagen</html>'),
+			SimpleUploadedFile('video.mp4', b'<html>no soy video</html>'),
+		]
+		with override_settings(MEDIA_ROOT=self.media), self.assertLogs('App.views_reportes', level='WARNING'):
+			guardados, errores = views_reportes._guardar_adjuntos(9, [self._foto_con_gps(), *falsos])
+		self.assertEqual(guardados, 1)
+		self.assertEqual(len(errores), 2)
+		ruta = insert.call_args.args[1]['url'].replace('/media/', '')
+		with Image.open(os.path.join(self.media, ruta)) as guardada:
+			self.assertEqual(len(guardada.getexif()), 0)
+
+	@patch('App.views_reportes.supabase_client.insert', side_effect=supabase_client.SupabaseError())
+	def test_borra_el_archivo_si_no_se_pudo_registrar(self, insert):
+		with override_settings(MEDIA_ROOT=self.media), self.assertLogs('App.views_reportes', level='ERROR'):
+			guardados, _ = views_reportes._guardar_adjuntos(9, [self._foto_con_gps()])
+		self.assertEqual(guardados, 0)
+		self.assertFalse(os.path.exists(os.path.join(self.media, 'reportes', '9')) and os.listdir(os.path.join(self.media, 'reportes', '9')))
+
+
+class AutenticacionTests(TestCase):
+	def setUp(self):
+		self.rol = Rol.objects.create(id_rol=1, nombre_rol='user')
+
+	@patch('App.backends.supabase_client.get_user_by_email', return_value=None)
+	def test_la_copia_local_de_la_contrasena_ya_no_sirve_para_entrar(self, _):
+		Usuario.objects.create_user(email='viejo@example.com', nombre='V', apellido='V', password='password-vieja', rol=self.rol)
+		with self.assertLogs('App.backends', level='WARNING'):
+			self.assertIsNone(authenticate(email='viejo@example.com', password='password-vieja'))
+
+	def test_un_usuario_desactivado_pierde_la_sesion(self):
+		user = Usuario.objects.create_user(email='off@example.com', nombre='O', apellido='F', password='x', rol=self.rol)
+		self.client.force_login(user)
+		Usuario.objects.filter(pk=user.pk).update(is_active=False)
+		self.assertRedirects(self.client.get(reverse('dashboard')), '/login/?next=/', fetch_redirect_response=False)
+
+	@patch('App.backends.supabase_client.get_rol_id', return_value=None)
+	def test_cuenta_sin_rol_no_entra_ni_se_vuelve_admin(self, _):
+		Rol.objects.create(id_rol=2, nombre_rol='user')  # base local con el bug de nombres anterior
+		with self.assertRaises(Exception):
+			sync_user_from_supabase({'id_usuario': 5, 'correo': 'sinrol@example.com', 'id_rol': None})
+		self.assertFalse(Usuario.objects.filter(email='sinrol@example.com').exists())
+
+	@override_settings(REVALIDAR_SESION_SEGUNDOS=300)
+	@patch('App.supabase_client.get_user_by_email', return_value={'correo': 'off@example.com', 'estado_usuario': False})
+	def test_la_sesion_se_cierra_si_la_cuenta_se_desactivo_en_supabase(self, _):
+		user = Usuario.objects.create_user(email='off@example.com', nombre='O', apellido='F', password='x', rol=self.rol)
+		self.client.force_login(user)
+		with self.assertLogs('App.seguridad', level='WARNING'):
+			response = self.client.get(reverse('dashboard'))
+		self.assertRedirects(response, '/login/?next=/', fetch_redirect_response=False)
+
+	def test_cerrar_sesion_pide_post(self):
+		user = Usuario.objects.create_user(email='s@example.com', nombre='S', apellido='S', password='x', rol=self.rol)
+		self.client.force_login(user)
+		self.assertContains(self.client.get(reverse('logout')), '¿Cerrar sesión?')
+		self.assertIn('_auth_user_id', self.client.session)
+		self.assertRedirects(self.client.post(reverse('logout')), reverse('login'), fetch_redirect_response=False)
+		self.assertNotIn('_auth_user_id', self.client.session)
+
+	def test_registro_web_exige_contrasena_segura(self):
+		with patch('App.forms.supabase_client.email_exists', return_value=False):
+			response = self.client.post(reverse('register'), {
+				'email': 'nuevo@example.com', 'nombre': 'N', 'apellido': 'N', 'password1': '12345678', 'password2': '12345678',
+			})
+		self.assertContains(response, 'Esta contraseña es demasiado común')
+
+	@patch('App.api.views_auth.supabase_client.create_usuario')
+	def test_registro_movil_valida_correo_y_contrasena(self, crear):
+		client = APIClient()
+		datos = {'nombre': 'Ana', 'apellido': 'Paz', 'correo': 'Ana@Example.com', 'contrasena': 'abc'}
+		self.assertEqual(client.post(reverse('mobile_register'), datos, format='json').status_code, 400)
+		self.assertEqual(client.post(reverse('mobile_register'), {**datos, 'correo': 'no-es-correo'}, format='json').status_code, 400)
+		crear.return_value = {'id_usuario': 8}
+		response = client.post(reverse('mobile_register'), {**datos, 'contrasena': 'Riego-Lunes-2026'}, format='json')
+		self.assertEqual(response.status_code, 201)
+		self.assertEqual(crear.call_args.kwargs['email'], 'ana@example.com')
+
+
+class TokensMovilesTests(TestCase):
+	def _refresh(self, id_rol=2):
+		refresh = RefreshToken()
+		refresh['id_usuario'] = 50
+		refresh['correo'] = 'admin@example.com'
+		refresh['id_rol'] = id_rol
+		return str(refresh)
+
+	def test_al_renovar_se_usa_el_rol_actual_de_supabase(self):
+		fila = {'id_usuario': 50, 'correo': 'admin@example.com', 'id_rol': 1, 'estado_usuario': True}
+		with patch('App.api.views_auth.supabase_client.get_user_by_email', return_value=fila):
+			response = APIClient().post(reverse('mobile_refresh'), {'refresh': self._refresh()}, format='json')
+		self.assertEqual(response.status_code, 200)
+		from rest_framework_simplejwt.tokens import AccessToken
+		self.assertEqual(AccessToken(response.json()['access'])['id_rol'], 1)
+
+	def test_cuenta_desactivada_no_renueva_y_el_token_queda_anulado(self):
+		token = self._refresh()
+		fila = {'id_usuario': 50, 'correo': 'admin@example.com', 'id_rol': 2, 'estado_usuario': False}
+		with patch('App.api.views_auth.supabase_client.get_user_by_email', return_value=fila), \
+				self.assertLogs('App.api.views_auth', level='WARNING'):
+			self.assertEqual(APIClient().post(reverse('mobile_refresh'), {'refresh': token}, format='json').status_code, 401)
+		fila['estado_usuario'] = True
+		with patch('App.api.views_auth.supabase_client.get_user_by_email', return_value=fila):
+			self.assertEqual(APIClient().post(reverse('mobile_refresh'), {'refresh': token}, format='json').status_code, 401)
+
+	def test_cerrar_sesion_en_la_app_anula_el_token(self):
+		token = self._refresh()
+		self.assertEqual(APIClient().post(reverse('mobile_logout'), {'refresh': token}, format='json').status_code, 200)
+		self.assertEqual(APIClient().post(reverse('mobile_refresh'), {'refresh': token}, format='json').status_code, 401)
+
+
+class ExposicionDeDatosTests(TestCase):
+	def test_errores_de_supabase_no_muestran_url_ni_detalle(self):
+		class Respuesta:
+			ok, status_code, text, content = False, 400, '{"message": "value too long"}', b'x'
+			request = type('R', (), {'url': 'https://proyecto.supabase.co/rest/v1/usuario'})()
+			def json(self):
+				return {'message': 'value too long'}
+		with self.assertLogs('App.supabase_client', level='WARNING'), self.assertRaises(supabase_client.SupabaseError) as error:
+			supabase_client._handle_response(Respuesta())
+		self.assertNotIn('supabase.co', str(error.exception))
+		self.assertIn('supabase.co', error.exception.detalle)
+
+	@patch('App.views_reportes.supabase_client.select')
+	def test_usuario_solo_ve_sus_alertas(self, select):
+		rol = Rol.objects.create(id_rol=1, nombre_rol='user')
+		user = Usuario.objects.create_user(email='al@example.com', nombre='A', apellido='L', password='x', rol=rol, supabase_id=31)
+		select.side_effect = select_by_table(notificacion=[{'id_alerta': 4}, {'id_alerta': 9}], alerta=[])
+		self.client.force_login(user)
+		with patch('App.views_reportes.preferencias.preferencias_de'), patch('App.views_reportes.preferencias.filtrar_alertas', return_value=[]):
+			self.client.get(reverse('alertas_historial'))
+		tablas = {llamada.args[0]: llamada.args[2] for llamada in select.call_args_list}
+		self.assertEqual(tablas['notificacion']['id_usario_destino'], 'eq.31')
+		self.assertEqual(tablas['alerta']['id_alerta'], 'in.(4,9)')
+
+	@patch('App.api.views_valves.supabase_client.select', return_value=[{'id_valvula': 1, 'estado_actual': 'abierta'}])
+	def test_usuario_no_ve_el_topic_mqtt_de_la_valvula(self, select):
+		client = APIClient()
+		client.force_authenticate(MobileUser({'id_usuario': 40, 'id_rol': 1}))
+		client.get(reverse('mobile_valvula_estado', args=[1]))
+		self.assertNotIn('topic_mqtt_comando', select.call_args.args[1])
+		self.assertNotEqual(select.call_args.args[1], '*')
+
+	@patch('App.api.views_valves.supabase_client.insert')
+	@patch('App.api.views_valves.supabase_client.update')
+	@patch('App.api.views_valves.publish_command')
+	@patch('App.api.views_valves.supabase_client.select', return_value=[{'id_valvula': 1, 'estado_actual': 'cerrada', 'topic_mqtt_comando': 't'}])
+	def test_comandos_de_la_app_quedan_en_el_historial(self, select, publish, update, insert):
+		client = APIClient()
+		client.force_authenticate(MobileUser({'id_usuario': 2, 'id_rol': 2}))
+		self.assertEqual(client.post('/api/valvula/1/abrir/').status_code, 200)
+		self.assertEqual(insert.call_args.args[0], 'log_valvula')
+		self.assertEqual(insert.call_args.args[1]['origen_accion'], 'app')
+		self.assertEqual(insert.call_args.args[1]['id_usuario'], 2)
+
+
+class WebSocketOrigenTests(TestCase):
+	def _conectar(self, cabeceras):
+		from SmartDrop.asgi import application
+
+		async def intentar():
+			comunicador = WebsocketCommunicator(application, '/ws/sensors/', headers=cabeceras)
+			conectado, codigo = await comunicador.connect()
+			if conectado:
+				await comunicador.disconnect()
+			else:
+				await comunicador.wait()
+			return conectado, codigo
+
+		return async_to_sync(intentar)()
+
+	def test_rechaza_websockets_del_navegador_abiertos_desde_otro_sitio(self):
+		conectado, codigo = self._conectar([(b'origin', b'https://sitio-malicioso.example')])
+		self.assertFalse(conectado)
+		self.assertNotEqual(codigo, 4401)  # lo cortó el validador de origen, antes de llegar al consumer
+
+	def test_la_app_con_token_no_necesita_origen(self):
+		conectado, codigo = self._conectar([(b'authorization', b'Bearer token-invalido')])
+		self.assertFalse(conectado)
+		self.assertEqual(codigo, 4401)  # llegó al consumer, que rechaza el token

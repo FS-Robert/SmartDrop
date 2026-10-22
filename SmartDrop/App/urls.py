@@ -35,6 +35,7 @@ urlpatterns = [
     path('reportes/<int:reporte_id>/', views_reportes.reporte_detalle, name='reporte_detalle'),
     path('reportes/<int:reporte_id>/adjuntar/', views_reportes.reporte_adjuntar, name='reporte_adjuntar'),
     path('reportes/<int:reporte_id>/mensajes/', views_reportes.reporte_mensajes_json, name='reporte_mensajes_json'),
+    path('adjuntos/<int:reporte_id>/<str:nombre>', views_reportes.adjunto_archivo, name='reporte_adjunto_archivo'),
     path('comunidad/',          views_reportes.reportes_comunidad,  name='reportes_comunidad'),
     path('alertas/',            views_reportes.alertas_historial,   name='alertas_historial'),
     path('alertas/export/',     views_reportes.alertas_export,      name='alertas_export'),

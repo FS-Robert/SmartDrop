@@ -3,24 +3,35 @@ fotográfica/video, historial de alertas y exportación CSV.
 
 Los datos viven en Supabase (tablas reporte, reporte_adjunto,
 reporte_mensaje, alerta, prediccion_desabasto). Los archivos adjuntos se
-guardan en MEDIA_ROOT y su URL pública se registra en reporte_adjunto.
+guardan en MEDIA_ROOT y su ruta se registra en reporte_adjunto; no son
+públicos: cada página o respuesta de la API entrega un enlace firmado que
+vence (ver adjunto_archivo).
+
+Los reportes son privados (solo los ven su autor y los admins) salvo los
+que se publican en el muro comunitario (columna es_comunitario).
 """
 import csv
+import io
 import logging
 import os
+import re
 import uuid
 from datetime import datetime
 
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.http import HttpResponse, JsonResponse
+from django.core import signing
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
+from PIL import Image, ImageOps, UnidentifiedImageError
 
 from . import preferencias, supabase_client
 from .queries import is_admin, owner_id, run_parallel, users_by_id as _usuarios_por_id
+from .seguridad import fila_csv, limitar
 
 logger = logging.getLogger(__name__)
 
@@ -41,9 +52,24 @@ ESTADO_LABEL = {'pendiente': 'Pendiente', 'en_proceso': 'En proceso', 'resuelto'
 PRIORIDADES = ['baja', 'media', 'alta']
 
 MAX_ADJUNTOS = 5
+MAX_ADJUNTOS_POR_REPORTE = 15
 MAX_TAMANO_ARCHIVO = 50 * 1024 * 1024  # 50 MB
+MAX_MENSAJE = 2000
 EXT_IMAGEN = {'.jpg', '.jpeg', '.png', '.gif', '.webp'}
 EXT_VIDEO = {'.mp4', '.webm', '.mov', '.3gp'}
+# Formato real (según Pillow) que se acepta para cada extensión de imagen. MPO es el JPEG de varias cámaras.
+_FORMATOS_IMAGEN = {
+    '.jpg': {'JPEG', 'MPO'}, '.jpeg': {'JPEG', 'MPO'}, '.png': {'PNG'}, '.gif': {'GIF'}, '.webp': {'WEBP'},
+}
+# Primeros bytes de los videos: MP4/MOV/3GP empiezan con una "caja" (ftyp, moov…) en el byte 4; WebM con EBML.
+_CAJAS_VIDEO = {b'ftyp', b'moov', b'mdat', b'wide', b'free', b'skip', b'pnot'}
+_TIPOS_MIME = {
+    '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif', '.webp': 'image/webp',
+    '.mp4': 'video/mp4', '.webm': 'video/webm', '.mov': 'video/quicktime', '.3gp': 'video/3gpp',
+}
+_RUTA_ADJUNTO = re.compile(r'^/media/reportes/(\d+)/([0-9a-f]{32}\.[a-z0-9]{2,5})$')
+_NOMBRE_ADJUNTO = re.compile(r'^[0-9a-f]{32}\.[a-z0-9]{2,5}$')
+_FIRMA_ADJUNTOS = signing.TimestampSigner(salt='smartdrop.reportes.adjuntos')
 
 
 def _tipo_meta():
@@ -80,8 +106,72 @@ def _supabase_id(request):
     return owner_id(request.user)
 
 
+def _alertas_de(user, columnas, params):
+    """Alertas que el usuario puede ver. Los admins ven todas; el resto, solo las que le llegaron como
+    notificación (consumo elevado, reporte semanal…), no las de otros usuarios."""
+    if is_admin(user):
+        return supabase_client.select('alerta', columnas, params)
+    notificaciones = supabase_client.select(
+        'notificacion', 'id_alerta',
+        {'id_usario_destino': f'eq.{owner_id(user)}', 'order': 'fecha_envio.desc', 'limit': '500'},
+    )
+    ids = sorted({n['id_alerta'] for n in notificaciones if n.get('id_alerta') is not None})
+    if not ids:
+        return []
+    return supabase_client.select('alerta', columnas, {**params, 'id_alerta': f"in.({','.join(map(str, ids))})"})
+
+
+def url_adjunto(url):
+    """Enlace firmado (vence en ADJUNTOS_URL_VIGENCIA_SEGUNDOS) para una ruta guardada en reporte_adjunto.
+
+    Solo lo recibe quien puede ver el reporte (su autor, los admins o, si es comunitario, cualquier usuario).
+    """
+    coincidencia = _RUTA_ADJUNTO.match(url or '')
+    if not coincidencia:
+        return url
+    reporte_id, nombre = coincidencia.groups()
+    firma = _FIRMA_ADJUNTOS.sign(f'{reporte_id}/{nombre}').split(':', 1)[1]
+    return f"{reverse('reporte_adjunto_archivo', args=[int(reporte_id), nombre])}?firma={firma}"
+
+
+def _firmar(adjuntos):
+    for adjunto in adjuntos:
+        adjunto['url'] = url_adjunto(adjunto.get('url'))
+    return adjuntos
+
+
+@require_http_methods(['GET', 'HEAD'])
+def adjunto_archivo(request, reporte_id, nombre):
+    """Entrega una evidencia si el enlace trae una firma válida y vigente.
+
+    En producción Nginx envía el archivo (X-Accel-Redirect a una ruta `internal`); /media/ ya no es público.
+    """
+    if not _NOMBRE_ADJUNTO.match(nombre):
+        raise Http404
+    try:
+        _FIRMA_ADJUNTOS.unsign(
+            f"{reporte_id}/{nombre}:{request.GET.get('firma', '')}",
+            max_age=settings.ADJUNTOS_URL_VIGENCIA_SEGUNDOS,
+        )
+    except signing.BadSignature:  # incluye SignatureExpired
+        raise Http404
+    ruta = os.path.join(settings.MEDIA_ROOT, 'reportes', str(reporte_id), nombre)
+    if not os.path.isfile(ruta):
+        raise Http404
+    tipo = _TIPOS_MIME.get(os.path.splitext(nombre)[1], 'application/octet-stream')
+    if settings.ADJUNTOS_X_ACCEL:
+        respuesta = HttpResponse(content_type=tipo)
+        respuesta['X-Accel-Redirect'] = f'/protegido/reportes/{reporte_id}/{nombre}'
+    else:
+        respuesta = FileResponse(open(ruta, 'rb'), content_type=tipo)
+    respuesta['Content-Disposition'] = 'inline'
+    respuesta['X-Content-Type-Options'] = 'nosniff'
+    respuesta['Cache-Control'] = 'private, max-age=3600'
+    return respuesta
+
+
 def _adjuntos_por_reporte(reporte_ids):
-    """Devuelve {id_reporte: [adjuntos]} con una sola consulta IN."""
+    """Devuelve {id_reporte: [adjuntos]} con una sola consulta IN (con sus enlaces ya firmados)."""
     if not reporte_ids:
         return {}
     ids = ','.join(str(i) for i in reporte_ids)
@@ -93,7 +183,7 @@ def _adjuntos_por_reporte(reporte_ids):
     except supabase_client.SupabaseError:
         rows = []
     agrupados = {}
-    for row in rows:
+    for row in _firmar(rows):
         agrupados.setdefault(row.get('id_reporte'), []).append(row)
     return agrupados
 
@@ -118,11 +208,55 @@ def _contadores_chat(reporte_ids, es_admin, user_id):
     return contadores
 
 
-def _guardar_adjuntos(reporte_id, archivos):
-    """Guarda archivos en MEDIA_ROOT/reportes/<id>/ y registra cada URL en Supabase."""
+def _imagen_sin_metadatos(archivo, ext):
+    """Bytes de la imagen vuelta a guardar sin EXIF: la ubicación GPS de una foto revelaría la casa de quien
+    reporta. Lanza ValueError si el contenido no es una imagen del formato que dice su extensión."""
+    try:
+        with Image.open(archivo) as imagen:
+            if imagen.format not in _FORMATOS_IMAGEN[ext]:
+                raise ValueError(f'el contenido es {imagen.format}, no {ext}')
+            imagen.load()
+            if imagen.format == 'GIF':
+                # Los GIF no llevan EXIF: se guardan tal cual para no perder la animación.
+                archivo.seek(0)
+                return archivo.read()
+            animada = imagen.format == 'WEBP' and getattr(imagen, 'n_frames', 1) > 1
+            # MPO (JPEG con varias imágenes, típico de cámaras de celular): se guarda solo la principal.
+            formato = 'JPEG' if imagen.format == 'MPO' else imagen.format
+            if not animada:
+                imagen = ImageOps.exif_transpose(imagen)  # aplica la rotación antes de quitar los metadatos
+            if formato == 'JPEG' and imagen.mode not in ('RGB', 'L'):
+                imagen = imagen.convert('RGB')
+            opciones = {'quality': 90} if formato in ('JPEG', 'WEBP') else {}
+            if animada:
+                opciones['save_all'] = True
+            salida = io.BytesIO()
+            imagen.save(salida, format=formato, **opciones)
+            return salida.getvalue()
+    except (UnidentifiedImageError, OSError, Image.DecompressionBombError, SyntaxError) as exc:
+        raise ValueError(str(exc)) from exc
+
+
+def _video_valido(archivo, ext):
+    archivo.seek(0)
+    cabecera = archivo.read(12)
+    archivo.seek(0)
+    if ext == '.webm':
+        return cabecera[:4] == b'\x1a\x45\xdf\xa3'
+    return cabecera[4:8] in _CAJAS_VIDEO
+
+
+def _guardar_adjuntos(reporte_id, archivos, existentes=0):
+    """Guarda archivos en MEDIA_ROOT/reportes/<id>/ y registra cada ruta en Supabase.
+
+    Se revisa el contenido (no solo la extensión) y a las fotos se les quitan los metadatos.
+    """
     guardados, errores = 0, []
-    for archivo in archivos[:MAX_ADJUNTOS]:
-        nombre = archivo.name or 'adjunto'
+    cupo = max(0, min(MAX_ADJUNTOS, MAX_ADJUNTOS_POR_REPORTE - existentes))
+    if len(archivos) > cupo:
+        errores.append(f'Cada reporte admite hasta {MAX_ADJUNTOS_POR_REPORTE} evidencias.')
+    for archivo in archivos[:cupo]:
+        nombre = (archivo.name or 'adjunto')[:255]
         ext = os.path.splitext(nombre)[1].lower()
         if ext not in EXT_IMAGEN | EXT_VIDEO:
             errores.append(f'{nombre}: formato no permitido.')
@@ -132,12 +266,25 @@ def _guardar_adjuntos(reporte_id, archivos):
             continue
 
         tipo = 'imagen' if ext in EXT_IMAGEN else 'video'
+        try:
+            contenido = _imagen_sin_metadatos(archivo, ext) if tipo == 'imagen' else None
+        except ValueError as exc:
+            logger.warning('Adjunto rechazado (%s) en el reporte %s: %s', nombre, reporte_id, exc)
+            errores.append(f'{nombre}: el archivo no es una imagen válida.')
+            continue
+        if tipo == 'video' and not _video_valido(archivo, ext):
+            errores.append(f'{nombre}: el archivo no es un video válido.')
+            continue
+
         destino_rel = os.path.join('reportes', str(reporte_id), f'{uuid.uuid4().hex}{ext}')
         destino_abs = os.path.join(settings.MEDIA_ROOT, destino_rel)
         os.makedirs(os.path.dirname(destino_abs), exist_ok=True)
-        with open(destino_abs, 'wb+') as out:
-            for chunk in archivo.chunks():
-                out.write(chunk)
+        with open(destino_abs, 'wb') as out:
+            if contenido is not None:
+                out.write(contenido)
+            else:
+                for chunk in archivo.chunks():
+                    out.write(chunk)
 
         url = f'{settings.MEDIA_URL}{destino_rel.replace(os.sep, "/")}'
         try:
@@ -151,7 +298,15 @@ def _guardar_adjuntos(reporte_id, archivos):
         except supabase_client.SupabaseError:
             logger.exception('No se pudo registrar adjunto %s del reporte %s', nombre, reporte_id)
             errores.append(f'{nombre}: no se pudo registrar.')
+            os.remove(destino_abs)  # sin fila en Supabase el archivo quedaría huérfano
     return guardados, errores
+
+
+def contar_adjuntos(reporte_id):
+    rows = supabase_client.select(
+        'reporte_adjunto', 'id_adjunto', {'id_reporte': f'eq.{reporte_id}', 'limit': str(MAX_ADJUNTOS_POR_REPORTE + 1)},
+    )
+    return len(rows)
 
 
 def _crear_reporte(request, es_comunitario):
@@ -174,14 +329,16 @@ def _crear_reporte(request, es_comunitario):
         'estado': 'pendiente',
         'prioridad': 'media',
     }
-    if es_comunitario and zona:
-        payload['ubicacion'] = f'[zona: {zona}] {ubicacion}'.strip()
+    if es_comunitario:
+        payload['es_comunitario'] = True
+        if zona:
+            payload['ubicacion'] = f'[zona: {zona}] {ubicacion}'.strip()
 
     try:
         row = supabase_client.insert('reporte', payload)
-    except supabase_client.SupabaseError as exc:
+    except supabase_client.SupabaseError:
         logger.exception('Error creando reporte')
-        return False, f'No se pudo enviar el reporte: {exc}'
+        return False, 'No se pudo enviar el reporte. Inténtalo de nuevo en unos minutos.'
 
     reporte_id = (row or {}).get('id_reporte')
     archivos = request.FILES.getlist('adjuntos')
@@ -202,6 +359,7 @@ def _crear_reporte(request, es_comunitario):
 # ── Vistas de usuario ─────────────────────────────────────────────────────────
 
 @login_required(login_url='login')
+@limitar('reportes', por='usuario')
 def reportes_panel(request):
     """Panel del usuario: problemas comunes, formulario de reporte e historial."""
     if _es_admin(request.user):
@@ -265,6 +423,7 @@ def _marcar_leidos(reporte_id, lector_id):
 
 
 @login_required(login_url='login')
+@limitar('mensajes', por='usuario')
 def reporte_detalle(request, reporte_id):
     """Detalle del reporte: evidencias y chat usuario↔admin."""
     es_admin = _es_admin(request.user)
@@ -279,7 +438,11 @@ def reporte_detalle(request, reporte_id):
     if request.method == 'POST':
         mensaje = (request.POST.get('mensaje') or '').strip()
         es_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest' or 'application/json' in request.headers.get('Accept', '')
-        if mensaje:
+        if len(mensaje) > MAX_MENSAJE:
+            if es_ajax:
+                return JsonResponse({'ok': False, 'error': 'mensaje_largo'}, status=400)
+            messages.error(request, f'El mensaje es muy largo (máximo {MAX_MENSAJE} caracteres).')
+        elif mensaje:
             try:
                 row = supabase_client.insert('reporte_mensaje', {
                     'id_reporte': reporte_id,
@@ -302,7 +465,7 @@ def reporte_detalle(request, reporte_id):
             except supabase_client.SupabaseError as exc:
                 if es_ajax:
                     return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
-                messages.error(request, f'No se pudo enviar el mensaje: {exc}')
+                messages.error(request, 'No se pudo enviar el mensaje. Inténtalo de nuevo.')
         elif es_ajax:
             return JsonResponse({'ok': False, 'error': 'mensaje_vacio'}, status=400)
         return redirect('reporte_detalle', reporte_id=reporte_id)
@@ -321,6 +484,7 @@ def reporte_detalle(request, reporte_id):
         )
     except supabase_client.SupabaseError:
         messages.error(request, 'No se pudo cargar la conversación.')
+    _firmar(adjuntos)
 
     # Nombres de los participantes (autor del reporte + admins que escriben)
     participantes = {reporte.get('id_usuario'), _supabase_id(request)}
@@ -355,6 +519,7 @@ def reporte_detalle(request, reporte_id):
 
 @login_required(login_url='login')
 @require_http_methods(['POST'])
+@limitar('adjuntos', por='usuario')
 def reporte_adjuntar(request, reporte_id):
     """El usuario agrega más evidencias a un reporte propio."""
     if _es_admin(request.user):
@@ -371,7 +536,11 @@ def reporte_adjuntar(request, reporte_id):
     if not archivos:
         messages.warning(request, 'Selecciona al menos un archivo.')
     else:
-        guardados, errores = _guardar_adjuntos(reporte_id, archivos)
+        try:
+            existentes = contar_adjuntos(reporte_id)
+        except supabase_client.SupabaseError:
+            existentes = MAX_ADJUNTOS_POR_REPORTE  # sin poder contar, no se agregan más
+        guardados, errores = _guardar_adjuntos(reporte_id, archivos, existentes)
         if guardados:
             messages.success(request, f'{guardados} evidencia(s) agregada(s).')
         for error in errores:
@@ -382,8 +551,12 @@ def reporte_adjuntar(request, reporte_id):
 # ── Reportes comunitarios ─────────────────────────────────────────────────────
 
 @login_required(login_url='login')
+@limitar('reportes', por='usuario')
 def reportes_comunidad(request):
-    """Muro comunitario: reportes de zona con evidencia fotográfica/video."""
+    """Muro comunitario: reportes de zona con evidencia fotográfica/video.
+
+    Solo muestra los reportes publicados aquí (es_comunitario); los de "Reportar un problema" son privados.
+    """
     if request.method == 'POST':
         ok, mensaje = _crear_reporte(request, es_comunitario=True)
         (messages.success if ok else messages.error)(request, mensaje)
@@ -392,7 +565,7 @@ def reportes_comunidad(request):
 
     try:
         reportes = supabase_client.select(
-            'reporte', '*', {'order': 'fecha_reporte.desc', 'limit': '100'},
+            'reporte', '*', {'es_comunitario': 'is.true', 'order': 'fecha_reporte.desc', 'limit': '100'},
         )
     except supabase_client.SupabaseError:
         reportes = []
@@ -525,13 +698,14 @@ def admin_reporte_update(request, reporte_id):
                     'id_usuario': _supabase_id(request),
                     'mensaje': f'Respuesta del equipo: {respuesta}',
                 })
-        except supabase_client.SupabaseError as exc:
-            messages.error(request, f'No se pudo actualizar: {exc}')
+        except supabase_client.SupabaseError:
+            messages.error(request, 'No se pudo actualizar el reporte. Inténtalo de nuevo.')
 
     return redirect('reporte_detalle', reporte_id=reporte_id)
 
 
 @login_required(login_url='login')
+@limitar('exportar', por='usuario', metodos=('GET',))
 def admin_reportes_export(request):
     """Exporta los reportes (con filtros aplicados) como CSV."""
     if not _es_admin(request.user):
@@ -557,7 +731,7 @@ def admin_reportes_export(request):
         'Estado', 'Prioridad', 'ID usuario', 'Respuesta admin', 'Fecha atención',
     ])
     for reporte in reportes:
-        writer.writerow([
+        writer.writerow(fila_csv([
             reporte.get('id_reporte'),
             reporte.get('fecha_reporte'),
             _tipo_label(reporte.get('tipo_problema')),
@@ -568,7 +742,7 @@ def admin_reportes_export(request):
             reporte.get('id_usuario') or '',
             (reporte.get('respuesta_admin') or '').replace('\n', ' '),
             reporte.get('fecha_atencion') or '',
-        ])
+        ]))
     return response
 
 
@@ -630,7 +804,7 @@ def alertas_historial(request):
         params['estado_confirmacion'] = f'eq.{filtro_estado}'
 
     try:
-        alertas = supabase_client.select('alerta', '*', params)
+        alertas = _alertas_de(request.user, '*', params)
     except supabase_client.SupabaseError:
         alertas = []
         messages.error(request, 'No se pudo cargar el historial de alertas.')
@@ -648,6 +822,7 @@ def alertas_historial(request):
 
 
 @login_required(login_url='login')
+@limitar('exportar', por='usuario', metodos=('GET',))
 def alertas_export(request):
     """Exporta el historial de alertas como CSV (solo administradores)."""
     if not _es_admin(request.user):
@@ -667,14 +842,14 @@ def alertas_export(request):
     writer = csv.writer(response)
     writer.writerow(['ID', 'Fecha', 'Tipo', 'Prioridad', 'Mensaje', 'Estado'])
     for alerta in alertas:
-        writer.writerow([
+        writer.writerow(fila_csv([
             alerta.get('id_alerta'),
             alerta.get('fecha_creacion'),
             alerta.get('tipo_alerta'),
             alerta.get('prioridad'),
             (alerta.get('mensaje') or '').replace('\n', ' '),
             alerta.get('estado_confirmacion'),
-        ])
+        ]))
     return response
 
 
@@ -699,8 +874,8 @@ def interrupciones_y_predicciones(user, prefs=None):
         try:
             reportes, alertas, predicciones = run_parallel(
                 lambda: supabase_client.select('reporte', '*', params_reportes),
-                lambda: supabase_client.select(
-                    'alerta', 'id_alerta,tipo_alerta,prioridad,mensaje,estado_confirmacion,fecha_creacion,datos_adicionales',
+                lambda: _alertas_de(
+                    user, 'id_alerta,tipo_alerta,prioridad,mensaje,estado_confirmacion,fecha_creacion,datos_adicionales',
                     {'order': 'fecha_creacion.desc', 'limit': '40'},
                 ),
                 lambda: supabase_client.select(
@@ -738,7 +913,7 @@ def reporte_mensajes_json(request, reporte_id):
             return JsonResponse({'ok': False, 'error': 'no_encontrado'}, status=404)
         after = request.GET.get('after', '0')
         params = {'id_reporte': f'eq.{reporte_id}', 'order': 'id_mensaje.asc', 'limit': '200'}
-        if after.isdigit() and int(after) > 0:
+        if after.isascii() and after.isdigit() and int(after) > 0:
             params['id_mensaje'] = f'gt.{after}'
         filas = supabase_client.select('reporte_mensaje', '*', params)
     except supabase_client.SupabaseError:

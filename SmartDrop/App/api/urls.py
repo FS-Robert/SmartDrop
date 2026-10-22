@@ -1,6 +1,6 @@
 from django.urls import path
 
-from .views_auth import MobileLoginView, MobileMeView, MobileRefreshView, MobileRegisterView
+from .views_auth import MobileLoginView, MobileLogoutView, MobileMeView, MobileRefreshView, MobileRegisterView
 from .views_mobile_data import (
     MobileEstadoAguaView,
     MobileGraficasView,
@@ -29,6 +29,7 @@ urlpatterns = [
     path('auth/login/', MobileLoginView.as_view(), name='mobile_login'),
     path('auth/me/', MobileMeView.as_view(), name='mobile_me'),
     path('auth/refresh/', MobileRefreshView.as_view(), name='mobile_refresh'),
+    path('auth/logout/', MobileLogoutView.as_view(), name='mobile_logout'),
     path('auth/perfil/', MobilePerfilView.as_view(), name='mobile_perfil'),
     path('auth/preferencias/', MobilePreferenciasView.as_view(), name='mobile_preferencias'),
     path('api/notificaciones/', MobileNotificacionesView.as_view(), name='mobile_notificaciones'),

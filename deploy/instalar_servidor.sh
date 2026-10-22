@@ -15,6 +15,7 @@ USUARIO="$(id -un)"
 PY_VERSION="3.13"                         # la misma que usas en tu PC
 
 paso() { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
+source "$REPO_DIR/deploy/seguridad_env.sh"
 
 if [[ ! -f "$ENV_FILE" ]]; then
     echo "No existe $ENV_FILE. Súbelo primero con deploy/desplegar.ps1 (o copia tu .env)." >&2
@@ -43,19 +44,13 @@ uv python install "$PY_VERSION"
 uv pip install --python "$VENV/bin/python" -r "$REPO_DIR/requirements.txt"
 
 paso "Ajustar .env para producción"
-set_env() {  # set_env CLAVE VALOR: reemplaza la línea o la agrega al final
-    if grep -q "^$1=" "$ENV_FILE"; then
-        sed -i "s|^$1=.*|$1=$2|" "$ENV_FILE"
-    else
-        printf '\n%s=%s\n' "$1" "$2" >> "$ENV_FILE"
-    fi
-}
 sed -i 's/\r$//' "$ENV_FILE"              # quitar finales de línea de Windows
 set_env DEBUG False
 set_env ALLOWED_HOSTS "$DOMINIO,localhost,127.0.0.1"
 set_env CSRF_TRUSTED_ORIGINS "https://$DOMINIO"
 set_env REDIS_URL ""                      # un solo proceso: el canal en memoria basta
-chmod 600 "$ENV_FILE"
+asegurar_claves
+apartar_env_duplicado
 
 paso "Migraciones y archivos estáticos"
 cd "$APP_DIR"
@@ -63,9 +58,11 @@ cd "$APP_DIR"
 "$VENV/bin/python" manage.py migrate --database=timeseries --noinput
 "$VENV/bin/python" manage.py collectstatic --noinput
 mkdir -p "$APP_DIR/media"
-# Nginx (usuario www-data) necesita poder entrar a las carpetas para servir static/ y media/.
+# Nginx (usuario www-data) necesita poder entrar a las carpetas para servir static/ y las evidencias
+# (estas solo cuando Django lo autoriza con X-Accel-Redirect).
 chmod o+x "$HOME" "$REPO_DIR" "$APP_DIR"
 chmod -R o+rX "$APP_DIR/staticfiles" "$APP_DIR/media"
+proteger_bases
 
 paso "Servicio systemd (arranca solo y se reinicia si falla)"
 sed -e "s|__USUARIO__|$USUARIO|g" -e "s|__REPO_DIR__|$REPO_DIR|g" \

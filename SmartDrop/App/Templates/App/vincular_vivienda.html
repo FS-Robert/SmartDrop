@@ -40,7 +40,7 @@
 
         <div class="auth-alt">
           <p class="auth-alt-text">{% if user.is_authenticated %}Sesión iniciada como <strong>{{ user.email }}</strong>{% else %}¿Quieres usar otra cuenta?{% endif %}</p>
-          <a class="auth-alt-link" href="{% url 'logout' %}"><svg class="icon" aria-hidden="true"><use href="#i-logout"></use></svg>Cerrar sesión</a>
+          <a class="auth-alt-link" href="{% url 'logout' %}" data-cerrar-sesion><svg class="icon" aria-hidden="true"><use href="#i-logout"></use></svg>Cerrar sesión</a>
         </div>
       </div>
     </main>
@@ -54,5 +54,6 @@
   </div>
 
   {% include 'App/_auth_scripts.html' %}
+  {% include 'App/_cerrar_sesion_form.html' %}
 </body>
 </html>
