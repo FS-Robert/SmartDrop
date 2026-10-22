@@ -1458,3 +1458,49 @@ class WebSocketOrigenTests(TestCase):
 		conectado, codigo = self._conectar([(b'authorization', b'Bearer token-invalido')])
 		self.assertFalse(conectado)
 		self.assertEqual(codigo, 4401)  # llegó al consumer, que rechaza el token
+
+
+class ErroresDeLaAppTests(TestCase):
+	"""Dos fallos de la app: los comandos de válvula y las evidencias agregadas a un reporte."""
+
+	def setUp(self):
+		self.client = APIClient()
+		self.client.force_authenticate(MobileUser({'id_usuario': 2, 'id_rol': 2}))
+
+	@patch('App.api.views_valves._start_timer_for_valvula')
+	@patch('App.api.views_valves.supabase_client.insert')
+	@patch('App.api.views_valves.supabase_client.update')
+	@patch('App.api.views_valves.publish_command')
+	@patch('App.api.views_valves.supabase_client.select', return_value=[{'id_valvula': 3, 'estado_actual': 'cerrada', 'topic_mqtt_comando': 't'}])
+	def test_la_valvula_acepta_lo_que_envia_la_app(self, select, publish, update, insert, iniciar):
+		response = self.client.post('/api/valvula/3/control/', {'accion': 'ABRIR', 'duracion': 30, 'usuario': 'Ana', 'origen': 'app'}, format='json')
+		self.assertEqual(response.status_code, 200)
+		publish.assert_called_once_with('t', 'abrir')
+		iniciar.assert_called_once_with(3, 30)
+		self.assertEqual(insert.call_args.args[1]['tipo_activacion'], 'temporizado')
+
+		response = self.client.post('/api/valvula/3/control/', {'accion': 'CERRAR', 'duracion': 0}, format='json')
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(publish.call_args.args, ('t', 'cerrar'))
+
+	@patch('App.api.views_valves.publish_command')
+	def test_rechaza_duraciones_fuera_de_rango(self, publish):
+		response = self.client.post('/api/valvula/3/control/', {'accion': 'ABRIR', 'duracion': 600}, format='json')
+		self.assertEqual(response.status_code, 400)
+		publish.assert_not_called()
+
+	@patch('App.api.views_valves.supabase_client.select', return_value=[{'id_valvula': 3, 'estado_actual': 'abierta'}])
+	def test_el_estado_incluye_el_temporizador_en_curso(self, select):
+		with patch('App.api.views_valves._timer_info_for_valvula', return_value={'timer_activo': True, 'timer_remaining': 12, 'duracion_seg': 30}):
+			response = self.client.get(reverse('mobile_valvula_estado', args=[3]))
+		self.assertEqual(response.json()['temporizador_activo'], {'duracion_programada': 30, 'segundos_restantes': 12})
+
+	@patch('App.api.views_mobile_reports.contar_adjuntos', return_value=0)
+	@patch('App.api.views_mobile_reports.supabase_client.select', return_value=[{'id_reporte': 7}])
+	def test_evidencia_rechazada_ya_no_responde_ok(self, select, contar):
+		self.client.force_authenticate(MobileUser({'id_usuario': 40, 'id_rol': 1}))
+		archivo = SimpleUploadedFile('evidencia_123', b'datos', content_type='image/jpeg')
+		response = self.client.post(reverse('mobile_reporte_adjuntar', args=[7]), {'adjuntos': [archivo]}, format='multipart')
+		self.assertEqual(response.status_code, 400)
+		self.assertFalse(response.json()['ok'])
+		self.assertIn('formato no permitido', response.json()['error'])

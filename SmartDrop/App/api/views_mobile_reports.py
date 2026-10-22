@@ -246,6 +246,13 @@ class MobileReporteAdjuntarView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         guardados, errores = _guardar_adjuntos(reporte_id, archivos, existentes)
+        if not guardados:
+            # Antes respondía ok aunque no se guardara nada, y la app mostraba "Evidencia agregada".
+            return Response(
+                {'ok': False, 'error': errores[0] if errores else 'No se pudo guardar la evidencia.',
+                 'adjuntos_guardados': 0, 'adjuntos_errores': errores},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         return Response({'ok': True, 'adjuntos_guardados': guardados, 'adjuntos_errores': errores})
 
 

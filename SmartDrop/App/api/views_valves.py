@@ -8,6 +8,7 @@ from rest_framework.views import APIView
 from .. import supabase_client
 from ..mqtt_service import MqttError, publish_command
 from ..queries import is_admin, owner_id, users_by_id
+from ..views import _cancel_active_timer, _start_timer_for_valvula, _timer_info_for_valvula
 from .permissions import IsAdministrator, IsAuthenticatedUser
 
 
@@ -32,7 +33,7 @@ class MobileValvulaEstadoView(APIView):
             return Response({'error': 'No se pudo consultar la válvula.'}, status=status.HTTP_502_BAD_GATEWAY)
         if not rows:
             return Response({'error': 'Válvula no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
-        return Response(rows[0])
+        return Response({**rows[0], 'temporizador_activo': _temporizador(id_valvula)})
 
 
 class MobileValvulaLogsView(APIView):
@@ -100,13 +101,42 @@ class MobileValvulaLogsView(APIView):
         return Response({'advertencia': None, 'logs': logs})
 
 
+def _temporizador(id_valvula):
+    """Temporizador de apertura en curso (mismo registro que la web), en el formato que lee la app."""
+    info = _timer_info_for_valvula(id_valvula)
+    if not info['timer_activo']:
+        return None
+    return {'duracion_programada': info['duracion_seg'], 'segundos_restantes': info['timer_remaining']}
+
+
+def _duracion(valor):
+    """Segundos de apertura temporizada (0 = sin temporizador); mismas reglas que la web (5 a 120 s)."""
+    try:
+        duracion = int(float(valor or 0))
+    except (TypeError, ValueError):
+        raise ValueError('La duración debe ser un número de segundos.')
+    if duracion and not 5 <= duracion <= 120:
+        raise ValueError('La duración debe estar entre 5 y 120 segundos.')
+    return duracion
+
+
 class MobileValvulaCommandView(APIView):
+    """POST api/valvula/<id>/abrir/ o /cerrar/, o /control/ con {"accion": "ABRIR"|"CERRAR", "duracion": s}
+    (lo que envía la app). Con duración, la válvula se cierra sola al terminar, igual que desde la web."""
+
     permission_classes = [IsAdministrator]
     limite_alcance = 'valvula'
     limite_por = 'usuario'
 
     def post(self, request, id_valvula, action):
         action = action.replace('-remoto', '')
+        duracion = 0
+        if action == 'control':
+            action = str(request.data.get('accion', '')).strip().lower()
+            try:
+                duracion = _duracion(request.data.get('duracion')) if action == 'abrir' else 0
+            except ValueError as exc:
+                return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         if action not in ('abrir', 'cerrar'):
             return Response({'error': 'Comando inválido.'}, status=status.HTTP_400_BAD_REQUEST)
         try:
@@ -121,11 +151,17 @@ class MobileValvulaCommandView(APIView):
             return Response({'error': 'Válvula no encontrada o sin topic MQTT.'}, status=status.HTTP_404_NOT_FOUND)
         valvula = rows[0]
         state = 'abierta' if action == 'abrir' else 'cerrada'
+        cierre_durante_temporizador = action == 'cerrar' and _temporizador(id_valvula) is not None
         try:
+            if action == 'cerrar':
+                _cancel_active_timer(id_valvula)
             publish_command(valvula['topic_mqtt_comando'], action)
             supabase_client.update(
                 'valvula',
-                {'estado_actual': state},
+                {
+                    'estado_actual': state,
+                    'ultima_apertura': timezone.now().isoformat() if action == 'abrir' else None,
+                },
                 {'id_valvula': f'eq.{id_valvula}'},
             )
         except MqttError as exc:
@@ -134,19 +170,29 @@ class MobileValvulaCommandView(APIView):
         except supabase_client.SupabaseError:
             return Response({'error': 'El comando se envió, pero no se pudo guardar el estado.'}, status=status.HTTP_502_BAD_GATEWAY)
 
+        if duracion:
+            _start_timer_for_valvula(id_valvula, duracion)
+
         # Mismo registro que los comandos desde la web: quién, cuándo y desde dónde.
+        razon = None
+        if cierre_durante_temporizador:
+            razon = 'Cierre manual durante temporizador'
+        elif duracion:
+            razon = f'Apertura temporizada de {duracion} segundos'
         try:
             supabase_client.insert('log_valvula', {
                 'id_valvula': valvula['id_valvula'],
                 'accion': action,
                 'estado_anterior': valvula.get('estado_actual') or 'desconocida',
                 'estado_nuevo': state,
-                'tipo_activacion': 'manual',
+                'tipo_activacion': 'temporizado' if duracion else 'manual',
                 'id_usuario': owner_id(request.user),
                 'fecha_hora': timezone.now().isoformat(),
                 'ip_dispositivo': request.META.get('REMOTE_ADDR'),
                 'origen_accion': 'app',
+                'duracion_programada': duracion or None,
+                'razon': razon,
             })
         except supabase_client.SupabaseError:
             logger.error('No se pudo registrar en log_valvula el comando %s de la válvula %s', action, id_valvula)
-        return Response({'ok': True, 'estado_actual': state})
+        return Response({'ok': True, 'estado_actual': state, 'temporizador_activo': _temporizador(id_valvula)})
