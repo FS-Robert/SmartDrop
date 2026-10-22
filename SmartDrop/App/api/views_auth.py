@@ -8,10 +8,19 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from .. import supabase_client
 from .permissions import IsAuthenticatedUser
+from .throttling import (
+    AnonApiThrottle,
+    LoginCuentaThrottle,
+    LoginIpThrottle,
+    RefreshThrottle,
+    RegistroThrottle,
+    UserApiThrottle,
+)
 
 
 class MobileRegisterView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [AnonApiThrottle, UserApiThrottle, RegistroThrottle]
 
     def post(self, request):
         required = ('nombre', 'apellido', 'correo', 'contrasena')
@@ -40,6 +49,7 @@ class MobileRegisterView(APIView):
 
 class MobileLoginView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [AnonApiThrottle, UserApiThrottle, LoginIpThrottle, LoginCuentaThrottle]
 
     def post(self, request):
         email = str(request.data.get('correo', '')).strip().lower()
@@ -81,6 +91,7 @@ class MobileRefreshView(APIView):
     """Renueva el token de acceso con el token de renovación (la app lo usa al recibir 401)."""
 
     permission_classes = [AllowAny]
+    throttle_classes = [AnonApiThrottle, UserApiThrottle, RefreshThrottle]
 
     def post(self, request):
         token = str(request.data.get('refresh', '')).strip()

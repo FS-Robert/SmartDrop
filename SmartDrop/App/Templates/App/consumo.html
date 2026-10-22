@@ -101,7 +101,7 @@
 {{ consumo.valor_semana|json_script:"consumo-valor-semana" }}
 {{ consumo.valor_mes|json_script:"consumo-valor-mes" }}
 {{ consumo.mes_key|json_script:"consumo-mes-key" }}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js" integrity="sha256-Mh46P6mNpKqpV9EL5Xy7UU3gmJ7tj51ya10FkCzQGQQ=" crossorigin="anonymous"></script>
 <script src="{% static 'App/js/sd_charts.js' %}?v=20261018-agua1"></script>
 <script>
   const jsonData = id => JSON.parse(document.getElementById(id).textContent);

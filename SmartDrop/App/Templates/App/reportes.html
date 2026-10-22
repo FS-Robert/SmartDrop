@@ -1,5 +1,5 @@
 {% extends 'App/base.html' %}
-{% load static %}
+{% load static sd_ui %}
 {% block title %}Reportar un problema{% endblock %}
 {% block nav_reportar %}active{% endblock %}
 
@@ -99,7 +99,7 @@
                 <p class="list-row-title">{{ reporte.tipo_label }}</p>
                 <p class="reporte-row-desc">{{ reporte.descripcion|truncatewords:12 }}</p>
                 <p class="list-row-meta reporte-row-meta">
-                  {% with f=reporte.fecha_reporte %}<time datetime="{{ reporte.fecha_reporte }}">{{ f|slice:'8:10' }}/{{ f|slice:'5:7' }}/{{ f|slice:':4' }} {{ f|slice:'11:16' }}</time>{% endwith %}
+                  <time datetime="{{ reporte.fecha_reporte }}">{{ reporte.fecha_reporte|fecha_corta }}</time>
                   {% if reporte.n_adjuntos %}<span class="reporte-row-adjuntos"><i class="ti ti-paperclip" aria-hidden="true"></i>{{ reporte.n_adjuntos }} adjunto{{ reporte.n_adjuntos|pluralize }}</span>{% endif %}
                 </p>
               </div>

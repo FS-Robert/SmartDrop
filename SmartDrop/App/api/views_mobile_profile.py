@@ -184,11 +184,11 @@ def _avisos_guardados(request, prefs):
         'id_usario_destino': f'eq.{user_id}', 'fecha_envio': f'gte.{desde}',
         'estado_visualizacion': 'eq.no_leida', 'order': 'fecha_envio.desc', 'limit': '50',
     })
-    ids = [str(n['id_alerta']) for n in notificaciones if n.get('id_alerta')]
+    ids = [str(n['id_alerta']) for n in notificaciones if str(n.get('id_alerta') or '').isdigit()]
     if not ids:
         return []
     alertas = supabase_client.select('alerta', 'id_alerta,tipo_alerta,mensaje,fecha_creacion,datos_adicionales', {
-        'id_alerta': f"in.({','.join(ids)})", 'limit': str(len(ids)),
+        'id_alerta': supabase_client.ids_in(ids), 'limit': str(len(ids)),
     })
     avisos = []
     for alerta in preferencias.filtrar_alertas(alertas, prefs):

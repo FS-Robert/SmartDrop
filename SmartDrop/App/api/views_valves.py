@@ -4,25 +4,42 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .. import supabase_client
+from .. import supabase_client, valve_service
 from ..mqtt_service import MqttError, publish_command
 from ..queries import users_by_id
+from ..ratelimit import client_ip
 from .permissions import IsAdministrator, IsAuthenticatedUser
+from .throttling import ValvulaComandoThrottle
 
 
 logger = logging.getLogger(__name__)
 
 
 class MobileValvulaEstadoView(APIView):
+    """Estado de la válvula para la app: la fila de `valvula` más el temporizador activo (si lo hay).
+
+    `temporizador_activo` = {duracion_programada, segundos_restantes, fin} o null; la app lo usa para
+    mostrar la cuenta regresiva.
+    """
     permission_classes = [IsAuthenticatedUser]
 
     def get(self, request, id_valvula):
-        rows = supabase_client.select(
-            'valvula', '*', {'id_valvula': f'eq.{id_valvula}', 'limit': '1'}
-        )
+        try:
+            rows = supabase_client.select(
+                'valvula',
+                'id_valvula,nombre,estado_actual,estado_operativo,ultima_apertura,ultima_conexion_mqtt',
+                {'id_valvula': f'eq.{int(id_valvula)}', 'limit': '1'},
+            )
+        except supabase_client.SupabaseError:
+            logger.exception('No se pudo leer el estado de la válvula %s', id_valvula)
+            return Response({'error': 'No se pudo consultar la válvula.'}, status=status.HTTP_502_BAD_GATEWAY)
         if not rows:
             return Response({'error': 'Válvula no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
-        return Response(rows[0])
+        valvula = dict(rows[0])
+        abierta = valve_service.esta_abierta(valvula.get('estado_actual'))
+        valvula['temporizador_activo'] = valve_service.temporizador_para_app(id_valvula) if abierta else None
+        valvula['abierta_desde'] = valvula.get('ultima_apertura') if abierta else None
+        return Response(valvula)
 
 
 class MobileValvulaLogsView(APIView):
@@ -91,27 +108,51 @@ class MobileValvulaLogsView(APIView):
 
 
 class MobileValvulaCommandView(APIView):
+    """Comandos de la válvula desde la app (solo administradores).
+
+    * POST api/valvula/<id>/control/  con {"accion": "ABRIR" | "CERRAR", "duracion": 0 | 5..120}
+      (lo que envía la app; duracion 0 = sin temporizador).
+    * POST api/valvula/<id>/abrir/ o /cerrar/ (también -remoto), con "duracion" opcional en el cuerpo.
+
+    Cada comando se publica por MQTT, actualiza `valvula` y queda en `log_valvula` con el usuario del
+    token (nunca el nombre que mande el cliente) y origen "app".
+    """
     permission_classes = [IsAdministrator]
+    throttle_classes = [ValvulaComandoThrottle]
 
     def post(self, request, id_valvula, action):
-        action = action.replace('-remoto', '')
-        if action not in ('abrir', 'cerrar'):
-            return Response({'error': 'Comando inválido.'}, status=status.HTTP_400_BAD_REQUEST)
-        rows = supabase_client.select(
-            'valvula',
-            'id_valvula,estado_actual,topic_mqtt_comando',
-            {'id_valvula': f'eq.{id_valvula}', 'limit': '1'},
-        )
-        if not rows or not rows[0].get('topic_mqtt_comando'):
-            return Response({'error': 'Válvula no encontrada o sin topic MQTT.'}, status=status.HTTP_404_NOT_FOUND)
+        action = str(action or '').strip().lower()
+        data = request.data if isinstance(request.data, dict) else {}
         try:
-            publish_command(rows[0]['topic_mqtt_comando'], action)
-            state = 'abierta' if action == 'abrir' else 'cerrada'
-            supabase_client.update(
-                'valvula',
-                {'estado_actual': state},
-                {'id_valvula': f'eq.{id_valvula}'},
+            comando = valve_service.normalizar_comando(data.get('accion') if action == 'control' else action)
+            duracion = valve_service.parse_duracion(data.get('duracion', data.get('duracion_seg')))
+        except ValueError as exc:
+            return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            resultado = valve_service.ejecutar_comando(
+                id_valvula, comando,
+                duracion_seg=duracion if comando == 'abrir' else None,
+                id_usuario=getattr(request.user, 'id_usuario', None),
+                ip=client_ip(request),
+                origen='app',
+                publish=publish_command,
             )
-        except MqttError as exc:
+        except valve_service.ValvulaNoEncontrada as exc:
+            return Response({'error': str(exc)}, status=status.HTTP_404_NOT_FOUND)
+        except (MqttError, supabase_client.SupabaseError) as exc:
+            logger.warning('Comando %s a la válvula %s falló: %s', comando, id_valvula, exc)
             return Response({'error': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
-        return Response({'ok': True, 'estado_actual': state})
+
+        temporizador = valve_service.temporizador_para_app(id_valvula) if resultado['estado_nuevo'] == 'abierta' else None
+        return Response({
+            'ok': True,
+            'accion': resultado['accion'].upper(),
+            'estado_anterior': resultado['estado_anterior'],
+            'estado_actual': resultado['estado_nuevo'],
+            'tipo_activacion': resultado['tipo_activacion'],
+            'fecha_hora': resultado['fecha_hora'],
+            'abierta_desde': resultado['ultima_apertura'],
+            'temporizador_activo': temporizador,
+            'log_registrado': resultado['log_registrado'],
+        })

@@ -630,8 +630,9 @@ class UsuarioProfileViewTests(TestCase):
 		self.assertContains(response, 'No configurado')
 		self.assertContains(response, 'Información personal')
 
+	@patch('App.views.supabase_client.select', return_value=[])  # sin esto la prueba consultaba el Supabase real del .env
 	@patch('App.views.supabase_client.update')
-	def test_editar_perfil_actualiza_supabase_y_usuario_local(self, update):
+	def test_editar_perfil_actualiza_supabase_y_usuario_local(self, update, select):
 		update.return_value = {
 			'id_usuario': 88,
 			'nombre': 'Andrea',

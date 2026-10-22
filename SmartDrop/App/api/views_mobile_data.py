@@ -9,6 +9,7 @@ from rest_framework.views import APIView
 from .. import preferencias, queries, supabase_client
 from ..queries import safe_float
 from .permissions import IsAuthenticatedUser
+from .throttling import UserApiThrottle, VincularThrottle
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,7 @@ def _readings_for_sensors(sensor_ids, since=None, limit=5000):
     if not ids:
         return []
     params = {
-        'id_sensor': f"in.({','.join(ids)})",
+        'id_sensor': supabase_client.ids_in(ids),
         'order': 'fecha_registro.desc',
         'limit': str(limit),
     }
@@ -162,6 +163,7 @@ class MobileViviendasView(APIView):
 
 class MobileVincularViviendaView(APIView):
     permission_classes = [IsAuthenticatedUser]
+    throttle_classes = [UserApiThrottle, VincularThrottle]
 
     def post(self, request):
         try:

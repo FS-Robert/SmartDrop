@@ -20,6 +20,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from . import preferencias, supabase_client
+from .ratelimit import rate_limit
 from .queries import is_admin, owner_id, run_parallel, users_by_id as _usuarios_por_id
 
 logger = logging.getLogger(__name__)
@@ -84,11 +85,11 @@ def _adjuntos_por_reporte(reporte_ids):
     """Devuelve {id_reporte: [adjuntos]} con una sola consulta IN."""
     if not reporte_ids:
         return {}
-    ids = ','.join(str(i) for i in reporte_ids)
+    ids = supabase_client.ids_in(reporte_ids)
     try:
         rows = supabase_client.select(
             'reporte_adjunto', '*',
-            {'id_reporte': f'in.({ids})', 'order': 'id_adjunto.asc', 'limit': '500'},
+            {'id_reporte': ids, 'order': 'id_adjunto.asc', 'limit': '500'},
         )
     except supabase_client.SupabaseError:
         rows = []
@@ -102,11 +103,11 @@ def _contadores_chat(reporte_ids, es_admin, user_id):
     """Mensajes sin leer dirigidos al usuario actual, agrupados por reporte."""
     if not reporte_ids:
         return {}
-    ids = ','.join(str(i) for i in reporte_ids)
+    ids = supabase_client.ids_in(reporte_ids)
     try:
         rows = supabase_client.select(
             'reporte_mensaje', 'id_reporte,id_usuario,leido',
-            {'id_reporte': f'in.({ids})', 'leido': 'eq.false', 'limit': '2000'},
+            {'id_reporte': ids, 'leido': 'eq.false', 'limit': '2000'},
         )
     except supabase_client.SupabaseError:
         return {}
@@ -202,6 +203,7 @@ def _crear_reporte(request, es_comunitario):
 # ── Vistas de usuario ─────────────────────────────────────────────────────────
 
 @login_required(login_url='login')
+@rate_limit('reportes_escritura', '30/h', key='user')
 def reportes_panel(request):
     """Panel del usuario: problemas comunes, formulario de reporte e historial."""
     if _es_admin(request.user):
@@ -265,6 +267,7 @@ def _marcar_leidos(reporte_id, lector_id):
 
 
 @login_required(login_url='login')
+@rate_limit('reportes_mensajes', '120/h', key='user')
 def reporte_detalle(request, reporte_id):
     """Detalle del reporte: evidencias y chat usuario↔admin."""
     es_admin = _es_admin(request.user)
@@ -354,6 +357,7 @@ def reporte_detalle(request, reporte_id):
 
 
 @login_required(login_url='login')
+@rate_limit('reportes_escritura', '30/h', key='user')
 @require_http_methods(['POST'])
 def reporte_adjuntar(request, reporte_id):
     """El usuario agrega más evidencias a un reporte propio."""
@@ -382,6 +386,7 @@ def reporte_adjuntar(request, reporte_id):
 # ── Reportes comunitarios ─────────────────────────────────────────────────────
 
 @login_required(login_url='login')
+@rate_limit('reportes_escritura', '30/h', key='user')
 def reportes_comunidad(request):
     """Muro comunitario: reportes de zona con evidencia fotográfica/video."""
     if request.method == 'POST':
@@ -495,7 +500,7 @@ def admin_reportes(request):
 @login_required(login_url='login')
 @require_http_methods(['POST'])
 def admin_reporte_update(request, reporte_id):
-    """Actualiza estado, prioridad, asignación y respuesta del admin."""
+    """Actualiza estado, prioridad, asignación y respuesta del admin, y avisa al autor del reporte."""
     if not _es_admin(request.user):
         return redirect('reportes_panel')
 
@@ -516,19 +521,71 @@ def admin_reporte_update(request, reporte_id):
 
     if cambios:
         try:
+            anterior = _cargar_reporte_o_404(request, reporte_id, solo_propietario=False) or {}
             supabase_client.update('reporte', cambios, {'id_reporte': f'eq.{reporte_id}'})
             messages.success(request, 'Reporte actualizado.')
-            # La respuesta también aparece como mensaje del chat
+            estado_cambio = 'estado' in cambios and cambios['estado'] != anterior.get('estado')
+            # La respuesta (o el cambio de estado) también aparece como mensaje del chat
             if respuesta:
                 supabase_client.insert('reporte_mensaje', {
                     'id_reporte': reporte_id,
                     'id_usuario': _supabase_id(request),
                     'mensaje': f'Respuesta del equipo: {respuesta}',
                 })
+            elif estado_cambio:
+                supabase_client.insert('reporte_mensaje', {
+                    'id_reporte': reporte_id,
+                    'id_usuario': _supabase_id(request),
+                    'mensaje': f'El equipo cambió el estado del reporte a: {ESTADO_LABEL.get(cambios["estado"], cambios["estado"])}.',
+                })
+            if estado_cambio or respuesta:
+                _avisar_autor_del_reporte(reporte_id, anterior, cambios.get('estado'), respuesta)
         except supabase_client.SupabaseError as exc:
             messages.error(request, f'No se pudo actualizar: {exc}')
 
     return redirect('reporte_detalle', reporte_id=reporte_id)
+
+
+def _avisar_autor_del_reporte(reporte_id, reporte, estado_nuevo, respuesta):
+    """Alerta + notificación para el autor: le llega a la web (alertas) y a la app (api/notificaciones/)."""
+    autor = reporte.get('id_usuario')
+    if not autor:
+        return
+    tipo = _tipo_label(reporte.get('tipo_problema'))
+    if estado_nuevo == 'resuelto':
+        titulo = f'Tu reporte #{reporte_id} ({tipo}) fue marcado como resuelto.'
+    elif estado_nuevo and estado_nuevo != reporte.get('estado'):
+        titulo = f'Tu reporte #{reporte_id} ({tipo}) ahora está: {ESTADO_LABEL.get(estado_nuevo, estado_nuevo)}.'
+    else:
+        titulo = f'El equipo respondió tu reporte #{reporte_id} ({tipo}).'
+    mensaje = titulo + (f'\nRespuesta del equipo: {respuesta}' if respuesta else '')
+    from django.utils import timezone
+    ahora = timezone.now().isoformat()
+    try:
+        alerta = supabase_client.insert('alerta', {
+            'tipo_alerta': 'reporte_actualizado',
+            'prioridad': 'media',
+            'mensaje': mensaje,
+            'estado_confirmacion': 'confirmada',
+            'fecha_creacion': ahora,
+            'datos_adicionales': {
+                'origen': preferencias.REPORTE_USUARIO_ORIGIN,
+                'id_usuario': autor,
+                'id_reporte': reporte_id,
+                'estado': estado_nuevo or reporte.get('estado'),
+            },
+        }) or {}
+        if alerta.get('id_alerta'):
+            supabase_client.insert('notificacion', {
+                'id_alerta': alerta['id_alerta'],
+                'id_usario_destino': autor,
+                'canal_envio': 'dashboard',
+                'estado_visualizacion': 'no_leida',
+                'fecha_envio': ahora,
+            })
+    except supabase_client.SupabaseError:
+        # El reporte ya se actualizó; si el aviso falla, el usuario igual lo ve en el chat del reporte.
+        logger.exception('No se pudo avisar al autor del reporte %s', reporte_id)
 
 
 @login_required(login_url='login')
@@ -596,7 +653,7 @@ def _alerta_icon(tipo):
 _TITULOS_ALERTA = {
     'fuga': 'Posible fuga', 'consumo_elevado': 'Consumo elevado', 'presion_baja': 'Presión baja',
     'nivel_tanque_bajo': 'Nivel de tanque bajo', 'calidad_agua': 'Calidad del agua',
-    'desabasto': 'Riesgo de desabasto',
+    'desabasto': 'Riesgo de desabasto', 'reporte_actualizado': 'Tu reporte fue actualizado',
 }
 _ESTADOS_ALERTA = {
     'pendiente': 'Pendiente', 'no_confirmada': 'Pendiente', 'confirmada': 'Confirmada',
@@ -626,7 +683,7 @@ def alertas_historial(request):
     es_admin = _es_admin(request.user)
     filtro_estado = request.GET.get('estado', '')
     params = {'order': 'fecha_creacion.desc', 'limit': '500'}
-    if filtro_estado:
+    if filtro_estado in _ESTADOS_ALERTA:  # lista blanca: nunca se arma un filtro con texto libre
         params['estado_confirmacion'] = f'eq.{filtro_estado}'
 
     try:
@@ -654,7 +711,7 @@ def alertas_export(request):
         return redirect('alertas_historial')
 
     params = {'order': 'fecha_creacion.desc', 'limit': '5000'}
-    if request.GET.get('estado'):
+    if request.GET.get('estado') in _ESTADOS_ALERTA:
         params['estado_confirmacion'] = f"eq.{request.GET['estado']}"
     try:
         alertas = supabase_client.select('alerta', '*', params)

@@ -154,9 +154,9 @@ class LeakAlertsView(AdminOnlyAPIView):
             alertas = supabase_client.select('alerta', '*', params)
             notificaciones = {}
             if alertas:
-                ids = ','.join(str(a['id_alerta']) for a in alertas)
+                ids = supabase_client.ids_in(a['id_alerta'] for a in alertas)
                 rows = supabase_client.select('notificacion', '*', {
-                    'id_usario_destino': f'eq.{user_id}', 'id_alerta': f'in.({ids})', 'limit': '500',
+                    'id_usario_destino': f'eq.{user_id}', 'id_alerta': ids, 'limit': '500',
                 })
                 notificaciones = {row['id_alerta']: row for row in rows}
         except supabase_client.SupabaseError:
@@ -189,7 +189,7 @@ class LeakAlertsReadView(AdminOnlyAPIView):
                 })]
             if not alert_ids:
                 return Response({'ok': True})
-            mine = {'id_usario_destino': f'eq.{user_id}', 'id_alerta': f"in.({','.join(map(str, alert_ids))})"}
+            mine = {'id_usario_destino': f'eq.{user_id}', 'id_alerta': supabase_client.ids_in(alert_ids)}
             supabase_client.update(
                 'notificacion', {'estado_visualizacion': 'leida', 'fecha_leida': now},
                 {**mine, 'estado_visualizacion': 'eq.no_leida'},

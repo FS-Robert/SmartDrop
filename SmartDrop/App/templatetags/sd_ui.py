@@ -85,6 +85,56 @@ def fecha_corta(valor):
     return f'{fecha.day} {_MESES[fecha.month - 1]} {fecha.year}, {fecha:%H:%M}'
 
 
+def _a_hora_local(valor):
+    """Fecha ISO (o datetime) en la zona horaria del proyecto (America/El_Salvador); None si no es fecha."""
+    from datetime import datetime
+
+    from django.utils import timezone
+    from django.utils.dateparse import parse_datetime
+
+    if not valor:
+        return None
+    fecha = valor if isinstance(valor, datetime) else None
+    if fecha is None:
+        try:
+            fecha = parse_datetime(str(valor).strip())
+        except ValueError:
+            return None
+    if fecha is None:
+        return None
+    return timezone.localtime(fecha) if timezone.is_aware(fecha) else fecha
+
+
+@register.filter
+def fecha_hora_local(valor):
+    """'2026-10-22T04:32:28+00:00' -> '21/10/2026 22:32:28' (hora de El Salvador). Si no es fecha, igual."""
+    fecha = _a_hora_local(valor)
+    return f'{fecha:%d/%m/%Y %H:%M:%S}' if fecha else valor
+
+
+@register.filter
+def hora_local(valor):
+    """'2026-10-22T04:32:28+00:00' -> '22:32:28' (hora de El Salvador). Si no es fecha, igual."""
+    fecha = _a_hora_local(valor)
+    return f'{fecha:%H:%M:%S}' if fecha else valor
+
+
+@register.filter
+def duracion_texto(segundos):
+    """95 -> '1 min 35 s'; 3700 -> '1 h 1 min'. Vacío si no es un número."""
+    try:
+        total = int(float(segundos))
+    except (TypeError, ValueError):
+        return ''
+    if total < 60:
+        return f'{total} s'
+    horas, resto = divmod(total, 3600)
+    minutos, segs = divmod(resto, 60)
+    if horas:
+        return f'{horas} h {minutos} min' if minutos else f'{horas} h'
+    return f'{minutos} min {segs} s' if segs else f'{minutos} min'
+
+
 @register.simple_tag
 def resumen_hogar(*estados):
     """Resumen en una frase del agua de la zona a partir de varios estados.

@@ -2,7 +2,7 @@
 {% load static sd_ui %}
 {% block title %}Electroválvulas{% endblock %}
 {% block nav_valvulas %}active{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/valvulas.css' %}?v=20261018-agua1">{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/valvulas.css' %}?v=20261022-apertura">{% endblock %}
 
 {% block content %}
 <div class="valves-page">
@@ -53,6 +53,8 @@
             <span class="status status--lg status--none badge"><span class="status-dot" aria-hidden="true"></span>{{ valvula.estado_actual|default:'Desconocida'|sentence }}</span>
           {% endif %}
         </div>
+
+        <p class="valve-open-info" data-valve-open-info="{{ valvula.id_valvula }}" data-open-since="{% if valvula.estado_actual|lower == 'abierta' %}{{ valvula.ultima_apertura|default:'' }}{% endif %}">{% if valvula.estado_actual|lower == 'abierta' and valvula.ultima_apertura %}<i class="ti ti-clock" aria-hidden="true"></i>Abierta a las <time class="num" datetime="{{ valvula.ultima_apertura }}">{{ valvula.ultima_apertura|hora_local }}</time> · lleva <span class="valve-open-elapsed num">{{ valvula.segundos_abierta|duracion_texto }}</span>{% elif valvula.ultimo_tiempo_abierta %}<i class="ti ti-history" aria-hidden="true"></i>Estuvo abierta: <span class="num">{{ valvula.ultimo_tiempo_abierta|duracion_texto }}</span>{% if valvula.ultimo_cierre %} (cerrada a las {{ valvula.ultimo_cierre|hora_local }}){% endif %}{% endif %}</p>
 
         <div class="valve-actions">
           <form class="valve-command-form" method="post" action="{% url 'valvula_comando' valvula.id_valvula %}">
@@ -177,7 +179,7 @@
         <tbody id="valve-history-body">
           {% for movimiento in movimientos %}
             <tr>
-              <td class="nowrap">{{ movimiento.fecha_hora }}</td>
+              <td class="nowrap"><time datetime="{{ movimiento.fecha_hora }}">{{ movimiento.fecha_hora|fecha_hora_local }}</time></td>
               <td>{{ movimiento.valvula_mostrar }}</td>
               <td>{{ movimiento.accion|capfirst }}</td>
               <td>
@@ -224,7 +226,7 @@
 {% block extra_js %}
 {{ estadisticas.labels_dias|json_script:"valvulas-labels-dias" }}
 {{ estadisticas.aperturas_dias|json_script:"valvulas-aperturas-dias" }}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js" integrity="sha256-Mh46P6mNpKqpV9EL5Xy7UU3gmJ7tj51ya10FkCzQGQQ=" crossorigin="anonymous"></script>
 <script src="{% static 'App/js/sd_charts.js' %}?v=20261018-agua1"></script>
 <script>
   const TIMER_MIN_SECONDS = 5;
@@ -401,9 +403,70 @@
     if (chip) chip.className = `icon-chip icon-chip--lg ${isOpen ? 'icon-chip--ok' : 'icon-chip--none'}`;
   }
 
+  // "Abierta a las hh:mm:ss · lleva X" / "Estuvo abierta: X" (hora local del navegador).
+  function formatElapsed(totalSeconds) {
+    const total = Math.max(0, Math.floor(totalSeconds));
+    if (total < 60) return `${total} s`;
+    const hours = Math.floor(total / 3600);
+    const minutes = Math.floor((total % 3600) / 60);
+    const seconds = total % 60;
+    if (hours) return minutes ? `${hours} h ${minutes} min` : `${hours} h`;
+    return seconds ? `${minutes} min ${seconds} s` : `${minutes} min`;
+  }
+
+  function renderOpenInfo(info) {
+    if (!info) return;
+    const since = info.dataset.openSince ? new Date(info.dataset.openSince) : null;
+    if (!since || Number.isNaN(since.getTime())) return;
+    const elapsed = info.querySelector('.valve-open-elapsed');
+    if (elapsed) {
+      elapsed.textContent = formatElapsed((Date.now() - since.getTime()) / 1000);
+      return;
+    }
+    info.textContent = '';
+    const icon = document.createElement('i');
+    icon.className = 'ti ti-clock';
+    icon.setAttribute('aria-hidden', 'true');
+    const time = document.createElement('time');
+    time.className = 'num';
+    time.dateTime = info.dataset.openSince;
+    time.textContent = since.toLocaleTimeString('es-SV', { hour12: false });
+    const span = document.createElement('span');
+    span.className = 'valve-open-elapsed num';
+    span.textContent = formatElapsed((Date.now() - since.getTime()) / 1000);
+    info.append(icon, 'Abierta a las ', time, ' · lleva ', span);
+  }
+
+  function updateOpenInfo(card, isOpen, openSince) {
+    const info = card.querySelector('[data-valve-open-info]');
+    if (!info) return;
+    if (isOpen && openSince) {
+      if (info.dataset.openSince !== openSince) {
+        info.dataset.openSince = openSince;
+        info.textContent = '';
+      }
+      renderOpenInfo(info);
+    } else if (!isOpen) {
+      const since = info.dataset.openSince ? new Date(info.dataset.openSince) : null;
+      info.dataset.openSince = '';
+      info.textContent = '';
+      if (since && !Number.isNaN(since.getTime())) {
+        const icon = document.createElement('i');
+        icon.className = 'ti ti-history';
+        icon.setAttribute('aria-hidden', 'true');
+        info.append(icon, `Estuvo abierta: ${formatElapsed((Date.now() - since.getTime()) / 1000)}`);
+      }
+    }
+  }
+
+  setInterval(() => {
+    document.querySelectorAll('[data-valve-open-info]').forEach(renderOpenInfo);
+  }, 1000);
+
   function updateValveStatus(card, result) {
     const isOpen = result.estado_nuevo === 'abierta';
     setStatusPill(card, isOpen, isOpen ? 'Abierta' : 'Cerrada');
+    updateOpenInfo(card, isOpen, result.ultima_apertura);
 
     const openButton = card.querySelector('.valve-button-open');
     const closeButton = card.querySelector('.valve-button-close');
@@ -484,7 +547,10 @@
 
       if (remainingSeconds <= 0) {
         const card = timerStatus.closest('.valve-card');
-        if (card) setStatusPill(card, false, 'Cerrada');
+        if (card) {
+          setStatusPill(card, false, 'Cerrada');
+          updateOpenInfo(card, false, null);
+        }
 
         const openButton = card?.querySelector('.valve-button-open');
         const closeButton = card?.querySelector('.valve-button-close');

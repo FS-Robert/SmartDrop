@@ -1,3 +1,5 @@
+import re
+
 import requests
 from requests import RequestException
 from requests.adapters import HTTPAdapter
@@ -41,6 +43,7 @@ def _base_url(table: str) -> str:
     base = _supabase_url().rstrip('/')
     # If the provided SUPABASE_URL already points to the REST endpoint,
     # don't append another `/rest/v1` segment.
+    _validar_tabla(table)
     if base.endswith('/rest/v1'):
         return f"{base}/{table}"
     return f"{base}/rest/v1/{table}"
@@ -72,7 +75,87 @@ def _handle_response(resp: requests.Response) -> dict | list | None:
     raise SupabaseError(message, status_code=resp.status_code)
 
 
+# ── Protección contra inyección ──────────────────────────────────────────────
+# Supabase se consulta por su API REST (PostgREST), que siempre arma consultas parametrizadas: no hay SQL
+# escrito a mano en este proyecto. El riesgo real es la *inyección de filtros*: que un dato del usuario
+# termine dentro de la sintaxis de un filtro (por ejemplo en `in.(...)` u `or=(...)`) y cambie su lógica.
+# Por eso: los nombres de tabla y de parámetro se validan contra una lista blanca de formatos, los valores
+# no pueden traer caracteres de control, y las listas se arman con `in_list` / `ids_in`, que validan o
+# entrecomillan cada elemento.
+
+_IDENTIFICADOR = re.compile(r'^[A-Za-z_][A-Za-z0-9_]{0,62}$')
+_PARAM = re.compile(r'^[A-Za-z_][A-Za-z0-9_]{0,62}(->>?[A-Za-z0-9_]{1,63})*$')
+_PARAMS_RESERVADOS = {'select', 'order', 'limit', 'offset', 'or', 'and', 'not.or', 'not.and', 'on_conflict', 'columns'}
+_CONTROL = re.compile(r'[\x00-\x1f\x7f]')
+
+
+class FiltroInvalido(ValueError):
+    """Un parámetro de consulta no tiene un formato permitido (posible intento de inyección)."""
+
+
+def _validar_tabla(table: str) -> str:
+    if not isinstance(table, str) or not _IDENTIFICADOR.match(table):
+        raise FiltroInvalido(f'Nombre de tabla no permitido: {table!r}')
+    return table
+
+
+def _validar_params(params: dict | None) -> dict | None:
+    if not params:
+        return params
+    limpios = {}
+    for clave, valor in params.items():
+        if not isinstance(clave, str) or not (clave in _PARAMS_RESERVADOS or _PARAM.match(clave)):
+            raise FiltroInvalido(f'Parámetro de consulta no permitido: {clave!r}')
+        if valor is None:
+            continue  # requests ya omitía los parámetros None; se conserva ese comportamiento
+        if isinstance(valor, bool) or not isinstance(valor, (str, int, float)):
+            raise FiltroInvalido(f'Valor no permitido para {clave!r}')
+        texto = str(valor)
+        if _CONTROL.search(texto) or len(texto) > 4000:
+            raise FiltroInvalido(f'Valor no permitido para {clave!r}')
+        if clave in ('limit', 'offset') and not texto.isdigit():
+            raise FiltroInvalido(f'{clave} debe ser un número entero')
+        limpios[clave] = texto
+    return limpios
+
+
+def ids_in(values) -> str:
+    """Filtro `in.(1,2,3)` solo con enteros positivos. Lanza FiltroInvalido si alguno no lo es."""
+    ids = []
+    for value in values:
+        texto = str(value).strip()
+        if not texto.isascii() or not texto.isdigit():
+            raise FiltroInvalido(f'Identificador no numérico: {value!r}')
+        ids.append(str(int(texto)))
+    if not ids:
+        raise FiltroInvalido('La lista de identificadores está vacía')
+    return f"in.({','.join(ids)})"
+
+
+def in_list(values) -> str:
+    """Filtro `in.("a","b")` con cada texto entre comillas y escapado según las reglas de PostgREST."""
+    partes = []
+    for value in values:
+        texto = str(value)
+        if _CONTROL.search(texto):
+            raise FiltroInvalido('Valor con caracteres de control')
+        partes.append('"' + texto.replace('\\', '\\\\').replace('"', '\\"') + '"')
+    if not partes:
+        raise FiltroInvalido('La lista está vacía')
+    return f"in.({','.join(partes)})"
+
+
+def eq_id(value) -> str:
+    """Filtro `eq.<id>` solo si el id es un entero positivo (los ids que llegan por URL o formulario)."""
+    texto = str(value).strip()
+    if not texto.isascii() or not texto.isdigit():
+        raise FiltroInvalido(f'Identificador no numérico: {value!r}')
+    return f'eq.{int(texto)}'
+
+
 def _request(method: str, url: str, **kwargs):
+    if 'params' in kwargs:
+        kwargs['params'] = _validar_params(kwargs['params'])
     try:
         return _session.request(method, url, timeout=10, **kwargs)
     except RequestException as exc:

@@ -20,6 +20,9 @@ BOOLEAN_FIELDS = ('alertas_nivel', 'suministro', 'calidad', 'consumo_elevado', '
 IDIOMAS = ('es', 'en')
 WEEKLY_REPORT_DAYS = 7
 WEEKLY_REPORT_ORIGIN = 'reporte_semanal'
+# Avisos sobre un reporte de problema de un usuario (estado o respuesta del equipo): son personales.
+REPORTE_USUARIO_ORIGIN = 'reporte_usuario'
+ORIGENES_PERSONALES = {WEEKLY_REPORT_ORIGIN, REPORTE_USUARIO_ORIGIN}
 
 # Categoría de notificación de cada tipo de alerta (por subcadena del tipo). Los tipos sin categoría
 # (p. ej. fugas o el reporte semanal) se muestran siempre.
@@ -188,6 +191,6 @@ def reporte_semanal(user, prefs=None):
 
 
 def es_reporte_ajeno(alerta, user_id):
-    """Los reportes semanales son personales: cada usuario solo ve los suyos."""
+    """Los reportes semanales y los avisos de reportes son personales: cada usuario solo ve los suyos."""
     extra = alerta.get('datos_adicionales') or {}
-    return extra.get('origen') == WEEKLY_REPORT_ORIGIN and extra.get('id_usuario') != user_id
+    return extra.get('origen') in ORIGENES_PERSONALES and str(extra.get('id_usuario')) != str(user_id)

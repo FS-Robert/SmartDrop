@@ -19,6 +19,7 @@ class AppConfig(AppConfig):
     def ready(self):
         if self._is_serving_process():
             threading.Thread(target=_keep_sensor_series_warm, name='sensor-series-warm', daemon=True).start()
+            threading.Thread(target=_watch_valve_timers, name='valve-timer-watchdog', daemon=True).start()
 
     @staticmethod
     def _is_serving_process():
@@ -40,3 +41,15 @@ def _keep_sensor_series_warm():
         except Exception:  # noqa: BLE001 — sin conexión momentánea: se reintenta en el siguiente ciclo.
             logger.warning('No se pudieron precargar las series de los sensores', exc_info=True)
         time.sleep(WARM_INTERVAL_SECONDS)
+
+
+def _watch_valve_timers():
+    """Cierra las aperturas temporizadas que quedaron pendientes (por ejemplo, tras reiniciar el servidor)."""
+    from django.conf import settings
+
+    from App.valve_service import vigilar_temporizadores
+
+    vigilar_temporizadores(
+        intervalo=getattr(settings, 'VALVE_WATCHDOG_SECONDS', 30),
+        espera_inicial=getattr(settings, 'VALVE_WATCHDOG_START_DELAY_SECONDS', 10),
+    )

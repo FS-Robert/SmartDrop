@@ -22,6 +22,7 @@ from ..views_reportes import (
     _usuarios_por_id,
 )
 from .permissions import IsAuthenticatedUser
+from .throttling import ReportesEscrituraThrottle, ReportesMensajesThrottle, UserApiThrottle
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,7 @@ def _feed(rows):
 class MobileReportesView(APIView):
     """GET: mis reportes (o todos los reportes si es admin). POST: crear reporte (multipart con adjuntos)."""
     permission_classes = [IsAuthenticatedUser]
+    throttle_classes = [UserApiThrottle, ReportesEscrituraThrottle]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def get(self, request):
@@ -130,6 +132,7 @@ class MobileReportesView(APIView):
 class MobileReporteDetalleView(APIView):
     """GET: detalle con adjuntos y mensajes. POST: enviar mensaje de chat."""
     permission_classes = [IsAuthenticatedUser]
+    throttle_classes = [UserApiThrottle, ReportesMensajesThrottle]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def _get_reporte(self, request, reporte_id):
@@ -199,6 +202,7 @@ class MobileReporteDetalleView(APIView):
 class MobileReporteAdjuntarView(APIView):
     """POST multipart: agregar evidencias a un reporte propio."""
     permission_classes = [IsAuthenticatedUser]
+    throttle_classes = [UserApiThrottle, ReportesEscrituraThrottle]
     parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request, reporte_id):

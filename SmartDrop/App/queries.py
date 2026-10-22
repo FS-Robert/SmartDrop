@@ -53,12 +53,12 @@ def users_by_id(ids, columns):
 
     Devuelve {} si no hay ids o si Supabase falla (los nombres son decorativos en todas las vistas).
     """
-    ids = sorted({str(i) for i in ids if i is not None and str(i).strip()})
+    ids = sorted({str(i).strip() for i in ids if i is not None and str(i).strip().isdigit()})
     if not ids:
         return {}
     try:
         rows = supabase_client.select(
-            'usuario', columns, {'id_usuario': f"in.({','.join(ids)})", 'limit': str(len(ids))},
+            'usuario', columns, {'id_usuario': supabase_client.ids_in(ids), 'limit': str(len(ids))},
         )
     except supabase_client.SupabaseError:
         return {}
@@ -206,8 +206,8 @@ def tank_summary(level, sensores, tanques):
 
 
 def _in_filter(viviendas):
-    ids = [str(row['id_vivienda']) for row in viviendas if row.get('id_vivienda')]
-    return f"in.({','.join(ids)})" if ids else None
+    ids = [str(row['id_vivienda']) for row in viviendas if str(row.get('id_vivienda') or '').isdigit()]
+    return supabase_client.ids_in(ids) if ids else None
 
 
 def _consumption_rows(in_filter):
@@ -302,7 +302,7 @@ def _fetch_flow_readings(in_filter, sensor_ids, since, until):
     """
     base = {
         'id_vivienda': in_filter,
-        'id_sensor': f"in.({','.join(sensor_ids)})",
+        'id_sensor': supabase_client.ids_in(sensor_ids),
         'and': f'(fecha_registro.gte.{since.isoformat()},fecha_registro.lt.{until.isoformat()})',
         'order': 'fecha_registro.desc',
         'limit': str(FLOW_PAGE_SIZE),
@@ -503,7 +503,7 @@ def _parse_reading_ts(raw):
 def _sensor_rows_between(sensor_id, since, until=None, columns='fecha_registro,valor'):
     """Lecturas (de todas las viviendas) de un sensor desde `since` (inclusive) hasta `until`, paginando."""
     params = {
-        'id_sensor': f'in.({sensor_id})',
+        'id_sensor': supabase_client.ids_in([sensor_id]),
         'fecha_registro': f'gte.{_fmt_utc(since)}',
         'order': 'fecha_registro.asc,id_lectura.asc',
         'limit': str(SENSOR_PAGE),

@@ -264,7 +264,33 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'App.api.authentication.SupabaseJWTAuthentication',
     ),
+    # Rate limiting de toda la API (por IP sin token, por usuario con token). Ver App/api/throttling.py.
+    'DEFAULT_THROTTLE_CLASSES': (
+        'App.api.throttling.AnonApiThrottle',
+        'App.api.throttling.UserApiThrottle',
+    ),
+    'EXCEPTION_HANDLER': 'App.api.exceptions.exception_handler',
 }
+
+# Rate limiting (App/ratelimit.py). RATELIMIT_OVERRIDES="login_ip=40/m,registro=50/h" ajusta límites
+# sin tocar código; RATELIMIT_ENABLED=0 lo apaga (solo para pruebas de carga, nunca en el servidor).
+RATELIMIT_ENABLED = os.environ.get('RATELIMIT_ENABLED', '1').strip().lower() not in ('0', 'false', 'no')
+RATELIMIT_OVERRIDES = {
+    scope.strip(): rate.strip()
+    for scope, _, rate in (
+        item.partition('=') for item in os.environ.get('RATELIMIT_OVERRIDES', '').split(',') if '=' in item
+    )
+    if scope.strip() and rate.strip()
+}
+
+# Token compartido con el ESP32 / simulador para POST /api/lecturas/ (cabecera X-Device-Token).
+# Si está vacío se aceptan lecturas sin token (compatibilidad con el firmware actual) y se avisa en el log.
+DEVICE_API_TOKEN = os.environ.get('DEVICE_API_TOKEN', '').strip()
+
+# Temporizador de la válvula: cada cuántos segundos se revisa que ninguna apertura temporizada quede abierta
+# (por ejemplo, tras reiniciar el servidor). Ver App/valve_service.py.
+VALVE_WATCHDOG_SECONDS = float(os.environ.get('VALVE_WATCHDOG_SECONDS', '30'))
+VALVE_WATCHDOG_START_DELAY_SECONDS = float(os.environ.get('VALVE_WATCHDOG_START_DELAY_SECONDS', '10'))
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),

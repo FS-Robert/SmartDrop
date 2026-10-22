@@ -9,8 +9,11 @@ Primero ejecuta deploy\\preparar_demo.ps1 (datos frescos para la IA) y después 
 Uso (desde la carpeta Backend/SmartDrop):
     .venv\\Scripts\\python.exe deploy\\simulador_lecturas.py            # cada 2 s hasta Ctrl+C
     .venv\\Scripts\\python.exe deploy\\simulador_lecturas.py --una-vez  # una ronda, para probar
+
+Si el servidor tiene DEVICE_API_TOKEN, pasa el mismo valor con --token o en la variable SMARTDROP_DEVICE_TOKEN.
 """
 import argparse
+import os
 import random
 import time
 from datetime import datetime, timezone
@@ -74,10 +77,14 @@ def main():
     parser.add_argument('--intervalo', type=float, default=2.0, help='Segundos entre rondas (por defecto 2).')
     parser.add_argument('--minutos', type=float, default=0, help='Detenerse tras N minutos (0 = hasta Ctrl+C).')
     parser.add_argument('--una-vez', action='store_true', help='Enviar una sola ronda y salir.')
+    parser.add_argument('--token', default=os.environ.get('SMARTDROP_DEVICE_TOKEN', ''),
+                        help='Token del dispositivo (DEVICE_API_TOKEN del servidor). Por defecto SMARTDROP_DEVICE_TOKEN.')
     args = parser.parse_args()
 
     print(f'Enviando lecturas de la vivienda {args.vivienda} a {args.url}  (Ctrl+C para detener)')
     sesion = requests.Session()
+    if args.token:
+        sesion.headers['X-Device-Token'] = args.token
     maqueta = Maqueta()
     fin = time.monotonic() + args.minutos * 60 if args.minutos else None
     try:
