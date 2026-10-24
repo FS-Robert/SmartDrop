@@ -1,10 +1,13 @@
 import re
+import logging
 
 import requests
 from requests import RequestException
 from requests.adapters import HTTPAdapter
 from django.conf import settings
 from passlib.hash import bcrypt
+
+logger = logging.getLogger(__name__)
 
 # Una sola sesión para todos los hilos: abrir TCP+TLS hacia Supabase cuesta ~2 s,
 # una consulta con la conexión ya abierta ~0,7 s.
@@ -30,9 +33,19 @@ def _headers() -> dict:
 
 
 class SupabaseError(Exception):
-    def __init__(self, message: str, status_code: int | None = None):
-        super().__init__(message)
+    """Fallo al hablar con Supabase.
+
+    `str(exc)` se puede mostrar al usuario: es un mensaje genérico o uno escrito a propósito (por ejemplo
+    "Este correo ya está registrado"). El detalle técnico (mensaje de PostgREST y URL, que revela el proyecto
+    y el esquema) queda solo en `detalle` y en los logs.
+    """
+
+    MENSAJE_GENERICO = 'No se pudo completar la operación. Inténtalo de nuevo en unos minutos.'
+
+    def __init__(self, message: str | None = None, status_code: int | None = None, detalle: str | None = None):
+        super().__init__(message or self.MENSAJE_GENERICO)
         self.status_code = status_code
+        self.detalle = detalle or message
 
 
 def _base_url(table: str) -> str:
@@ -69,10 +82,11 @@ def _handle_response(resp: requests.Response) -> dict | list | None:
         detail = payload.get('message') or payload.get('hint') or payload.get('error') or resp.text
     except ValueError:
         pass
-    message = str(detail)
+    detalle = str(detail)
     if url:
-        message = f"{message} (url: {url})"
-    raise SupabaseError(message, status_code=resp.status_code)
+        detalle = f"{detalle} (url: {url})"
+    logger.warning('Supabase respondió %s: %s', resp.status_code, detalle)
+    raise SupabaseError(status_code=resp.status_code, detalle=detalle)
 
 
 # ── Protección contra inyección ──────────────────────────────────────────────
@@ -159,10 +173,9 @@ def _request(method: str, url: str, **kwargs):
     try:
         return _session.request(method, url, timeout=10, **kwargs)
     except RequestException as exc:
-        raise SupabaseError(
-            f'No se pudo conectar con Supabase ({exc.__class__.__name__}). '
-            'Verifica SUPABASE_URL, DNS y conexión a Internet.'
-        ) from exc
+        detalle = f'No se pudo conectar con Supabase ({exc.__class__.__name__}). Verifica SUPABASE_URL, DNS y conexión.'
+        logger.warning(detalle)
+        raise SupabaseError(detalle=detalle) from exc
 
 
 def insert(table: str, data: dict, return_representation: bool = True) -> dict | None:
@@ -256,17 +269,18 @@ def create_usuario(nombre: str, apellido: str, email: str, password: str) -> dic
         raise SupabaseError('Este correo ya está registrado', status_code=409)
 
     id_rol = get_rol_id('user')
+    if id_rol is None:
+        raise SupabaseError(detalle="No existe el rol 'user' en la tabla rol de Supabase.")
     payload = {
         'nombre': nombre,
         'apellido': apellido,
         'correo': email,
         'contrasena': bcrypt.using(rounds=12, ident='2b').hash(password),
         'estado_usuario': True,
+        'id_rol': id_rol,
     }
-    if id_rol is not None:
-        payload['id_rol'] = id_rol
 
     row = insert('usuario', payload)
     if not row:
-        raise SupabaseError('No se pudo crear el usuario en Supabase')
+        raise SupabaseError(detalle='Supabase no devolvió el usuario creado.')
     return row

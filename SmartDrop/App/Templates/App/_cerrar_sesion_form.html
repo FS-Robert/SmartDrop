@@ -1,0 +1,12 @@
+{% if user.is_authenticated %}
+  {# Cerrar sesión va por POST con CSRF: un enlace o una imagen de otra página no puede sacarte de tu cuenta. #}
+  <form id="form-cerrar-sesion" method="post" action="{% url 'logout' %}" hidden>{% csrf_token %}</form>
+  <script>
+    document.addEventListener('click', function (event) {
+      var enlace = event.target.closest('a[data-cerrar-sesion]');
+      if (!enlace) return;
+      event.preventDefault();
+      document.getElementById('form-cerrar-sesion').submit();
+    });
+  </script>
+{% endif %}

@@ -12,7 +12,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from asgiref.sync import async_to_sync
-from django.core.cache import cache
+from django.core.cache import cache, caches
 from django.shortcuts import render
 from django.test import RequestFactory, TestCase as DjangoTestCase, override_settings
 from django.utils import timezone
@@ -32,6 +32,11 @@ class TestCase(DjangoTestCase):
     def _pre_setup(self):
         super()._pre_setup()
         cache.clear()
+        caches['limites'].clear()
+        # Sin Supabase en las pruebas: no se revisa cada rato que la cuenta siga activa (igual que App/tests.py).
+        revisar = override_settings(REVALIDAR_SESION_SEGUNDOS=0)
+        revisar.enable()
+        self.addCleanup(revisar.disable)
         # Los audios de prueba van a una carpeta temporal que se borra al terminar.
         carpeta = tempfile.TemporaryDirectory()
         self.addCleanup(carpeta.cleanup)

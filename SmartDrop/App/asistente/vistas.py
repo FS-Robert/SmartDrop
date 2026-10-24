@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 LIMITE_MINUTO = '12/m'
 VOZ_POR_MINUTO = '40/m'
 DICTADO_POR_MINUTO = '15/m'
-MAX_AUDIO = 3 * 1024 * 1024   # unos 2 minutos de voz; una pregunta normal pesa mucho menos
+MAX_AUDIO = 2 * 1024 * 1024   # más de un minuto de voz; una pregunta normal pesa mucho menos
 MIN_AUDIO = 1000
 # Cómo empieza cada tipo de audio permitido (para no mandarle a ElevenLabs algo que no es audio).
 _TIPOS_AUDIO = {

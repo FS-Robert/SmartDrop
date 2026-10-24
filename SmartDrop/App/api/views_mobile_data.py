@@ -163,7 +163,8 @@ class MobileViviendasView(APIView):
 
 class MobileVincularViviendaView(APIView):
     permission_classes = [IsAuthenticatedUser]
-    throttle_classes = [UserApiThrottle, VincularThrottle]
+    limite_alcance = 'vincular'
+    limite_por = 'usuario'
 
     def post(self, request):
         try:
@@ -174,6 +175,11 @@ class MobileVincularViviendaView(APIView):
             )
         except queries.LinkViviendaError as exc:
             return Response({'error': exc.message}, status=exc.status)
+        except supabase_client.SupabaseError:
+            return Response(
+                {'error': 'No se pudo vincular la vivienda en este momento. Inténtalo de nuevo.'},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
         return Response({'mensaje': 'Vivienda vinculada exitosamente.', 'vivienda': vivienda})
 
 

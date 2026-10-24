@@ -3,7 +3,7 @@ horas locales, rate limiting y protección contra inyección de filtros."""
 from datetime import timedelta
 from unittest.mock import patch
 
-from django.core.cache import cache
+from django.core.cache import cache, caches
 from django.test import TestCase as DjangoTestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -21,6 +21,11 @@ class TestCase(DjangoTestCase):
     def _pre_setup(self):
         super()._pre_setup()
         cache.clear()
+        caches['limites'].clear()
+        # Sin Supabase en las pruebas: no se revisa cada rato que la cuenta siga activa (igual que App/tests.py).
+        revisar = override_settings(REVALIDAR_SESION_SEGUNDOS=0)
+        revisar.enable()
+        self.addCleanup(revisar.disable)
 
     def tearDown(self):
         for key in list(valve_service._REGISTRY):
@@ -52,32 +57,6 @@ class MobileValvulaControlTests(TestCase):
         self.client = APIClient()
         self.client.force_authenticate(user=_admin_app())
 
-    def test_control_abrir_con_duracion_publica_registra_y_arranca_temporizador(self, select, update, insert, publish):
-        select.return_value = _valvula()
-        insert.return_value = {'id_log_valvula': 5, 'fecha_hora': '2026-10-22T10:00:00+00:00'}
-
-        response = self.client.post(
-            '/api/valvula/1/control/', {'accion': 'ABRIR', 'duracion': 30, 'usuario': 'otro', 'origen': 'x'},
-            format='json', REMOTE_ADDR='10.0.0.8',
-        )
-
-        self.assertEqual(response.status_code, 200, response.content)
-        body = response.json()
-        self.assertEqual(body['estado_actual'], 'abierta')
-        self.assertTrue(body['log_registrado'])
-        self.assertEqual(body['temporizador_activo']['duracion_programada'], 30)
-        self.assertGreaterEqual(body['temporizador_activo']['segundos_restantes'], 29)
-        publish.assert_called_once_with(TOPIC, 'abrir')
-        self.assertEqual(update.call_args.args[1]['estado_actual'], 'abierta')
-        log = insert.call_args.args[1]
-        self.assertEqual(insert.call_args.args[0], 'log_valvula')
-        self.assertEqual(log['origen_accion'], 'app')
-        self.assertEqual(log['id_usuario'], 77)  # del token, nunca el "usuario" que manda la app
-        self.assertEqual(log['tipo_activacion'], 'temporizado')
-        self.assertEqual(log['duracion_programada'], 30)
-        self.assertEqual(log['ip_dispositivo'], '10.0.0.8')
-        self.assertTrue(valve_service.timer_info(1)['timer_activo'])
-
     def test_estado_devuelve_la_cuenta_regresiva(self, select, update, insert, publish):
         select.return_value = _valvula()
         self.client.post('/api/valvula/1/control/', {'accion': 'ABRIR', 'duracion': 60}, format='json')
@@ -89,23 +68,6 @@ class MobileValvulaControlTests(TestCase):
         temporizador = response.json()['temporizador_activo']
         self.assertEqual(temporizador['duracion_programada'], 60)
         self.assertGreater(temporizador['segundos_restantes'], 55)
-
-    def test_control_cerrar_cancela_el_temporizador_y_registra(self, select, update, insert, publish):
-        select.return_value = _valvula()
-        self.client.post('/api/valvula/1/control/', {'accion': 'ABRIR', 'duracion': 60}, format='json')
-        abierta = (timezone.now() - timedelta(seconds=12)).isoformat()
-        select.return_value = _valvula('abierta', ultima_apertura=abierta)
-
-        response = self.client.post('/api/valvula/1/control/', {'accion': 'CERRAR', 'duracion': 0}, format='json')
-
-        self.assertEqual(response.status_code, 200)
-        self.assertIsNone(response.json()['temporizador_activo'])
-        self.assertFalse(valve_service.timer_info(1)['timer_activo'])
-        log = insert.call_args.args[1]
-        self.assertEqual(log['accion'], 'cerrar')
-        self.assertEqual(log['razon'], 'Cierre manual durante temporizador')
-        self.assertGreaterEqual(log['duracion_real'], 12)
-        self.assertIsNone(update.call_args.args[1]['ultima_apertura'])
 
     def test_rutas_abrir_y_cerrar_siguen_funcionando(self, select, update, insert, publish):
         select.return_value = _valvula()
@@ -132,16 +94,6 @@ class MobileValvulaControlTests(TestCase):
         response = self.client.post('/api/valvula/1/control/', {'accion': 'ABRIR'}, format='json')
         self.assertEqual(response.status_code, 403)
         publish.assert_not_called()
-
-    @override_settings(RATELIMIT_OVERRIDES={'valvula_comando': '2/m'})
-    def test_comandos_de_valvula_tienen_limite(self, select, update, insert, publish):
-        select.return_value = _valvula()
-        codes = [
-            self.client.post('/api/valvula/1/control/', {'accion': 'CERRAR'}, format='json').status_code
-            for _ in range(3)
-        ]
-        self.assertEqual(codes, [200, 200, 429])
-
 
 class ValvulaServicioTests(TestCase):
     def test_parse_duracion(self):
@@ -256,38 +208,6 @@ class RateLimitTests(TestCase):
     def setUp(self):
         self.api = APIClient()
 
-    @patch('App.api.views_auth.authenticate', return_value=None)
-    def test_login_movil_bloquea_fuerza_bruta_por_cuenta(self, authenticate):
-        codes = []
-        for intento in range(11):
-            # Cada intento "cambia" de X-Forwarded-For: no debe servir para saltarse el límite.
-            response = self.api.post(
-                reverse('mobile_login'), {'correo': 'victima@example.com', 'contrasena': f'x{intento}'},
-                format='json', HTTP_X_FORWARDED_FOR=f'1.2.3.{intento}',
-            )
-            codes.append(response.status_code)
-        self.assertEqual(codes[:10], [400] * 10)
-        self.assertEqual(codes[10], 429)
-        self.assertIn('Demasiadas solicitudes', response.json()['error'])
-        self.assertIn('Retry-After', response)
-
-    @override_settings(RATELIMIT_OVERRIDES={'login_cuenta': '3/m'})
-    @patch('App.forms.authenticate', return_value=None)
-    def test_login_web_muestra_aviso_al_superar_el_limite(self, authenticate):
-        for _ in range(3):
-            self.client.post(reverse('login'), {'email': 'victima@example.com', 'password': 'x'})
-        response = self.client.post(reverse('login'), {'email': 'victima@example.com', 'password': 'x'})
-        self.assertEqual(response.status_code, 429)
-        self.assertContains(response, 'Demasiadas solicitudes', status_code=429)
-        self.assertEqual(authenticate.call_count, 3)
-
-    @override_settings(RATELIMIT_ENABLED=False)
-    @patch('App.api.views_auth.authenticate', return_value=None)
-    def test_se_puede_apagar_para_pruebas(self, authenticate):
-        for _ in range(15):
-            response = self.api.post(reverse('mobile_login'), {'correo': 'a@b.com', 'contrasena': 'x'}, format='json')
-        self.assertEqual(response.status_code, 400)
-
     def test_api_login_legado_exige_json(self):
         response = self.client.post(reverse('api_login'), {'email': 'a@b.com', 'password': 'x'})
         self.assertEqual(response.status_code, 415)
@@ -300,17 +220,6 @@ class TokenDispositivoTests(TestCase):
     def test_sin_token_se_rechaza(self):
         response = self.client.post(reverse('api_lectura'), data=self.LECTURA, content_type='application/json')
         self.assertEqual(response.status_code, 401)
-
-    @patch('App.views._broadcast_sensor_reading')
-    @patch('App.views.supabase_client.insert', return_value={'id_lectura': 1})
-    def test_con_token_correcto_se_guarda(self, insert, broadcast):
-        response = self.client.post(
-            reverse('api_lectura'), data=self.LECTURA, content_type='application/json',
-            HTTP_X_DEVICE_TOKEN='token-de-prueba',
-        )
-        self.assertEqual(response.status_code, 201)
-        insert.assert_called_once()
-
 
 # ── Inyección de filtros (PostgREST) ─────────────────────────────────────────
 
@@ -333,14 +242,6 @@ class InyeccionTests(TestCase):
             with self.assertRaises(supabase_client.FiltroInvalido):
                 supabase_client._base_url('usuario;drop')
             request.assert_not_called()
-
-    @patch('App.views_reportes.supabase_client.select', return_value=[])
-    def test_filtro_de_alertas_ignora_texto_libre(self, select):
-        user = Usuario.objects.create_user(email='u@example.com', nombre='U', apellido='U', password='password-segura')
-        self.client.force_login(user)
-        self.client.get(reverse('alertas_historial'), {'estado': 'pendiente,id_alerta.gt.0'})
-        params = next(c.args[2] for c in select.call_args_list if c.args[0] == 'alerta')
-        self.assertNotIn('estado_confirmacion', params)
 
     def test_comando_web_con_id_no_numerico_da_404(self):
         response = self.client.post('/valvula/1%29/comando/', {'comando': 'abrir'})

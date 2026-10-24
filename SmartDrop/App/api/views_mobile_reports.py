@@ -1,6 +1,8 @@
 """API móvil del sistema de reportes: crear reportes con evidencia
 fotográfica/video (multipart), listar reportes propios y de la comunidad,
 ver el detalle con adjuntos y chatear con los administradores.
+
+Un reporte es privado salvo que la app lo publique en el muro (campo `comunitario`).
 """
 import logging
 
@@ -14,6 +16,9 @@ from ..queries import is_admin as _es_admin, owner_id as _user_id, run_parallel
 from ..views_reportes import (
     ESTADO_LABEL,
     MAX_ADJUNTOS,
+    MAX_ADJUNTOS_POR_REPORTE,
+    MAX_MENSAJE,
+    contar_adjuntos,
     _adjuntos_por_reporte as _adjuntos_map,
     _guardar_adjuntos,
     _hay_sin_leer,
@@ -49,24 +54,32 @@ def _serialize_reporte(row, adjuntos_map=None, autores=None):
     }
 
 
-def _nombres_usuarios(ids):
+def _nombres_usuarios(ids, abreviar=False):
+    """{id: {'nombre', 'es_admin'}}. Con `abreviar` (muro comunitario) solo nombre e inicial del apellido."""
+    def nombre(row):
+        apellido = row.get('apellido') or ''
+        if abreviar:
+            apellido = f'{apellido[:1]}.' if apellido else ''
+        return f"{row.get('nombre', '')} {apellido}".strip()
+
     return {
-        user_id: {
-            'nombre': f"{row.get('nombre', '')} {row.get('apellido', '')}".strip(),
-            'es_admin': row.get('id_rol') == 2,
-        }
+        user_id: {'nombre': nombre(row), 'es_admin': row.get('id_rol') == 2}
         for user_id, row in _usuarios_por_id(ids, 'id_usuario,nombre,apellido,id_rol').items()
     }
 
 
-def _feed(rows):
+def _feed(rows, abreviar=False):
     """Reportes serializados con sus adjuntos y autores (ambas consultas a la vez)."""
     adjuntos, autores = run_parallel(
         lambda: _adjuntos_map([r.get('id_reporte') for r in rows]),
-        lambda: _nombres_usuarios({r.get('id_usuario') for r in rows}),
+        lambda: _nombres_usuarios({r.get('id_usuario') for r in rows}, abreviar),
     )
     nombres = {uid: info['nombre'] for uid, info in autores.items()}
     return [_serialize_reporte(r, adjuntos, nombres) for r in rows]
+
+
+def _es_verdadero(valor):
+    return str(valor).strip().lower() in ('1', 'true', 'si', 'sí', 'on')
 
 
 class MobileReportesView(APIView):
@@ -74,6 +87,8 @@ class MobileReportesView(APIView):
     permission_classes = [IsAuthenticatedUser]
     throttle_classes = [UserApiThrottle, ReportesEscrituraThrottle]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
+    limite_alcance = 'reportes'
+    limite_por = 'usuario'
 
     def get(self, request):
         try:
@@ -108,6 +123,8 @@ class MobileReportesView(APIView):
             'estado': 'pendiente',
             'prioridad': 'media',
         }
+        if _es_verdadero(data.get('comunitario', '')):
+            payload['es_comunitario'] = True
         try:
             row = supabase_client.insert('reporte', payload)
         except supabase_client.SupabaseError as exc:
@@ -134,6 +151,8 @@ class MobileReporteDetalleView(APIView):
     permission_classes = [IsAuthenticatedUser]
     throttle_classes = [UserApiThrottle, ReportesMensajesThrottle]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
+    limite_alcance = 'mensajes'
+    limite_por = 'usuario'
 
     def _get_reporte(self, request, reporte_id):
         params = {'id_reporte': f'eq.{reporte_id}', 'limit': '1'}
@@ -185,6 +204,11 @@ class MobileReporteDetalleView(APIView):
         mensaje = (request.data.get('mensaje') or '').strip()
         if not mensaje:
             return Response({'ok': False, 'error': 'mensaje vacío'}, status=status.HTTP_400_BAD_REQUEST)
+        if len(mensaje) > MAX_MENSAJE:
+            return Response(
+                {'ok': False, 'error': f'El mensaje es muy largo (máximo {MAX_MENSAJE} caracteres).'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         try:
             reporte = self._get_reporte(request, reporte_id)
             if not reporte:
@@ -204,35 +228,55 @@ class MobileReporteAdjuntarView(APIView):
     permission_classes = [IsAuthenticatedUser]
     throttle_classes = [UserApiThrottle, ReportesEscrituraThrottle]
     parser_classes = [MultiPartParser, FormParser]
+    limite_alcance = 'adjuntos'
+    limite_por = 'usuario'
 
     def post(self, request, reporte_id):
         try:
             params = {'id_reporte': f'eq.{reporte_id}', 'id_usuario': f'eq.{_user_id(request.user)}', 'limit': '1'}
             rows = supabase_client.select('reporte', 'id_reporte', params)
+            existentes = contar_adjuntos(reporte_id) if rows else 0
         except supabase_client.SupabaseError as exc:
             return Response({'ok': False, 'error': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
         if not rows:
             return Response({'ok': False, 'error': 'no_encontrado'}, status=status.HTTP_404_NOT_FOUND)
 
-        archivos = request.FILES.getlist('adjuntos')[:MAX_ADJUNTOS]
+        archivos = request.FILES.getlist('adjuntos')
         if not archivos:
             return Response({'ok': False, 'error': 'sin archivos'}, status=status.HTTP_400_BAD_REQUEST)
-        guardados, errores = _guardar_adjuntos(reporte_id, archivos)
+        if existentes >= MAX_ADJUNTOS_POR_REPORTE:
+            return Response(
+                {'ok': False, 'error': f'Cada reporte admite hasta {MAX_ADJUNTOS_POR_REPORTE} evidencias.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        guardados, errores = _guardar_adjuntos(reporte_id, archivos, existentes)
+        if not guardados:
+            # Antes respondía ok aunque no se guardara nada, y la app mostraba "Evidencia agregada".
+            return Response(
+                {'ok': False, 'error': errores[0] if errores else 'No se pudo guardar la evidencia.',
+                 'adjuntos_guardados': 0, 'adjuntos_errores': errores},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         return Response({'ok': True, 'adjuntos_guardados': guardados, 'adjuntos_errores': errores})
 
 
 class MobileReportesComunidadView(APIView):
-    """GET: feed comunitario con evidencias."""
+    """GET: feed comunitario con evidencias.
+
+    La app también usa esta pantalla como "Problemas reportados" del admin: el admin recibe todos los reportes.
+    """
     permission_classes = [IsAuthenticatedUser]
 
     def get(self, request):
+        admin = _es_admin(request.user)
+        params = {'order': 'fecha_reporte.desc', 'limit': '100'}
+        if not admin:
+            params['es_comunitario'] = 'is.true'
         try:
-            rows = supabase_client.select(
-                'reporte', '*', {'order': 'fecha_reporte.desc', 'limit': '100'}
-            )
+            rows = supabase_client.select('reporte', '*', params)
         except supabase_client.SupabaseError as exc:
             return Response({'ok': False, 'error': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
-        return Response({'ok': True, 'reportes': _feed(rows)})
+        return Response({'ok': True, 'reportes': _feed(rows, abreviar=not admin)})
 
 
 class MobileReportesCatalogoView(APIView):

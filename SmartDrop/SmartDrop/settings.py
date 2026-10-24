@@ -37,7 +37,17 @@ if not SECRET_KEY:
         'Falta DJANGO_SECRET_KEY. Copia .env.example a SmartDrop/.env y genera una clave nueva.'
     )
 
+# Apagado salvo que el .env diga DEBUG=True (el .env.example de desarrollo lo trae encendido). Con DEBUG
+# encendido, una página de error mostraría variables internas, entre ellas la clave de Supabase.
 DEBUG = os.environ.get('DEBUG', 'False').strip().lower() in ('1', 'true', 'yes')
+
+# La clave vieja de `startproject` quedó en el historial de Git: en producción se exige una clave propia y larga.
+# deploy/instalar_servidor.sh y deploy/actualizar.sh generan una nueva si falta o es la de ejemplo.
+if not DEBUG and (SECRET_KEY.startswith('django-insecure-') or len(SECRET_KEY) < 40):
+    raise ImproperlyConfigured(
+        'DJANGO_SECRET_KEY es la de ejemplo o es muy corta. Genera una nueva con: '
+        'python -c "import secrets; print(secrets.token_urlsafe(50))"'
+    )
 
 ALLOWED_HOSTS = [
     host.strip()
@@ -57,8 +67,8 @@ if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
-    # El navegador recuerda por un año que SmartDrop solo se abre con candado (HTTPS).
-    SECURE_HSTS_SECONDS = int(os.environ.get('SECURE_HSTS_SECONDS', '31536000') or 0)
+    # HSTS: el navegador ya no intenta entrar por HTTP (evita que alguien en la misma red quite el HTTPS).
+    SECURE_HSTS_SECONDS = int(os.environ.get('SECURE_HSTS_SECONDS', str(60 * 60 * 24 * 365)))
 
 # No contarle a otras páginas desde qué pantalla de SmartDrop se llegó.
 SECURE_REFERRER_POLICY = 'same-origin'
@@ -77,6 +87,8 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'channels',
     'rest_framework',
+    # Lista negra de tokens de renovación: cerrar sesión en la app los invalida en el servidor.
+    'rest_framework_simplejwt.token_blacklist',
     'App',
     'ml_engine',
 ]
@@ -89,6 +101,8 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'App.seguridad.LimiteUsoMiddleware',
+    'App.seguridad.RevalidarSesionMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -121,6 +135,12 @@ CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
         'LOCATION': 'smartdrop',
+    },
+    # Contadores de los límites de uso (App/seguridad.py), aparte para no desplazar los datos cacheados.
+    'limites': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'smartdrop-limites',
+        'OPTIONS': {'MAX_ENTRIES': 50000},
     },
 }
 
@@ -180,10 +200,13 @@ ML_LEAK_ALERT_COOLDOWN_HOURS = float(os.environ.get('ML_LEAK_ALERT_COOLDOWN_HOUR
 DATABASE_ROUTERS = ['ml_engine.routers.MlEngineRouter']
 
 AUTH_USER_MODEL = 'App.Usuario'
+# Solo Supabase: sin el ModelBackend de Django, la copia local de la contraseña (que puede ser vieja) nunca
+# sirve para entrar, y un usuario desactivado o borrado en Supabase ya no puede iniciar sesión.
 AUTHENTICATION_BACKENDS = [
     'App.backends.SupabaseAuthBackend',
-    'django.contrib.auth.backends.ModelBackend',
 ]
+# Cada cuánto se vuelve a confirmar en Supabase que la cuenta de una sesión web sigue activa y con el mismo rol.
+REVALIDAR_SESION_SEGUNDOS = int(os.environ.get('REVALIDAR_SESION_SEGUNDOS', '300'))
 LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'dashboard'
 LOGOUT_REDIRECT_URL = 'login'
@@ -239,9 +262,14 @@ if not DEBUG:
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
-# Límite de subida por request (50 MB cubre videos cortos de evidencia)
-DATA_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024
-FILE_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024
+# Subidas: los valores por defecto de Django (2,5 MB). Un JSON o formulario más grande se rechaza, y un archivo
+# más grande se escribe en disco en vez de quedarse en memoria. El tope de cada evidencia (50 MB) está en
+# views_reportes.MAX_TAMANO_ARCHIVO.
+
+# Los adjuntos de reportes no se publican en /media/: se entregan con un enlace firmado que vence
+# (views_reportes.adjunto_archivo). En producción Nginx envía el archivo (X-Accel-Redirect).
+ADJUNTOS_URL_VIGENCIA_SEGUNDOS = 12 * 60 * 60
+ADJUNTOS_X_ACCEL = os.environ.get('ADJUNTOS_X_ACCEL', 'False' if DEBUG else 'True').strip().lower() in ('1', 'true', 'yes')
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
@@ -268,20 +296,50 @@ MQTT_USERNAME = os.environ.get('MQTT_USERNAME', '')
 MQTT_PASSWORD = os.environ.get('MQTT_PASSWORD', '')
 MQTT_CA_CERT = os.environ.get('MQTT_CA_CERT', '')
 
+# Clave que el ESP32 (y deploy/simulador_lecturas.py) mandan en la cabecera X-Api-Key al enviar lecturas.
+# Sin ella, /api/lecturas/ solo acepta lecturas con DEBUG=True.
+LECTURAS_API_KEY = os.environ.get('LECTURAS_API_KEY', '').strip()
+
+# Límites de uso (App/seguridad.py): 'cantidad/periodo' con periodo s, m, h o d (se admite '10/15m').
+LIMITES_USO = {
+    'general_anonimo': '300/m',   # cualquier petición sin sesión, por IP
+    'general_usuario': '600/m',   # cualquier petición con sesión o token, por usuario
+    'acceso': '30/m',             # inicios de sesión por IP (web, /api/login/ y la app); un salón entero
+                                  # comparte la IP del Wi-Fi, por eso no es más bajo
+    'acceso_fallido': '10/15m',   # contraseñas incorrectas por correo
+    'registro': '60/h',           # cuentas nuevas por IP
+    'renovar': '30/m',            # renovar el token de la app, por IP
+    'lecturas': '600/m',          # lecturas de sensores, por IP
+    'vincular': '5/h',            # intentos de vincular una vivienda, por usuario
+    'reportes': '10/h',           # reportes nuevos, por usuario
+    'adjuntos': '20/h',           # subidas de evidencias, por usuario
+    'mensajes': '30/m',           # mensajes del chat de reportes, por usuario
+    'valvula': '30/m',            # comandos de válvula, por usuario
+    'exportar': '10/m',           # descargas CSV, por usuario
+}
+
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'App.api.authentication.SupabaseJWTAuthentication',
     ),
-    # Rate limiting de toda la API (por IP sin token, por usuario con token). Ver App/api/throttling.py.
-    'DEFAULT_THROTTLE_CLASSES': (
-        'App.api.throttling.AnonApiThrottle',
-        'App.api.throttling.UserApiThrottle',
+    # Una vista nueva que olvide declarar permisos exige sesión (login, registro y renovar usan AllowAny).
+    'DEFAULT_PERMISSION_CLASSES': (
+        'App.api.permissions.IsAuthenticatedUser',
     ),
-    'EXCEPTION_HANDLER': 'App.api.exceptions.exception_handler',
+    # Cada vista elige su límite con `limite_alcance` (ver App/seguridad.py).
+    'DEFAULT_THROTTLE_CLASSES': (
+        'App.seguridad.LimiteAPI',
+    ),
+    'EXCEPTION_HANDLER': 'App.api.excepciones.manejar_excepcion',
 }
 
-# Rate limiting (App/ratelimit.py). RATELIMIT_OVERRIDES="login_ip=40/m,registro=50/h" ajusta límites
-# sin tocar código; RATELIMIT_ENABLED=0 lo apaga (solo para pruebas de carga, nunca en el servidor).
+# Los tokens de la app se firman con su propia clave (JWT_SIGNING_KEY); si falta, con DJANGO_SECRET_KEY.
+JWT_SIGNING_KEY = os.environ.get('JWT_SIGNING_KEY', '').strip() or SECRET_KEY
+if not DEBUG and (JWT_SIGNING_KEY.startswith('django-insecure-') or len(JWT_SIGNING_KEY) < 40):
+    raise ImproperlyConfigured('JWT_SIGNING_KEY es muy corta. Genera una con secrets.token_urlsafe(50).')
+
+# Límites de Gotita y de la válvula (App/ratelimit.py). RATELIMIT_OVERRIDES="valvula_comando=10/m" ajusta
+# límites sin tocar código; RATELIMIT_ENABLED=0 los apaga (solo para pruebas de carga, nunca en el servidor).
 RATELIMIT_ENABLED = os.environ.get('RATELIMIT_ENABLED', '1').strip().lower() not in ('0', 'false', 'no')
 RATELIMIT_OVERRIDES = {
     scope.strip(): rate.strip()
@@ -291,18 +349,21 @@ RATELIMIT_OVERRIDES = {
     if scope.strip() and rate.strip()
 }
 
-# Token compartido con el ESP32 / simulador para POST /api/lecturas/ (cabecera X-Device-Token).
-# Si está vacío se aceptan lecturas sin token (compatibilidad con el firmware actual) y se avisa en el log.
-DEVICE_API_TOKEN = os.environ.get('DEVICE_API_TOKEN', '').strip()
-
 # Temporizador de la válvula: cada cuántos segundos se revisa que ninguna apertura temporizada quede abierta
 # (por ejemplo, tras reiniciar el servidor). Ver App/valve_service.py.
 VALVE_WATCHDOG_SECONDS = float(os.environ.get('VALVE_WATCHDOG_SECONDS', '30'))
 VALVE_WATCHDOG_START_DELAY_SECONDS = float(os.environ.get('VALVE_WATCHDOG_START_DELAY_SECONDS', '10'))
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'SIGNING_KEY': JWT_SIGNING_KEY,
+    # Corto a propósito: al renovarlo se vuelve a leer el rol y el estado de la cuenta en Supabase,
+    # así un admin al que se le quita el rol pierde el acceso en minutos.
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=30),
+    # El usuario del token es el id de Supabase (claim id_usuario), guardado localmente en supabase_id.
+    'USER_ID_FIELD': 'supabase_id',
+    'USER_ID_CLAIM': 'id_usuario',
+    'UPDATE_LAST_LOGIN': False,
 }
 
 # Gotita, la asistente de voz (App/asistente/). La llave de Claude solo vive en el .env del servidor y

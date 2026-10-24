@@ -10,7 +10,8 @@ Uso (desde la carpeta Backend/SmartDrop):
     .venv\\Scripts\\python.exe deploy\\simulador_lecturas.py            # cada 2 s hasta Ctrl+C
     .venv\\Scripts\\python.exe deploy\\simulador_lecturas.py --una-vez  # una ronda, para probar
 
-Si el servidor tiene DEVICE_API_TOKEN, pasa el mismo valor con --token o en la variable SMARTDROP_DEVICE_TOKEN.
+Necesita la clave del dispositivo (LECTURAS_API_KEY del .env del servidor) en la variable de entorno
+LECTURAS_API_KEY o con --clave.
 """
 import argparse
 import os
@@ -72,19 +73,22 @@ def enviar_ronda(sesion, url, vivienda, maqueta):
 def main():
     parser = argparse.ArgumentParser(description='Simula el ESP32 de SmartDrop enviando lecturas en vivo.')
     parser.add_argument('--url', default=URL_POR_DEFECTO)
+    parser.add_argument(
+        '--clave', default=os.environ.get('LECTURAS_API_KEY', ''),
+        help='Clave del dispositivo (LECTURAS_API_KEY del .env del servidor). Por defecto la variable de entorno.',
+    )
     parser.add_argument('--vivienda', type=int, default=9,
                         help='id de la vivienda (por defecto 9 = NIC-0009, sin escenario de fuga ni de bomba).')
     parser.add_argument('--intervalo', type=float, default=2.0, help='Segundos entre rondas (por defecto 2).')
     parser.add_argument('--minutos', type=float, default=0, help='Detenerse tras N minutos (0 = hasta Ctrl+C).')
     parser.add_argument('--una-vez', action='store_true', help='Enviar una sola ronda y salir.')
-    parser.add_argument('--token', default=os.environ.get('SMARTDROP_DEVICE_TOKEN', ''),
-                        help='Token del dispositivo (DEVICE_API_TOKEN del servidor). Por defecto SMARTDROP_DEVICE_TOKEN.')
     args = parser.parse_args()
 
     print(f'Enviando lecturas de la vivienda {args.vivienda} a {args.url}  (Ctrl+C para detener)')
+    if not args.clave:
+        parser.error('Falta la clave del dispositivo: usa --clave o define LECTURAS_API_KEY.')
     sesion = requests.Session()
-    if args.token:
-        sesion.headers['X-Device-Token'] = args.token
+    sesion.headers['X-Api-Key'] = args.clave
     maqueta = Maqueta()
     fin = time.monotonic() + args.minutos * 60 if args.minutos else None
     try:

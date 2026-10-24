@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 INTENTOS_POR_HORA = 5
 PAUSA_SEGUNDOS = 3600
-MAX_CUERPO = 4 * 1024 * 1024  # lo más que puede pesar una pregunta (con la foto de la pantalla)
+MAX_CUERPO = 2_621_440  # lo más que puede pesar una pregunta con la foto de la pantalla (lo mismo que acepta Django)
 
 _MANIPULACION = [re.compile(patron) for patron in (
     r'\b(ignora|ignore|olvida|olvidate|forget|omite|saltate|salta|desactiva|disable|bypass|rompe)\b.{0,40}'

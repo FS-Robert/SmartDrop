@@ -28,4 +28,4 @@ urlpatterns = [
 if settings.DEBUG:
     static_dir = Path(settings.BASE_DIR) / 'App' / 'Static'
     urlpatterns += static(settings.STATIC_URL, document_root=str(static_dir))
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    # /media/ no se publica ni en desarrollo: las evidencias se ven con su enlace firmado (/adjuntos/...).

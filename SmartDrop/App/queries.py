@@ -3,6 +3,7 @@
 Cada consulta remota cuesta ~0,7 s, así que se agrupan en una sola ronda
 paralela y los datos casi estáticos (viviendas, sensores, tanques) se cachean.
 """
+import logging
 import threading
 import time
 from collections import defaultdict, namedtuple
@@ -14,6 +15,8 @@ from django.core.cache import cache
 from django.utils import timezone
 
 from . import supabase_client
+
+logger = logging.getLogger(__name__)
 
 VIVIENDAS_CACHE_SECONDS = 30
 REFERENCE_CACHE_SECONDS = 60
@@ -90,6 +93,12 @@ def invalidate_user_viviendas(user):
     cache.delete_many([f'viviendas:{user.id_usuario}', f'viviendas:{owner_id(user)}'])
 
 
+LINK_VIVIENDA_ERROR = (
+    'No pudimos vincular una vivienda con esos datos. Revisa el número de cuenta (NIC) y el nombre del titular '
+    'tal como aparecen en tu recibo. Si están bien y aun así no funciona, escríbenos desde "Reportar un problema".'
+)
+
+
 class LinkViviendaError(Exception):
     """Fallo de validación al vincular; `status` es el código HTTP equivalente."""
 
@@ -109,15 +118,18 @@ def link_vivienda(user, account, holder):
     if not account or not holder:
         raise LinkViviendaError('Completa todos los campos.', 400)
 
+    # Un solo mensaje para todos los fallos: si cada caso tuviera el suyo, se podría averiguar qué números de
+    # cuenta existen y cuáles ya están vinculados. Los intentos están limitados (LIMITES_USO['vincular']).
     rows = supabase_client.select('vivienda', '*', {'nic': f'eq.{account}', 'limit': '1'})
-    if not rows:
-        raise LinkViviendaError('No encontramos ese número de cuenta.', 404)
-    vivienda = rows[0]
-    if str(vivienda.get('nombre_completo_titular', '')).strip().lower() != holder.lower():
-        raise LinkViviendaError('El nombre no coincide con el titular.', 400)
+    vivienda = rows[0] if rows else None
     owner = owner_id(user)
-    if vivienda.get('id_usuario_propietario') not in (None, owner):
-        raise LinkViviendaError('Esta vivienda ya está vinculada.', 409)
+    if (
+        not vivienda
+        or str(vivienda.get('nombre_completo_titular', '')).strip().lower() != holder.lower()
+        or vivienda.get('id_usuario_propietario') not in (None, owner)
+    ):
+        logger.warning('Vinculación de vivienda rechazada para el usuario %s (NIC %s).', owner, account)
+        raise LinkViviendaError(LINK_VIVIENDA_ERROR, 400)
 
     supabase_client.update(
         'vivienda',

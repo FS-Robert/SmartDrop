@@ -17,6 +17,8 @@ class AppConfig(AppConfig):
     name = 'App'
 
     def ready(self):
+        from . import checks  # noqa: F401 — registra las revisiones de seguridad de `manage.py check`
+
         if self._is_serving_process():
             threading.Thread(target=_keep_sensor_series_warm, name='sensor-series-warm', daemon=True).start()
             threading.Thread(target=_watch_valve_timers, name='valve-timer-watchdog', daemon=True).start()

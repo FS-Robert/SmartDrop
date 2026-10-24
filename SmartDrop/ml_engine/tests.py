@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest import mock
 
 import numpy as np
-from django.core.cache import cache
+from django.core.cache import cache, caches
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -157,11 +157,13 @@ def build_supabase(scenarios):
     return FakeSupabase(vivienda=viviendas, tanque=tanques, sensor=sensores, lectura=lecturas, usuario=usuarios)
 
 
+@override_settings(REVALIDAR_SESION_SEGUNDOS=0)
 class MlTestCase(TestCase):
     databases = {'default', 'timeseries'}
 
     def setUp(self):
         cache.clear()
+        caches['limites'].clear()
 
     @classmethod
     def create_users(cls):

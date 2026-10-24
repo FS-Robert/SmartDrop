@@ -89,11 +89,12 @@ CREATE TABLE IF NOT EXISTS public.reporte (
     prioridad           VARCHAR(10) DEFAULT 'media',               -- baja | media | alta
     id_usuario_atiende  BIGINT REFERENCES public.usuario(id_usuario) ON DELETE SET NULL,
     fecha_atencion      TIMESTAMPTZ,
-    respuesta_admin     TEXT
+    respuesta_admin     TEXT,
+    es_comunitario      BOOLEAN NOT NULL DEFAULT FALSE  -- TRUE: publicado en el muro comunitario
 );
 
--- Adjuntos (imágenes/videos) de un reporte. La URL apunta al
--- archivo servido por Django (MEDIA_URL) o a un bucket si migra.
+-- Adjuntos (imágenes/videos) de un reporte. `url` es la ruta del archivo en MEDIA_ROOT
+-- (/media/reportes/<id>/<archivo>); Django lo entrega con un enlace firmado que vence.
 CREATE TABLE IF NOT EXISTS public.reporte_adjunto (
     id_adjunto    BIGSERIAL PRIMARY KEY,
     id_reporte    BIGINT NOT NULL REFERENCES public.reporte(id_reporte) ON DELETE CASCADE,
@@ -118,7 +119,18 @@ CREATE INDEX IF NOT EXISTS idx_reporte_estado ON public.reporte (estado);
 CREATE INDEX IF NOT EXISTS idx_reporte_fecha ON public.reporte (fecha_reporte DESC);
 CREATE INDEX IF NOT EXISTS idx_adjunto_reporte ON public.reporte_adjunto (id_reporte);
 CREATE INDEX IF NOT EXISTS idx_mensaje_reporte ON public.reporte_mensaje (id_reporte, id_mensaje);
+CREATE INDEX IF NOT EXISTS idx_reporte_comunitario ON public.reporte (es_comunitario, fecha_reporte DESC);
 
--- Habilitar REST API (PostgREST expone tablas en schema public por defecto)
--- Con service_role key, Django puede leer/escribir sin RLS adicional.
+-- PostgREST expone las tablas del schema public. Django usa la clave service_role, que no pasa por RLS;
+-- RLS activado y sin políticas deja fuera a las claves anon y authenticated (públicas por diseño).
+DO $$
+DECLARE
+    tabla record;
+BEGIN
+    FOR tabla IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' LOOP
+        EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', tabla.tablename);
+    END LOOP;
+END $$;
+REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
+REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM anon, authenticated;
 

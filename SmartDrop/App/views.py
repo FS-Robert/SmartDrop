@@ -1,5 +1,6 @@
 import calendar
 import csv
+import hmac
 import json
 import logging
 import math
@@ -7,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone as dt_timezone
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
@@ -21,6 +23,7 @@ from django.views.decorators.http import require_http_methods
 from .forms import LoginForm, UsuarioProfileForm, UsuarioRegisterForm, VincularViviendaForm
 from . import preferencias, supabase_client, valve_service
 from .models import Usuario
+from .seguridad import fila_csv, limitar
 from . import views_reportes
 from .mqtt_service import MqttError, publish_command
 from .queries import (
@@ -1163,12 +1166,12 @@ def valvulas(request):
         writer = csv.writer(response)
         writer.writerow(['Fecha', 'Válvula', 'Acción', 'Tipo', 'Usuario', 'Origen', 'IP dispositivo'])
         for movement in movimientos_filtrados:
-            writer.writerow([
+            writer.writerow(fila_csv([
                 _fecha_hora_local_texto(movement.get('fecha_hora')), movement.get('valvula_mostrar', ''),
                 movement.get('accion', ''), movement.get('tipo_mostrar', ''),
                 movement.get('usuario_mostrar', ''), movement.get('origen_accion', ''),
                 movement.get('ip_dispositivo', ''),
-            ])
+            ]))
         return response
 
     statistics = _valve_statistics(movimientos)
@@ -1214,7 +1217,7 @@ def valvulas(request):
 
 @login_required(login_url='login')
 @require_http_methods(['POST'])
-@rate_limit('valvula_comando', '20/m', key='user')
+@limitar('valvula', por='usuario')
 def valvula_comando(request, valvula_id):
     if not _admin_only(request):
         return redirect('dashboard')
@@ -1420,21 +1423,7 @@ def usuario_preferencias(request):
     return response
 
 
-def _form_bloqueado(form_class, template):
-    """Respuesta de rate limit para los formularios web: la misma página con el aviso como error del formulario."""
-    from django.forms.utils import ErrorDict
-
-    def responder(request, retry_after):
-        initial = {k: v for k, v in request.POST.items() if 'password' not in k and k != 'csrfmiddlewaretoken'}
-        form = form_class(initial=initial)
-        form._errors = ErrorDict({'__all__': form.error_class([MENSAJE_LIMITE.format(segundos=retry_after)])})
-        response = render(request, template, {'form': form}, status=429)
-        response['Retry-After'] = str(retry_after)
-        return response
-    return responder
-
-
-@rate_limit('registro', '20/h', on_limit=_form_bloqueado(UsuarioRegisterForm, 'App/register.html'))
+@limitar('registro')
 def register(request):
     if request.user.is_authenticated:
         return redirect('dashboard')
@@ -1498,7 +1487,7 @@ def _user_payload(user):
 # y exige Content-Type application/json, que un formulario de otro sitio no puede enviar sin CORS.
 @csrf_exempt  # NOSONAR: ver comentario anterior
 @require_http_methods(['POST'])
-@rate_limit('registro', '20/h')
+@limitar('registro')
 def api_register(request):
     """Registro JSON para app móvil. Guarda el usuario en Supabase."""
     if not _es_json(request):
@@ -1524,8 +1513,7 @@ def api_register(request):
 # Igual que api_register: valida credenciales y responde JSON, sin iniciar sesión ni usar cookies.
 @csrf_exempt  # NOSONAR: endpoint JSON sin sesión, ver comentario de api_register
 @require_http_methods(['POST'])
-@rate_limit('login_ip', '20/m')
-@rate_limit('login_cuenta', '10/m', key=correo_de_la_peticion)
+@limitar('acceso')
 def api_login(request):
     """Login JSON para app móvil. Valida credenciales contra Supabase."""
     if not _es_json(request):
@@ -1543,14 +1531,28 @@ def api_login(request):
     return JsonResponse({'ok': True, 'user': _user_payload(user)})
 
 
-# El ESP32 no maneja cookies ni tokens CSRF; se autentica con X-Device-Token (DEVICE_API_TOKEN).
-@csrf_exempt  # NOSONAR: dispositivo IoT sin sesión, autenticado por token de dispositivo
+def _clave_dispositivo_valida(request):
+    """El ESP32 se identifica con la cabecera X-Api-Key (settings.LECTURAS_API_KEY).
+
+    Sin clave configurada solo se aceptan lecturas en desarrollo (DEBUG=True); en producción se rechazan todas.
+    """
+    esperada = settings.LECTURAS_API_KEY
+    if not esperada:
+        if not settings.DEBUG:
+            logger.error('Lectura rechazada: falta LECTURAS_API_KEY en el .env del servidor.')
+        return settings.DEBUG
+    recibida = request.headers.get('X-Api-Key', '')
+    return hmac.compare_digest(recibida.encode('utf-8'), esperada.encode('utf-8'))
+
+
+@csrf_exempt
 @require_http_methods(['POST'])
-@rate_limit('lecturas', '300/m')
+@limitar('lecturas')
 def api_lectura(request):
     """Valida y envía una lectura del ESP32 a Supabase."""
-    if not _dispositivo_autorizado(request):
-        return JsonResponse({'ok': False, 'error': 'Dispositivo no autorizado'}, status=401)
+    if not _clave_dispositivo_valida(request):
+        logger.warning('Lectura rechazada por clave de dispositivo inválida desde %s', request.META.get('REMOTE_ADDR'))
+        return JsonResponse({'ok': False, 'error': 'Clave de dispositivo inválida'}, status=401)
     try:
         data = json.loads(request.body.decode('utf-8'))
     except (json.JSONDecodeError, UnicodeDecodeError):
@@ -1629,7 +1631,7 @@ def _home_for(user):
 
 
 @login_required(login_url='login')
-@rate_limit('vincular', '20/h', key='user')
+@limitar('vincular', por='usuario')
 def vincular_vivienda(request):
     if _admin_only(request):
         return redirect('admin_panel')
@@ -1654,8 +1656,7 @@ def vincular_vivienda(request):
     return render(request, 'App/vincular_vivienda.html', {'form': form})
 
 
-@rate_limit('login_ip', '20/m', on_limit=_form_bloqueado(LoginForm, 'App/login.html'))
-@rate_limit('login_cuenta', '10/m', key=correo_de_la_peticion, on_limit=_form_bloqueado(LoginForm, 'App/login.html'))
+@limitar('acceso')
 def login_view(request):
     if request.user.is_authenticated:
         return _home_for(request.user)
@@ -1800,6 +1801,15 @@ def sensor_data(request, sensor_id):
     })
 
 
+@require_http_methods(['GET', 'POST'])
 def logout_view(request):
-    logout(request)
-    return redirect('login')
+    """Cierra la sesión solo por POST (con CSRF): un enlace o una imagen de otra página ya no puede sacarte.
+
+    Los enlaces "Cerrar sesión" envían ese POST (_cerrar_sesion_form.html); por GET se pide confirmar.
+    """
+    if request.method == 'POST':
+        logout(request)
+        return redirect('login')
+    if not request.user.is_authenticated:
+        return redirect('login')
+    return render(request, 'App/cerrar_sesion.html')
