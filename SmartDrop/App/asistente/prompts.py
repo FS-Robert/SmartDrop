@@ -4,6 +4,7 @@ Las reglas generales casi no cambian (así Claude las recuerda y cobra menos); l
 pregunta (la pantalla, los datos, el modo y la hora) va junto con la pregunta.
 """
 import json
+import re
 
 from . import caliche, destinos
 
@@ -118,12 +119,13 @@ def sistema_avisos(rol, idioma):
     return _AVISOS.format(idioma=IDIOMA_NOMBRE.get(idioma, 'español'), rol=ROL_TEXTO[rol])
 
 
+_ETIQUETAS = re.compile(r'<\s*(/?)\s*(pantalla|datos|usuario|secciones|aviso)', re.IGNORECASE)
+
+
 def _escapar(texto):
-    # Evita que un texto de la pantalla se haga pasar por una instrucción.
-    texto = str(texto)
-    for etiqueta in ('pantalla', 'datos', 'usuario', 'secciones'):
-        texto = texto.replace(f'</{etiqueta}', f'</ {etiqueta}').replace(f'<{etiqueta}', f'< {etiqueta}')
-    return texto
+    # Evita que un texto de la pantalla (o de un reporte de otra persona) se haga pasar por una instrucción:
+    # cualquier etiqueta nuestra, en mayúsculas o minúsculas y con o sin espacios, queda rota.
+    return _ETIQUETAS.sub(lambda m: f'<{m.group(1)} {m.group(2)}', str(texto))
 
 
 def mensaje_turno(turno, datos, ahora_texto, nombre=''):

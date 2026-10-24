@@ -213,7 +213,7 @@ class RateLimitTests(TestCase):
         self.assertEqual(response.status_code, 415)
 
 
-@override_settings(DEVICE_API_TOKEN='token-de-prueba')
+@override_settings(LECTURAS_API_KEY='clave-de-prueba')
 class TokenDispositivoTests(TestCase):
     LECTURA = {'id_sensor': 4, 'fecha_registro': '2026-10-22T10:00:00Z', 'valor': 1.5}
 

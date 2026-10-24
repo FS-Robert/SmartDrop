@@ -1468,7 +1468,7 @@ class ErroresDeLaAppTests(TestCase):
 		self.client = APIClient()
 		self.client.force_authenticate(MobileUser({'id_usuario': 2, 'id_rol': 2}))
 
-	@patch('App.api.views_valves._start_timer_for_valvula')
+	@patch('App.valve_service.start_timer', return_value={'timer_activo': True})
 	@patch('App.api.views_valves.supabase_client.insert')
 	@patch('App.api.views_valves.supabase_client.update')
 	@patch('App.api.views_valves.publish_command')
@@ -1477,12 +1477,25 @@ class ErroresDeLaAppTests(TestCase):
 		response = self.client.post('/api/valvula/3/control/', {'accion': 'ABRIR', 'duracion': 30, 'usuario': 'Ana', 'origen': 'app'}, format='json')
 		self.assertEqual(response.status_code, 200)
 		publish.assert_called_once_with('t', 'abrir')
-		iniciar.assert_called_once_with(3, 30)
+		self.assertEqual(iniciar.call_args.args, (3, 30))
 		self.assertEqual(insert.call_args.args[1]['tipo_activacion'], 'temporizado')
 
 		response = self.client.post('/api/valvula/3/control/', {'accion': 'CERRAR', 'duracion': 0}, format='json')
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(publish.call_args.args, ('t', 'cerrar'))
+
+	@patch('App.valve_service.cancel_timer')
+	@patch('App.valve_service.timer_info', return_value={'timer_activo': True, 'timer_remaining': 20, 'timer_end_at': None, 'duracion_seg': 30})
+	@patch('App.api.views_valves.supabase_client.insert')
+	@patch('App.api.views_valves.supabase_client.update', side_effect=supabase_client.SupabaseError())
+	@patch('App.api.views_valves.publish_command')
+	@patch('App.api.views_valves.supabase_client.select', return_value=[{'id_valvula': 3, 'estado_actual': 'abierta', 'topic_mqtt_comando': 't'}])
+	def test_abrir_sin_tiempo_cancela_el_temporizador_aunque_falle_supabase(self, select, publish, update, insert, info, cancelar):
+		# Igual que en la web: abrir sin tiempo cancela el temporizador pendiente (antes la app lo dejaba y la
+		# válvula se cerraba sola), y eso pasa apenas se envía la orden, antes de guardar en Supabase.
+		response = self.client.post('/api/valvula/3/control/', {'accion': 'ABRIR', 'duracion': 0}, format='json')
+		self.assertEqual(response.status_code, 502)
+		cancelar.assert_called_once_with(3)
 
 	@patch('App.api.views_valves.publish_command')
 	def test_rechaza_duraciones_fuera_de_rango(self, publish):
@@ -1490,11 +1503,13 @@ class ErroresDeLaAppTests(TestCase):
 		self.assertEqual(response.status_code, 400)
 		publish.assert_not_called()
 
-	@patch('App.api.views_valves.supabase_client.select', return_value=[{'id_valvula': 3, 'estado_actual': 'abierta'}])
+	@patch('App.api.views_valves.supabase_client.select', return_value=[{'id_valvula': 3, 'estado_actual': 'abierta', 'ultima_apertura': '2026-10-24T10:00:00+00:00'}])
 	def test_el_estado_incluye_el_temporizador_en_curso(self, select):
-		with patch('App.api.views_valves._timer_info_for_valvula', return_value={'timer_activo': True, 'timer_remaining': 12, 'duracion_seg': 30}):
-			response = self.client.get(reverse('mobile_valvula_estado', args=[3]))
-		self.assertEqual(response.json()['temporizador_activo'], {'duracion_programada': 30, 'segundos_restantes': 12})
+		info = {'timer_activo': True, 'timer_remaining': 12, 'timer_end_at': '2026-10-24T10:00:30+00:00', 'duracion_seg': 30}
+		with patch('App.valve_service.timer_info', return_value=info):
+			datos = self.client.get(reverse('mobile_valvula_estado', args=[3])).json()
+		self.assertEqual(datos['temporizador_activo'], {'duracion_programada': 30, 'segundos_restantes': 12, 'fin': '2026-10-24T10:00:30+00:00'})
+		self.assertEqual(datos['abierta_desde'], '2026-10-24T10:00:00+00:00')
 
 	@patch('App.api.views_mobile_reports.contar_adjuntos', return_value=0)
 	@patch('App.api.views_mobile_reports.supabase_client.select', return_value=[{'id_reporte': 7}])

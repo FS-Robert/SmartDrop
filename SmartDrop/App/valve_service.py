@@ -244,6 +244,15 @@ def ejecutar_comando(valvula_id, comando, *, duracion_seg=None, id_usuario=None,
     timer_ya_activo = timer_info(valvula_id)['timer_activo']
     publish(valvula['topic_mqtt_comando'], comando)
 
+    # El temporizador se arma apenas la válvula recibió la orden, antes de tocar Supabase: si guardar el estado
+    # falla, una apertura temporizada igual se cierra sola. Cerrar, o abrir sin tiempo, cancela uno pendiente.
+    if duracion_seg:
+        info = start_timer(valvula_id, duracion_seg, publish=publish)
+    else:
+        if timer_ya_activo:
+            cancel_timer(valvula_id)
+        info = timer_info(valvula_id)
+
     now = timezone.now()
     estado_anterior = valvula.get('estado_actual') or 'desconocida'
     estado_nuevo = 'abierta' if comando == 'abrir' else 'cerrada'
@@ -256,14 +265,6 @@ def ejecutar_comando(valvula_id, comando, *, duracion_seg=None, id_usuario=None,
     else:
         update_payload = {'estado_actual': estado_nuevo, 'ultima_apertura': None}
     supabase_client.update('valvula', update_payload, {'id_valvula': f'eq.{valvula_id}'})
-
-    # Cerrar, o abrir sin tiempo, cancela un temporizador pendiente; abrir con tiempo lo reinicia.
-    if duracion_seg:
-        info = start_timer(valvula_id, duracion_seg, publish=publish)
-    else:
-        if timer_ya_activo:
-            cancel_timer(valvula_id)
-        info = timer_info(valvula_id)
 
     razon = None
     if comando == 'cerrar' and timer_ya_activo:

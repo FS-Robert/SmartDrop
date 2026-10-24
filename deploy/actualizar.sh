@@ -18,12 +18,15 @@ uv pip install --python "$VENV/bin/python" -r requirements.txt
 
 source "$REPO_DIR/deploy/seguridad_env.sh"
 asegurar_claves
+ajustes_del_servidor
 apartar_env_duplicado
 
 cd "$APP_DIR"
 "$VENV/bin/python" manage.py migrate --noinput
 "$VENV/bin/python" manage.py migrate --database=timeseries --noinput
 "$VENV/bin/python" manage.py collectstatic --noinput
+# Conversaciones con Gotita de más de 20 días: se borran de verdad (antes solo al abrir el historial).
+"$VENV/bin/python" manage.py limpiar_gotita
 chmod -R o+rX "$APP_DIR/staticfiles"
 proteger_bases
 

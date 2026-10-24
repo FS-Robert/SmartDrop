@@ -19,7 +19,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from .api.authentication import MobileUser
-from .asistente import avisos, caliche, claude, destinos, historial, idioma, prompts, proteccion, seguridad, voz
+from .asistente import avisos, caliche, claude, destinos, historial, idioma, prompts, proteccion, seguridad, vistas, voz
 from .models import ConversacionGotita, MensajeGotita, Rol, Usuario
 
 PNG_1X1 = base64.b64encode(
@@ -33,6 +33,7 @@ class TestCase(DjangoTestCase):
         super()._pre_setup()
         cache.clear()
         caches['limites'].clear()
+        caches['gotita_audio'].clear()
         # Sin Supabase en las pruebas: no se revisa cada rato que la cuenta siga activa (igual que App/tests.py).
         revisar = override_settings(REVALIDAR_SESION_SEGUNDOS=0)
         revisar.enable()
@@ -465,9 +466,45 @@ class VozNaturalTests(TestCase):
         self.usuario = Usuario.objects.create_user(email='voz@example.com', nombre='Ana', apellido='M',
                                                    password='password-segura', rol=rol)
 
-    def _pedir(self, texto, **extra):
+    def _pedir(self, texto, dicha=True, **extra):
+        if dicha:  # como si Gotita acabara de decir la frase en una respuesta
+            voz.permitir(str(self.usuario.supabase_id or self.usuario.id_usuario), [texto])
         return self.client.post('/asistente/voz/', {'texto': texto, 'idioma': 'es', **extra},
                                 content_type='application/json')
+
+    @patch('App.asistente.voz.requests.post', return_value=_respuesta_audio())
+    def test_solo_lee_frases_que_dijo_gotita_o_fijas(self, post):
+        self.client.force_login(self.usuario)
+        self.assertEqual(self._pedir('Compra en mi-tienda.example, es una oferta.', dicha=False).status_code, 403)
+        post.assert_not_called()
+        self.assertEqual(self._pedir('Hola, soy Gotita. Así sueno con esta voz.', dicha=False).status_code, 200)
+
+    @patch('App.asistente.voz.requests.post', return_value=_respuesta_audio())
+    def test_texto_enorme_no_se_filtra_entero(self, post):
+        # El filtro de voz tarda más que proporcional: 400 KB tomaban segundos de CPU del único proceso.
+        self.client.force_login(self.usuario)
+        self.assertEqual(self._pedir('a' * 400_000).status_code, 400)
+        with patch('App.asistente.voz.filtrar_texto', side_effect=lambda texto, idioma: texto) as filtro:
+            voz.sintetizar('b' * 1500, 'es')
+        self.assertLessEqual(len(filtro.call_args.args[0]), voz.MAX_TEXTO * 2)
+
+    def test_las_frases_de_respuestas_y_avisos_quedan_permitidas(self):
+        async def respuesta():
+            yield {'evento': 'texto', 't': 'Tu tanque está al 70 %.'}
+            yield {'evento': 'fin'}
+
+        async def recorrer():
+            return [evento async for evento in vistas._anotar_frases(respuesta(), '7')]
+
+        async_to_sync(recorrer)()
+        self.assertTrue(voz.permitida('7', 'Tu tanque está al 70 %.'))
+        self.assertFalse(voz.permitida('8', 'Tu tanque está al 70 %.'))  # es de esa persona, no de otra
+        aviso = {'clave': 'x', 'titulo': 'Presión baja', 'mensaje': 'Revisa la llave.', 'gotita': 'La presión bajó.'}
+        with patch('App.asistente.avisos._con_texto', side_effect=lambda lista, rol, idioma: lista):
+            avisos.con_texto_de_gotita([aviso], 'user', 'es', para=self.usuario)
+        usuario = str(self.usuario.supabase_id or self.usuario.id_usuario)
+        self.assertTrue(voz.permitida(usuario, 'La presión bajó.'))
+        self.assertTrue(voz.permitida(usuario, 'Presión baja. Revisa la llave.'))
 
     @patch('App.asistente.voz.requests.post', return_value=_respuesta_audio())
     def test_devuelve_el_audio_en_espanol_y_no_repite_frases(self, post):
@@ -512,6 +549,7 @@ class VozNaturalTests(TestCase):
     def test_la_app_pide_el_audio(self, _post):
         client = APIClient()
         client.force_authenticate(user=_usuario_app())
+        voz.permitir('81', ['Hola.'])
         self.assertTrue(client.get('/api/asistente/').json()['voz_natural'])
         response = client.post('/api/asistente/voz/', {'texto': 'Hola.', 'idioma': 'en'}, format='json',
                                HTTP_ACCEPT='audio/mpeg')
@@ -705,11 +743,11 @@ class AudiosGuardadosTests(TestCase):
     @patch('App.asistente.voz.requests.post', return_value=_respuesta_audio())
     def test_las_frases_cortas_se_hacen_una_sola_vez_aunque_se_reinicie(self, post):
         voz.sintetizar('Listo, te explico en modo técnico.', 'es')
-        cache.clear()  # como si el servidor se reiniciara
+        caches['gotita_audio'].clear()  # como si el servidor se reiniciara
         self.assertEqual(voz.sintetizar('Listo, te explico en modo técnico.', 'es'), b'ID3-audio-de-prueba')
         self.assertEqual(post.call_count, 1)
         voz.sintetizar('x ' * 150, 'es')
-        cache.clear()
+        caches['gotita_audio'].clear()
         voz.sintetizar('x ' * 150, 'es')
         self.assertEqual(post.call_count, 3)  # las respuestas largas no se guardan en la carpeta
 

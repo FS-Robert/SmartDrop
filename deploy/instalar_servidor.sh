@@ -50,6 +50,7 @@ set_env ALLOWED_HOSTS "$DOMINIO,localhost,127.0.0.1"
 set_env CSRF_TRUSTED_ORIGINS "https://$DOMINIO"
 set_env REDIS_URL ""                      # un solo proceso: el canal en memoria basta
 asegurar_claves
+ajustes_del_servidor
 apartar_env_duplicado
 
 paso "Migraciones y archivos estáticos"
@@ -72,11 +73,18 @@ sudo systemctl enable smartdrop
 sudo systemctl restart smartdrop
 
 paso "Nginx"
+SITIO_NGINX=/etc/nginx/sites-available/smartdrop
+# Si la configuración nueva no pasa `nginx -t`, se vuelve a la anterior en vez de dejar Nginx roto.
+[[ -f "$SITIO_NGINX" ]] && sudo cp "$SITIO_NGINX" "$SITIO_NGINX.anterior"
 sed -e "s|__DOMINIO__|$DOMINIO|g" -e "s|__APP_DIR__|$APP_DIR|g" \
-    "$REPO_DIR/deploy/nginx-smartdrop.conf" | sudo tee /etc/nginx/sites-available/smartdrop >/dev/null
-sudo ln -sf /etc/nginx/sites-available/smartdrop /etc/nginx/sites-enabled/smartdrop
+    "$REPO_DIR/deploy/nginx-smartdrop.conf" | sudo tee "$SITIO_NGINX" >/dev/null
+sudo ln -sf "$SITIO_NGINX" /etc/nginx/sites-enabled/smartdrop
 sudo rm -f /etc/nginx/sites-enabled/default
-sudo nginx -t
+if ! sudo nginx -t; then
+    echo "La configuración nueva de Nginx no es válida." >&2
+    [[ -f "$SITIO_NGINX.anterior" ]] && sudo cp "$SITIO_NGINX.anterior" "$SITIO_NGINX" && echo "Se restauró la anterior." >&2
+    exit 1
+fi
 sudo systemctl reload nginx
 
 paso "Certificado HTTPS gratis (Let's Encrypt)"

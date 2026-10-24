@@ -1,7 +1,8 @@
 """Reglas de seguridad que la página le manda al navegador en cada respuesta.
 
-* Qué fuentes externas se aceptan: solo las letras de Google, las gráficas y la foto de pantalla de Gotita
-  (cdn.jsdelivr.net). Cualquier otro script de afuera se bloquea, aunque alguien logre meterlo en la página.
+* Qué fuentes externas se aceptan: solo las letras de Google y, de cdn.jsdelivr.net, las dos librerías que se
+  usan (Chart.js y html2canvas-pro, cada una con su versión). jsDelivr sirve cualquier paquete de npm o GitHub,
+  así que permitir el dominio entero dejaba cargar cualquier script de ahí.
 * Nadie puede mostrar SmartDrop dentro de otra página (evita engaños con botones escondidos).
 * El micrófono solo lo puede pedir la propia página (para Gotita); cámara, ubicación y pagos, nadie.
 """
@@ -9,7 +10,8 @@ from asgiref.sync import iscoroutinefunction, markcoroutinefunction
 
 POLITICA_CONTENIDO = '; '.join((
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
+    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net/npm/chart.js@4.4.0/ "
+    "https://cdn.jsdelivr.net/npm/html2canvas-pro@1.5.8/",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' data: https://fonts.gstatic.com",
     "img-src 'self' data: blob: https:",

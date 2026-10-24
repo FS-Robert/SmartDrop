@@ -5,6 +5,7 @@ import threading
 import time
 
 from django.apps import AppConfig
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,8 @@ class AppConfig(AppConfig):
 
         if self._is_serving_process():
             threading.Thread(target=_keep_sensor_series_warm, name='sensor-series-warm', daemon=True).start()
-            threading.Thread(target=_watch_valve_timers, name='valve-timer-watchdog', daemon=True).start()
+            if settings.VALVE_WATCHDOG_ENABLED:
+                threading.Thread(target=_watch_valve_timers, name='valve-timer-watchdog', daemon=True).start()
 
     @staticmethod
     def _is_serving_process():
@@ -47,8 +49,6 @@ def _keep_sensor_series_warm():
 
 def _watch_valve_timers():
     """Cierra las aperturas temporizadas que quedaron pendientes (por ejemplo, tras reiniciar el servidor)."""
-    from django.conf import settings
-
     from App.valve_service import vigilar_temporizadores
 
     vigilar_temporizadores(

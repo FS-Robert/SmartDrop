@@ -10,11 +10,12 @@ import re
 import unicodedata
 
 from django.conf import settings
-from django.core.cache import cache
+from django.core.cache import caches
 
 from ..ratelimit import hit, rate_for
 
 logger = logging.getLogger(__name__)
+cache = caches['limites']  # la pausa por manipulación no debe borrarse con el tráfico normal
 
 INTENTOS_POR_HORA = 5
 PAUSA_SEGUNDOS = 3600

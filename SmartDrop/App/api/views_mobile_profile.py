@@ -228,5 +228,7 @@ class MobileNotificacionesView(APIView):
             return Response({'error': 'No se pudieron cargar los avisos.'}, status=status.HTTP_502_BAD_GATEWAY)
         if request.query_params.get('gotita') == '1':
             from ..asistente.avisos import con_texto_de_gotita
-            avisos = con_texto_de_gotita(avisos, 'admin' if is_admin(request.user) else 'user', prefs.idioma or 'es')
+            avisos = con_texto_de_gotita(
+                avisos, 'admin' if is_admin(request.user) else 'user', prefs.idioma or 'es', para=request.user,
+            )
         return Response({'ok': True, 'preferencias': preferencias.como_dict(prefs), 'avisos': avisos})

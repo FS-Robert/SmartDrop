@@ -100,6 +100,14 @@ async def _con_memoria(eventos, id_usuario, plataforma, conversacion, pregunta):
         yield evento
 
 
+async def _anotar_frases(eventos, user_id):
+    """Deja pasar la respuesta y anota cada frase: son las únicas que esa persona puede pedir en audio."""
+    async for evento in eventos:
+        if evento.get('evento') == 'texto':
+            voz.permitir(user_id, [evento.get('t')])
+        yield evento
+
+
 def _respuesta_por_frases(eventos):
     response = StreamingHttpResponse(_sse(eventos), content_type='text/event-stream; charset=utf-8')
     response['Cache-Control'] = 'no-cache, no-transform'
@@ -131,7 +139,8 @@ def responder_turno(user, data, plataforma):
         # Ni siquiera se le pregunta a Claude; si la cuenta insiste, queda en pausa un rato.
         if proteccion.registrar_intento(user_id):
             return _error(429, 'Gotita está en pausa para tu cuenta por un rato.')
-        return _respuesta_por_frases(_solo_decir(proteccion.RESPUESTA.get(idioma, proteccion.RESPUESTA['es'])))
+        respuesta = _solo_decir(proteccion.RESPUESTA.get(idioma, proteccion.RESPUESTA['es']))
+        return _respuesta_por_frases(_anotar_frases(respuesta, user_id))
     if not proteccion.tope_preguntas():
         return _error(503, 'Gotita descansa por hoy. Mañana seguimos.')
 
@@ -147,7 +156,7 @@ def responder_turno(user, data, plataforma):
     eventos = _con_memoria(eventos, id_usuario, plataforma, conversacion, turno['texto'])
     if idioma != elegido:
         eventos = _con_cambio_de_idioma(eventos, idioma)
-    return _respuesta_por_frases(eventos)
+    return _respuesta_por_frases(_anotar_frases(eventos, user_id))
 
 
 def responder_voz(user, data):
@@ -159,7 +168,14 @@ def responder_voz(user, data):
     texto = str(data.get('texto') or '').strip()
     if not texto:
         return _error(400, 'No hay nada que decir.')
+    if len(texto) > 2000:
+        return _error(400, 'La frase es demasiado larga.')
     user_id = str(owner_id(user) or 'anonimo')
+    if proteccion.en_pausa(user_id):
+        return _error(429, 'Gotita está en pausa para tu cuenta por un rato.')
+    if not voz.permitida(user_id, texto):
+        # No es una frase que Gotita le haya dicho: la web o la app la leen con su propia voz.
+        return _error(403, 'Solo leo con mi voz lo que yo digo.')
     # Límites para cuidar el saldo de ElevenLabs.
     permitida, espera = hit('asistente_voz_minuto', user_id, rate_for('asistente_voz_minuto', VOZ_POR_MINUTO))
     if permitida:

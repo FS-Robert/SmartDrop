@@ -38,6 +38,11 @@ asegurar_claves() {
     chmod 600 "$ENV_FILE"
 }
 
+ajustes_del_servidor() {
+    # Solo el servidor vigila los temporizadores de la válvula (ver VALVE_WATCHDOG_ENABLED en settings.py).
+    set_env VALVE_WATCHDOG_ENABLED 1
+}
+
 apartar_env_duplicado() {
     # settings.py carga también SmartDrop/.env y le da prioridad: uno olvidado ahí podría volver a encender
     # DEBUG o traer una clave vieja. En el servidor la configuración vive solo en el .env de la raíz.

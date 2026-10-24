@@ -6,6 +6,11 @@
       var enlace = event.target.closest('a[data-cerrar-sesion]');
       if (!enlace) return;
       event.preventDefault();
+      // La conversación con Gotita de esta pestaña no debe quedar para quien use la computadora después.
+      try {
+        Object.keys(sessionStorage).filter(function (clave) { return clave.indexOf('gotita:') === 0; })
+          .forEach(function (clave) { sessionStorage.removeItem(clave); });
+      } catch (e) { /* sin almacenamiento */ }
       document.getElementById('form-cerrar-sesion').submit();
     });
   </script>

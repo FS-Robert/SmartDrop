@@ -15,7 +15,7 @@ from pathlib import Path
 
 import requests
 from django.conf import settings
-from django.core.cache import cache
+from django.core.cache import cache, caches
 
 from .seguridad import filtrar_texto
 
@@ -33,6 +33,40 @@ FRASE_CORTA = 160            # las frases de este largo o menos se guardan en la
 DIAS_EN_CARPETA = 30
 # Estos modelos entienden el idioma que se les pide (así no leen el español con acento de otro idioma).
 MODELOS_CON_IDIOMA = ('eleven_flash_v2_5', 'eleven_turbo_v2_5')
+
+
+# Solo se convierten en audio las frases que el servidor le mandó a esa persona (respuestas y avisos de Gotita)
+# y estas frases fijas de la web (gotita.js) y la app (Gotita.java). Cualquier otro texto se rechaza y la web o
+# la app usan su propia voz: así nadie usa la voz de Gotita (ni el saldo de ElevenLabs) para decir lo que quiera.
+FRASES_FIJAS = frozenset({
+    'Hola, soy Gotita. Así sueno con esta voz.', "Hi, I'm Gotita. This is how I sound with this voice.",
+    'Listo, ahora te hablo en español.', "Done, I'll speak English now.",
+    'Listo, empezamos de nuevo.', "Done, let's start over.",
+    'Listo, te explico en modo técnico.', "Done, I'll explain things in technical mode.",
+    'Listo, te explico en modo sencillo.', "Done, I'll explain things in simple mode.",
+    'Listo, hablaré más despacio.', "Done, I'll speak more slowly.",
+    'Listo, vuelvo a la velocidad normal.', 'Done, back to normal speed.',
+    'Listo, ya no escucho. Puedes hablarme con el botón del micrófono o escribirme.',
+    "Done, I'm no longer listening. You can talk to me with the microphone button or type.",
+})
+FRASE_VIGENCIA = 6 * 3600
+_frases = caches['limites']
+_audios = caches['gotita_audio']
+
+
+def _clave_frase(user_id, texto):
+    return 'gotita:frase:' + hashlib.sha256(f'{user_id}\n{texto.strip()}'.encode('utf-8')).hexdigest()[:40]
+
+
+def permitir(user_id, textos):
+    """Anota las frases que el servidor le acaba de mandar a esa persona: solo esas puede pedir en audio."""
+    for texto in textos:
+        if texto and str(texto).strip():
+            _frases.set(_clave_frase(user_id, str(texto)), True, FRASE_VIGENCIA)
+
+
+def permitida(user_id, texto):
+    return texto.strip() in FRASES_FIJAS or bool(_frases.get(_clave_frase(user_id, texto)))
 
 
 class VozNoDisponible(Exception):
@@ -94,7 +128,9 @@ def _a_la_carpeta(nombre, audio):
 def sintetizar(texto, idioma='es', lenta=False):
     """Audio MP3 (bytes) de la frase con la voz de Gotita."""
     idioma = idioma if idioma in ('es', 'en') else 'es'
-    limpio = filtrar_texto(texto or '', idioma)[:MAX_TEXTO].strip()
+    # Se recorta ANTES de filtrar: el filtro tarda más que proporcional con textos largos (un texto de 400 KB
+    # tomaba segundos de CPU en el único proceso del servidor).
+    limpio = filtrar_texto((texto or '')[:MAX_TEXTO * 2], idioma)[:MAX_TEXTO].strip()
     if not limpio:
         raise VozNoDisponible('Frase vacía.')
     if not disponible():
@@ -105,7 +141,7 @@ def sintetizar(texto, idioma='es', lenta=False):
     nombre = hashlib.sha256(f'{voz}|{modelo}|{idioma}|{lenta}|{limpio}'.encode('utf-8')).hexdigest()
     clave = 'gotita:voz:' + nombre
     corta = len(limpio) <= FRASE_CORTA
-    guardado = cache.get(clave) or (_de_la_carpeta(nombre) if corta else None)
+    guardado = _audios.get(clave) or (_de_la_carpeta(nombre) if corta else None)
     if guardado:
         return guardado
 
@@ -143,7 +179,7 @@ def sintetizar(texto, idioma='es', lenta=False):
 
     audio = respuesta.content
     if len(audio) <= MAX_GUARDADO:
-        cache.set(clave, audio, GUARDAR_SEGUNDOS)
+        _audios.set(clave, audio, GUARDAR_SEGUNDOS)
         if corta:
             _a_la_carpeta(nombre, audio)
     return audio

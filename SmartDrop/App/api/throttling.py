@@ -5,12 +5,14 @@ usuario para peticiones con token. Las vistas sensibles (login, registro, renova
 de la válvula y creación de reportes) agregan límites más estrictos.
 Los valores se pueden cambiar con RATELIMIT_OVERRIDES (ver App/ratelimit.py).
 """
+from django.core.cache import caches
 from rest_framework.throttling import SimpleRateThrottle
 
 from ..ratelimit import client_ip, enabled, rate_for
 
 
 class _BaseThrottle(SimpleRateThrottle):
+    cache = caches['limites']  # la misma caché que App/seguridad.py y App/ratelimit.py
     default_rate = None
     methods = None  # None = todos los métodos
 

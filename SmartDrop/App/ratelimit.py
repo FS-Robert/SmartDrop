@@ -18,10 +18,13 @@ import re
 import time
 
 from django.conf import settings
-from django.core.cache import cache
+from django.core.cache import caches
 from django.http import HttpResponse, JsonResponse
 
 logger = logging.getLogger(__name__)
+# Los contadores van en la caché 'limites' (50 000 entradas): en la de fábrica (300) el tráfico normal los
+# borraba y se reiniciaban los límites diarios de Gotita, sus topes de gasto y la pausa por manipulación.
+cache = caches['limites']
 
 _PERIODOS = {'s': 1, 'm': 60, 'h': 3600, 'd': 86400}
 _RATE_RE = re.compile(r'^\s*(\d+)\s*/\s*([smhd])[a-z]*\s*$', re.IGNORECASE)

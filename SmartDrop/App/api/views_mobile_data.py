@@ -9,7 +9,6 @@ from rest_framework.views import APIView
 from .. import preferencias, queries, supabase_client
 from ..queries import safe_float
 from .permissions import IsAuthenticatedUser
-from .throttling import UserApiThrottle, VincularThrottle
 
 logger = logging.getLogger(__name__)
 

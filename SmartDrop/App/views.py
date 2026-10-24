@@ -1445,33 +1445,6 @@ def _es_json(request):
     return (request.content_type or '').lower() == 'application/json'
 
 
-_aviso_token_dispositivo = {'mostrado': False}
-
-
-def _dispositivo_autorizado(request):
-    """Valida X-Device-Token contra DEVICE_API_TOKEN (comparación en tiempo constante).
-
-    Sin DEVICE_API_TOKEN configurado se aceptan las lecturas (firmware actual) y se avisa una vez en el log.
-    """
-    import hmac
-
-    from django.conf import settings
-
-    esperado = getattr(settings, 'DEVICE_API_TOKEN', '')
-    if not esperado:
-        if not _aviso_token_dispositivo['mostrado']:
-            _aviso_token_dispositivo['mostrado'] = True
-            logger.warning('DEVICE_API_TOKEN no está configurado: /api/lecturas/ acepta lecturas sin autenticar.')
-        return True
-    recibido = request.headers.get('X-Device-Token', '')
-    if not recibido and request.headers.get('Authorization', '').startswith('Device '):
-        recibido = request.headers['Authorization'][len('Device '):]
-    if hmac.compare_digest(recibido.strip().encode('utf-8'), esperado.encode('utf-8')):
-        return True
-    logger.warning('Lectura rechazada: token de dispositivo inválido desde %s', client_ip(request))
-    return False
-
-
 def _user_payload(user):
     return {
         'id': user.id_usuario,

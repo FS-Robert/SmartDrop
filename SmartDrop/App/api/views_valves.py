@@ -1,18 +1,14 @@
 import logging
 
-from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .. import supabase_client, valve_service
 from ..mqtt_service import MqttError, publish_command
-from ..queries import users_by_id
-from ..ratelimit import client_ip
 from ..queries import is_admin, owner_id, users_by_id
-from ..views import _cancel_active_timer, _start_timer_for_valvula, _timer_info_for_valvula
+from ..ratelimit import client_ip
 from .permissions import IsAdministrator, IsAuthenticatedUser
-from .throttling import ValvulaComandoThrottle
 
 
 logger = logging.getLogger(__name__)
@@ -41,7 +37,14 @@ class MobileValvulaEstadoView(APIView):
             return Response({'error': 'No se pudo consultar la válvula.'}, status=status.HTTP_502_BAD_GATEWAY)
         if not rows:
             return Response({'error': 'Válvula no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
-        return Response({**rows[0], 'temporizador_activo': _temporizador(id_valvula)})
+        valvula = rows[0]
+        abierta = valve_service.esta_abierta(valvula.get('estado_actual'))
+        return Response({
+            **valvula,
+            # La app muestra "Abierta desde las …" con este campo.
+            'abierta_desde': valvula.get('ultima_apertura') if abierta else None,
+            'temporizador_activo': valve_service.temporizador_para_app(id_valvula),
+        })
 
 
 class MobileValvulaLogsView(APIView):
@@ -109,14 +112,6 @@ class MobileValvulaLogsView(APIView):
         return Response({'advertencia': None, 'logs': logs})
 
 
-def _temporizador(id_valvula):
-    """Temporizador de apertura en curso (mismo registro que la web), en el formato que lee la app."""
-    info = _timer_info_for_valvula(id_valvula)
-    if not info['timer_activo']:
-        return None
-    return {'duracion_programada': info['duracion_seg'], 'segundos_restantes': info['timer_remaining']}
-
-
 def _duracion(valor):
     """Segundos de apertura temporizada (0 = sin temporizador); mismas reglas que la web (5 a 120 s)."""
     try:
@@ -147,60 +142,27 @@ class MobileValvulaCommandView(APIView):
                 return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         if action not in ('abrir', 'cerrar'):
             return Response({'error': 'Comando inválido.'}, status=status.HTTP_400_BAD_REQUEST)
+        # El mismo servicio que la web: temporizador compartido, "abrir" sin tiempo cancela uno pendiente y
+        # el movimiento queda en log_valvula (quién, cuándo y desde dónde).
         try:
-            rows = supabase_client.select(
-                'valvula',
-                'id_valvula,estado_actual,topic_mqtt_comando',
-                {'id_valvula': f'eq.{id_valvula}', 'limit': '1'},
+            resultado = valve_service.ejecutar_comando(
+                id_valvula, action,
+                duracion_seg=duracion or None,
+                id_usuario=owner_id(request.user),
+                ip=client_ip(request),
+                origen='app',
+                publish=publish_command,
             )
-        except supabase_client.SupabaseError:
-            return Response({'error': 'No se pudo consultar la válvula.'}, status=status.HTTP_502_BAD_GATEWAY)
-        if not rows or not rows[0].get('topic_mqtt_comando'):
+        except valve_service.ValvulaNoEncontrada:
             return Response({'error': 'Válvula no encontrada o sin topic MQTT.'}, status=status.HTTP_404_NOT_FOUND)
-        valvula = rows[0]
-        state = 'abierta' if action == 'abrir' else 'cerrada'
-        cierre_durante_temporizador = action == 'cerrar' and _temporizador(id_valvula) is not None
-        try:
-            if action == 'cerrar':
-                _cancel_active_timer(id_valvula)
-            publish_command(valvula['topic_mqtt_comando'], action)
-            supabase_client.update(
-                'valvula',
-                {
-                    'estado_actual': state,
-                    'ultima_apertura': timezone.now().isoformat() if action == 'abrir' else None,
-                },
-                {'id_valvula': f'eq.{id_valvula}'},
-            )
         except MqttError as exc:
             logger.error('No se pudo enviar el comando %s a la válvula %s: %s', action, id_valvula, exc)
             return Response({'error': 'No se pudo enviar el comando a la válvula.'}, status=status.HTTP_502_BAD_GATEWAY)
         except supabase_client.SupabaseError:
-            return Response({'error': 'El comando se envió, pero no se pudo guardar el estado.'}, status=status.HTTP_502_BAD_GATEWAY)
-
-        if duracion:
-            _start_timer_for_valvula(id_valvula, duracion)
-
-        # Mismo registro que los comandos desde la web: quién, cuándo y desde dónde.
-        razon = None
-        if cierre_durante_temporizador:
-            razon = 'Cierre manual durante temporizador'
-        elif duracion:
-            razon = f'Apertura temporizada de {duracion} segundos'
-        try:
-            supabase_client.insert('log_valvula', {
-                'id_valvula': valvula['id_valvula'],
-                'accion': action,
-                'estado_anterior': valvula.get('estado_actual') or 'desconocida',
-                'estado_nuevo': state,
-                'tipo_activacion': 'temporizado' if duracion else 'manual',
-                'id_usuario': owner_id(request.user),
-                'fecha_hora': timezone.now().isoformat(),
-                'ip_dispositivo': request.META.get('REMOTE_ADDR'),
-                'origen_accion': 'app',
-                'duracion_programada': duracion or None,
-                'razon': razon,
-            })
-        except supabase_client.SupabaseError:
-            logger.error('No se pudo registrar en log_valvula el comando %s de la válvula %s', action, id_valvula)
-        return Response({'ok': True, 'estado_actual': state, 'temporizador_activo': _temporizador(id_valvula)})
+            return Response({'error': 'No se pudo completar el comando. Revisa el estado de la válvula.'},
+                            status=status.HTTP_502_BAD_GATEWAY)
+        return Response({
+            'ok': True,
+            'estado_actual': resultado['estado_nuevo'],
+            'temporizador_activo': valve_service.temporizador_para_app(id_valvula),
+        })

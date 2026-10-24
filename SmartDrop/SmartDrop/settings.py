@@ -135,6 +135,14 @@ CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
         'LOCATION': 'smartdrop',
+        # Con el límite de fábrica (300) Gotita (contexto, avisos, nombres) desplazaba los datos cacheados.
+        'OPTIONS': {'MAX_ENTRIES': 5000},
+    },
+    # Audios de la voz natural de Gotita (hasta ~400 KB cada uno): aparte y con pocos, para acotar la memoria.
+    'gotita_audio': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'smartdrop-gotita-audio',
+        'OPTIONS': {'MAX_ENTRIES': 150},
     },
     # Contadores de los límites de uso (App/seguridad.py), aparte para no desplazar los datos cacheados.
     'limites': {
@@ -351,6 +359,9 @@ RATELIMIT_OVERRIDES = {
 
 # Temporizador de la válvula: cada cuántos segundos se revisa que ninguna apertura temporizada quede abierta
 # (por ejemplo, tras reiniciar el servidor). Ver App/valve_service.py.
+# Solo el servidor lo enciende (deploy/seguridad_env.sh pone VALVE_WATCHDOG_ENABLED=1): un `runserver` con el .env
+# apuntando al Supabase y al MQTT reales cerraría válvulas de producción con sus propios temporizadores.
+VALVE_WATCHDOG_ENABLED = os.environ.get('VALVE_WATCHDOG_ENABLED', '0').strip().lower() in ('1', 'true', 'yes')
 VALVE_WATCHDOG_SECONDS = float(os.environ.get('VALVE_WATCHDOG_SECONDS', '30'))
 VALVE_WATCHDOG_START_DELAY_SECONDS = float(os.environ.get('VALVE_WATCHDOG_START_DELAY_SECONDS', '10'))
 

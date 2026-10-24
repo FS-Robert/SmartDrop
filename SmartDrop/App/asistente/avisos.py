@@ -13,8 +13,8 @@ from types import SimpleNamespace
 from django.core.cache import cache
 
 from .. import preferencias, supabase_client
-from ..queries import run_parallel
-from . import claude, destinos
+from ..queries import owner_id, run_parallel
+from . import claude, destinos, voz
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +41,27 @@ def _clave_cache(aviso, rol, idioma):
     return 'gotita:aviso:' + hashlib.sha256(base.encode('utf-8')).hexdigest()[:40]
 
 
-def con_texto_de_gotita(avisos, rol, idioma):
-    """Le agrega a cada aviso importante la frase corta de Gotita. Si algo falla, los avisos quedan como estaban."""
+def _anotar_para_voz(avisos, user):
+    """Las frases de los avisos que se le mandan a la persona: así puede pedirlas con la voz de Gotita."""
+    if user is None:
+        return avisos
+    textos = []
+    for aviso in avisos:
+        textos.append(aviso.get('gotita'))
+        textos.append('. '.join(str(parte) for parte in (aviso.get('titulo'), aviso.get('mensaje')) if parte))
+    voz.permitir(str(owner_id(user) or 'anonimo'), textos)
+    return avisos
+
+
+def con_texto_de_gotita(avisos, rol, idioma, para=None):
+    """Le agrega a cada aviso importante la frase corta de Gotita. Si algo falla, los avisos quedan como estaban.
+
+    `para` es la persona que va a recibir los avisos: sus frases quedan permitidas en la voz natural.
+    """
+    return _anotar_para_voz(_con_texto(avisos, rol, idioma), para)
+
+
+def _con_texto(avisos, rol, idioma):
     pendientes = []
     for aviso in avisos:
         if not _amerita(aviso):
@@ -85,7 +104,9 @@ def aviso_de_fuga(alerta):
         'categoria': 'fugas',
         'estado': 'nueva',
         'titulo': f'Posible fuga en {nic}{porcentaje}',
-        'mensaje': alerta.get('resumen') or alerta.get('mensaje') or '',
+        # Nunca el `mensaje` completo de la alerta: trae el nombre y el teléfono del titular, y este aviso se le
+        # manda a Claude para redactar la frase de Gotita.
+        'mensaje': alerta.get('resumen') or 'El motor de predicción detectó un consumo fuera de lo normal.',
         'detalle': ', '.join(filter(None, [alerta.get('zona'), alerta.get('inicio')])),
         'fecha': alerta.get('fecha'),
         'destino': 'prediccion_fugas',
@@ -95,7 +116,7 @@ def aviso_de_fuga(alerta):
 def agregar_a_alertas_de_fuga(alertas, user):
     """Agrega la frase de Gotita a las alertas de fuga que el admin aún no ha leído."""
     nuevas = [a for a in alertas if not a.get('leida')][:MAX_FUGAS]
-    avisos = con_texto_de_gotita([aviso_de_fuga(a) for a in nuevas], destinos.ADMIN, idioma_de(user))
+    avisos = con_texto_de_gotita([aviso_de_fuga(a) for a in nuevas], destinos.ADMIN, idioma_de(user), para=user)
     for alerta, aviso in zip(nuevas, avisos):
         if aviso.get('gotita'):
             alerta['gotita'] = aviso['gotita']
@@ -128,4 +149,4 @@ def avisos_para(user):
     except supabase_client.SupabaseError:
         logger.warning('Gotita: no se pudieron leer los avisos', exc_info=True)
         return []
-    return con_texto_de_gotita(avisos, rol, idioma)
+    return con_texto_de_gotita(avisos, rol, idioma, para=user)

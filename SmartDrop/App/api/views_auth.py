@@ -13,14 +13,6 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from .. import seguridad, supabase_client
 from ..forms import errores_contrasena
 from .permissions import IsAuthenticatedUser
-from .throttling import (
-    AnonApiThrottle,
-    LoginCuentaThrottle,
-    LoginIpThrottle,
-    RefreshThrottle,
-    RegistroThrottle,
-    UserApiThrottle,
-)
 
 logger = logging.getLogger(__name__)
 

@@ -27,6 +27,7 @@ from ..views_reportes import (
     _usuarios_por_id,
 )
 from .permissions import IsAuthenticatedUser
+from ..seguridad import LimiteAPI
 from .throttling import ReportesEscrituraThrottle, ReportesMensajesThrottle, UserApiThrottle
 
 logger = logging.getLogger(__name__)
@@ -85,7 +86,8 @@ def _es_verdadero(valor):
 class MobileReportesView(APIView):
     """GET: mis reportes (o todos los reportes si es admin). POST: crear reporte (multipart con adjuntos)."""
     permission_classes = [IsAuthenticatedUser]
-    throttle_classes = [UserApiThrottle, ReportesEscrituraThrottle]
+    # Declarar throttle_classes reemplaza los de settings: LimiteAPI se repite para que siga contando limite_alcance.
+    throttle_classes = [LimiteAPI, UserApiThrottle, ReportesEscrituraThrottle]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
     limite_alcance = 'reportes'
     limite_por = 'usuario'
@@ -149,7 +151,7 @@ class MobileReportesView(APIView):
 class MobileReporteDetalleView(APIView):
     """GET: detalle con adjuntos y mensajes. POST: enviar mensaje de chat."""
     permission_classes = [IsAuthenticatedUser]
-    throttle_classes = [UserApiThrottle, ReportesMensajesThrottle]
+    throttle_classes = [LimiteAPI, UserApiThrottle, ReportesMensajesThrottle]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
     limite_alcance = 'mensajes'
     limite_por = 'usuario'
@@ -226,7 +228,7 @@ class MobileReporteDetalleView(APIView):
 class MobileReporteAdjuntarView(APIView):
     """POST multipart: agregar evidencias a un reporte propio."""
     permission_classes = [IsAuthenticatedUser]
-    throttle_classes = [UserApiThrottle, ReportesEscrituraThrottle]
+    throttle_classes = [LimiteAPI, UserApiThrottle, ReportesEscrituraThrottle]
     parser_classes = [MultiPartParser, FormParser]
     limite_alcance = 'adjuntos'
     limite_por = 'usuario'

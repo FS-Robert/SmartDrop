@@ -12,6 +12,7 @@ from datetime import datetime, timezone as dt_timezone
 from types import SimpleNamespace
 
 from django.core.cache import cache
+from django.db import close_old_connections
 from django.utils import timezone
 
 from .. import preferencias, supabase_client
@@ -156,13 +157,24 @@ def _datos_admin():
     }
 
 
+def _con_conexion_fresca(funcion, *args):
+    """Los hilos del pool no pasan por el ciclo de una petición: sin esto, una conexión a la base que el servidor
+    cerró por inactividad (Postgres) se quedaba rota y los datos del admin salían vacíos hasta reiniciar."""
+    close_old_connections()
+    try:
+        return funcion(*args)
+    finally:
+        close_old_connections()
+
+
 def datos_de(user, rol):
     """Datos para Gotita, o None si no se pudieron leer a tiempo."""
     clave = f'gotita:datos:{rol}:{owner_id(user)}'
     datos = cache.get(clave)
     if datos is not None:
         return datos
-    tarea = _pool.submit(_datos_admin if rol == destinos.ADMIN else _datos_usuario, *([] if rol == destinos.ADMIN else [user]))
+    tarea = _pool.submit(_con_conexion_fresca, _datos_admin if rol == destinos.ADMIN else _datos_usuario,
+                         *([] if rol == destinos.ADMIN else [user]))
     try:
         datos = tarea.result(timeout=TIEMPO_MAXIMO)
     except FuturesTimeout:

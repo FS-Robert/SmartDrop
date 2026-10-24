@@ -103,8 +103,15 @@ _PARAMS_RESERVADOS = {'select', 'order', 'limit', 'offset', 'or', 'and', 'not.or
 _CONTROL = re.compile(r'[\x00-\x1f\x7f]')
 
 
-class FiltroInvalido(ValueError):
-    """Un parámetro de consulta no tiene un formato permitido (posible intento de inyección)."""
+class FiltroInvalido(SupabaseError, ValueError):
+    """Un parámetro de consulta no tiene un formato permitido (posible intento de inyección).
+
+    Es un SupabaseError: las vistas que ya atrapan SupabaseError responden con su mensaje de error en vez de
+    un 500, y el motivo técnico queda solo en `detalle` (no se le muestra al usuario).
+    """
+
+    def __init__(self, detalle):
+        super().__init__(status_code=400, detalle=detalle)
 
 
 def _validar_tabla(table: str) -> str:
@@ -125,7 +132,8 @@ def _validar_params(params: dict | None) -> dict | None:
         if isinstance(valor, bool) or not isinstance(valor, (str, int, float)):
             raise FiltroInvalido(f'Valor no permitido para {clave!r}')
         texto = str(valor)
-        if _CONTROL.search(texto) or len(texto) > 4000:
+        # 8000: un filtro in.(...) con cientos de ids (por ejemplo las alertas de una persona) cabe holgado.
+        if _CONTROL.search(texto) or len(texto) > 8000:
             raise FiltroInvalido(f'Valor no permitido para {clave!r}')
         if clave in ('limit', 'offset') and not texto.isdigit():
             raise FiltroInvalido(f'{clave} debe ser un número entero')

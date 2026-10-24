@@ -204,6 +204,15 @@
   }
   const local = window.localStorage;
   const sesion = window.sessionStorage;
+  // Lo guardado en este navegador es de quien inició sesión. Si entra otra cuenta (una computadora compartida),
+  // se borran la conversación y los ajustes de la anterior, incluida la escucha con "Oye Gotita".
+  [local, sesion].forEach((almacen) => {
+    if (leer(almacen, 'usuario', null) === USUARIO) return;
+    try {
+      Object.keys(almacen).filter((clave) => clave.startsWith('gotita:')).forEach((clave) => almacen.removeItem(clave));
+    } catch (e) { /* sin almacenamiento */ }
+    guardar(almacen, 'usuario', USUARIO);
+  });
 
   const ajustes = {
     modo: leer(local, 'modo', 'sencillo'),
@@ -391,23 +400,20 @@
     return document.getElementById('contenido') || document.querySelector('main') || document.body;
   }
 
+  // Pantallas con datos personales o de otras personas (perfil, NIC y titular, paneles del admin, fugas con
+  // nombres y direcciones, buscador, detalle de un reporte): su texto y su foto nunca se le mandan a Claude.
+  const PANTALLAS_PRIVADAS = new Set(['perfil', 'vincular_vivienda', 'panel', 'valvulas', 'prediccion_fugas',
+    'reportes_admin', 'buscar']);
+  function pantallaPrivada() {
+    return PANTALLAS_PRIVADAS.has(pantallaId()) || /^\/(reportes|admin-reportes|sensor|usuario)\//.test(window.location.pathname);
+  }
+
   function textoVisible() {
-    // Todo el texto de la página, también lo que está más abajo (sin el chat de Gotita).
+    // Todo el texto de la página, también lo que está más abajo (sin el chat de Gotita). Lo que la persona
+    // escribe en los campos no se manda (el innerText no lo trae).
     const principal = zonaPrincipal();
     let texto = principal.innerText || '';
     if (principal.contains(raiz)) texto = texto.replace(raiz.innerText || '', '');
-    // Lo que la persona escribió o eligió en los campos (el innerText no lo trae). Nunca contraseñas.
-    const campos = [];
-    principal.querySelectorAll('select, input:not([type=password]):not([type=hidden]):not([type=file])').forEach((campo) => {
-      if (raiz.contains(campo) || !campo.getClientRects().length) return;
-      let valor = '';
-      if (campo.tagName === 'SELECT') valor = campo.selectedOptions[0] ? campo.selectedOptions[0].text : '';
-      else if (campo.type === 'checkbox' || campo.type === 'radio') valor = campo.checked ? '✓' : '';
-      else valor = campo.value;
-      const etiqueta = (campo.labels && campo.labels[0] ? campo.labels[0].innerText : campo.getAttribute('aria-label') || campo.name || '').trim();
-      if (valor && etiqueta) campos.push(etiqueta.slice(0, 60) + ': ' + String(valor).slice(0, 80));
-    });
-    if (campos.length) texto += '\nCampos: ' + campos.slice(0, 20).join(' | ');
     return texto.replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n').trim().slice(0, MAX_PANTALLA);
   }
 
@@ -448,11 +454,13 @@
     window.setTimeout(() => destino.classList.remove('gotita-resaltado'), 3500);
   }
 
-  function leerPantalla() {
+  // El texto de la pantalla solo va cuando la pregunta es sobre lo que se ve (y nunca en pantallas privadas);
+  // para lo demás Gotita usa los datos de la persona que le da el servidor.
+  function leerPantalla(conTexto) {
     return {
       id: pantallaId(),
       titulo: (document.title || '').replace(/^SmartDrop\s*[–-]\s*/, '').slice(0, 80),
-      texto: textoVisible(),
+      texto: conTexto && !pantallaPrivada() ? textoVisible() : '',
       secciones: recogerSecciones(),
     };
   }
@@ -464,6 +472,8 @@
       cargaHtml2canvas = new Promise((resolve, reject) => {
         const s = document.createElement('script');
         s.src = HTML2CANVAS;
+        // Si el CDN entregara otro archivo, el navegador no lo ejecuta (integridad del archivo publicado en npm).
+        s.integrity = 'sha384-QbVSYhU9faw2C7l92rI0Dmke8Yod6KaOixC1kkbO/dGnMDKtbWhwcxSSOkmHXWom';
         s.crossOrigin = 'anonymous';
         s.referrerPolicy = 'no-referrer';
         s.onload = () => resolve(window.html2canvas);
@@ -1276,11 +1286,11 @@
     ponerEstado('pensando');
     mostrarEscribiendo(true);
 
-    const cuerpo = { texto: pregunta, modo: ajustes.modo, idioma: ajustes.idioma, pantalla: leerPantalla(), historial: historial };
+    const cuerpo = { texto: pregunta, modo: ajustes.modo, idioma: ajustes.idioma, pantalla: leerPantalla(conCaptura), historial: historial };
     cuerpo.conversacion = conversacionId; // vacío = conversación nueva
     if (soloVoz) cuerpo.por_voz = true;
     if (opciones && (opciones.idiomaHablado === 'es' || opciones.idiomaHablado === 'en')) cuerpo.idioma_hablado = opciones.idiomaHablado;
-    if (conCaptura) {
+    if (conCaptura && !pantallaPrivada()) {
       const captura = await capturarPantalla();
       if (captura) cuerpo.captura = captura;
     }
