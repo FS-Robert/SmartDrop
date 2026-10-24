@@ -1,0 +1,2178 @@
+From 91cf111c7ec539945427882c7b7f9b76b824887f Mon Sep 17 00:00:00 2001
+From: Robert <robertoantoniolopezramirez1@gmail.com>
+Date: Thu, 22 Oct 2026 08:40:51 +0000
+Subject: [PATCH 1/2] Seguridad de la app y evidencias agregadas a un reporte
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Sesión
+- Los tokens se guardan cifrados (AES-GCM con una clave del almacén de
+  claves de Android) y ya no van en las copias de seguridad ni en la
+  transferencia entre teléfonos (allowBackup=false y reglas de exclusión).
+- Cerrar sesión anula el token en el servidor (auth/logout/) y corta el
+  WebSocket, en las tres pantallas que cierran sesión.
+- Si el servidor rechaza la renovación (cuenta desactivada o sesión
+  anulada), la app vuelve al inicio de sesión; una caída pasajera (503,
+  429 o sin red) ya no cierra la sesión.
+
+Red y datos
+- Solo HTTPS en release; HTTP únicamente en el build de depuración (LAN).
+- El build falla si falta smartdropReleaseApiHost, en vez de apuntar a
+  api.smartdrop.com.
+- Gson 2.11.0 (la 2.8.5 que traía converter-gson tiene CVE-2022-25647).
+- Los errores muestran el mensaje del servidor o uno fijo, nunca el cuerpo
+  crudo; login y registro muestran el motivo real (contraseña débil, límite
+  de intentos…).
+- Los avisos en la pantalla bloqueada ya no muestran la dirección.
+
+Reportes
+- Lo que se publica desde el muro comunitario se marca como comunitario;
+  el resto queda privado.
+- Las evidencias se suben con su extensión (antes sin ella el servidor las
+  rechazaba y la app igual decía "Evidencia agregada"); formatos no
+  permitidos se avisan al elegirlos; las copias en caché se borran y ya no
+  se guardan permisos permanentes sobre los archivos elegidos.
+---
+ app/build.gradle.kts                          |   9 +-
+ .../debug/res/xml/network_security_config.xml |   7 +-
+ app/src/main/AndroidManifest.xml              |   2 +-
+ .../java/com/example/smartdrop/Adjunto.java   |  24 +++
+ .../smartdrop/AdminDashboardActivity.java     |  12 +-
+ .../java/com/example/smartdrop/ApiClient.java |  33 +--
+ .../com/example/smartdrop/ApiService.java     |   4 +
+ .../com/example/smartdrop/AvisosFuga.java     |  10 +-
+ .../com/example/smartdrop/AvisosUsuario.java  |  11 +-
+ .../example/smartdrop/ComunidadActivity.java  |   5 +-
+ .../java/com/example/smartdrop/ErrorApi.java  |  20 +-
+ .../java/com/example/smartdrop/Gotita.java    |  18 +-
+ .../com/example/smartdrop/GotitaVista.java    |   5 +-
+ .../com/example/smartdrop/InicioActivity.java |   2 +-
+ .../com/example/smartdrop/MainActivity.java   |   9 +-
+ .../com/example/smartdrop/PerfilActivity.java |   2 +-
+ .../com/example/smartdrop/RealtimeClient.java |   5 +-
+ .../example/smartdrop/RegisterActivity.java   |   6 +-
+ .../smartdrop/ReportarProblemaActivity.java   |  65 ++++--
+ .../smartdrop/ReporteDetalleActivity.java     |  53 ++++-
+ .../java/com/example/smartdrop/Sesion.java    | 192 +++++++++++++++++-
+ app/src/main/res/xml/backup_rules.xml         |   9 +-
+ .../main/res/xml/data_extraction_rules.xml    |  10 +-
+ .../main/res/xml/network_security_config.xml  |   9 +-
+ .../com/example/smartdrop/ErrorApiTest.java   |  22 ++
+ 25 files changed, 460 insertions(+), 84 deletions(-)
+
+diff --git a/app/build.gradle.kts b/app/build.gradle.kts
+index 34d54d1..fcbf48a 100644
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -20,7 +20,12 @@ android {
+ 
+     val apiHost = providers.gradleProperty("smartdropApiHost").orElse("10.0.2.2").get()
+     // Dominio público del servidor (solo el nombre: sin https://, puerto ni "/").
+-    val releaseApiHost = providers.gradleProperty("smartdropReleaseApiHost").orElse("api.smartdrop.com").get()
++    // Sin valor por defecto: si falta, el build falla en vez de apuntar a un dominio ajeno.
++    val releaseApiHost = providers.gradleProperty("smartdropReleaseApiHost").orNull?.trim()
++        ?.takeIf { it.isNotEmpty() }
++        ?: throw GradleException(
++            "Falta smartdropReleaseApiHost en gradle.properties: el dominio del servidor (p. ej. smartdrop-ugb.duckdns.org)."
++        )
+     signingConfigs {
+         if (keystoreProps.containsKey("storeFile")) {
+             create("release") {
+@@ -76,6 +81,8 @@ dependencies {
+     androidTestImplementation(libs.espresso.core)
+     implementation("com.squareup.retrofit2:retrofit:2.9.0")
+     implementation ("com.squareup.retrofit2:converter-gson:2.9.0")
++    // converter-gson trae Gson 2.8.5 (CVE-2022-25647); se fuerza una versión corregida.
++    implementation("com.google.code.gson:gson:2.11.0")
+     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+     implementation("com.github.PhilJay:MPAndroidChart:v3.1.0")
+     implementation("com.github.bumptech.glide:glide:4.16.0")
+diff --git a/app/src/debug/res/xml/network_security_config.xml b/app/src/debug/res/xml/network_security_config.xml
+index 1b74327..daea5dc 100644
+--- a/app/src/debug/res/xml/network_security_config.xml
++++ b/app/src/debug/res/xml/network_security_config.xml
+@@ -1,5 +1,8 @@
+-<?xml version="1.0" encoding="utf-8"?>
+-<!-- Solo para pruebas (debug): permite hablar con el servidor de la PC en la red local sin HTTPS. -->
++<?xml version="1.0" encoding="utf-8"?><!--
++   Solo para builds de depuración: el servidor de desarrollo corre en la LAN
++   (http://<IP>:8000 y ws://), así que aquí se permite tráfico sin cifrar.
++   El APK release usa src/main/res/xml/network_security_config.xml (solo HTTPS).
++-->
+ <network-security-config>
+     <base-config cleartextTrafficPermitted="true">
+         <trust-anchors>
+diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
+index f84bc8c..ab3b269 100644
+--- a/app/src/main/AndroidManifest.xml
++++ b/app/src/main/AndroidManifest.xml
+@@ -23,11 +23,11 @@
+         android:fullBackupContent="@xml/backup_rules"
+         android:icon="@mipmap/ic_launcher"
+         android:label="@string/app_name"
++        android:networkSecurityConfig="@xml/network_security_config"
+         android:roundIcon="@mipmap/ic_launcher_round"
+         android:supportsRtl="true"
+         android:theme="@style/Theme.SmartDrop"
+         android:usesCleartextTraffic="${usesCleartextTraffic}"
+-        android:networkSecurityConfig="@xml/network_security_config"
+         tools:targetApi="31">
+         <meta-data
+             android:name="preloaded_fonts"
+diff --git a/app/src/main/java/com/example/smartdrop/Adjunto.java b/app/src/main/java/com/example/smartdrop/Adjunto.java
+index 770f85d..cec6722 100644
+--- a/app/src/main/java/com/example/smartdrop/Adjunto.java
++++ b/app/src/main/java/com/example/smartdrop/Adjunto.java
+@@ -1,8 +1,21 @@
+ package com.example.smartdrop;
+ 
++import android.webkit.MimeTypeMap;
++
+ import com.google.gson.annotations.SerializedName;
+ 
++import java.util.Arrays;
++import java.util.HashSet;
++import java.util.Locale;
++import java.util.Set;
++
+ public class Adjunto {
++    // Formatos de evidencia que acepta el servidor; los reconoce por la extensión del nombre del archivo.
++    private static final Set<String> EXTENSIONES = new HashSet<>(Arrays.asList(
++            "jpg", "jpeg", "png", "gif", "webp", "mp4", "webm", "mov", "3gp"));
++    public static final String FORMATO_NO_PERMITIDO =
++            "Formato no permitido. Usa una foto (JPG, PNG, GIF, WEBP) o un video (MP4, WEBM, MOV, 3GP).";
++
+     @SerializedName("id_adjunto") private int idAdjunto;
+     @SerializedName("url") private String url;
+     @SerializedName("tipo") private String tipo;
+@@ -13,4 +26,15 @@ public class Adjunto {
+     public String getTipo() { return tipo; }
+     public String getNombre() { return nombre; }
+     public boolean esVideo() { return "video".equals(tipo); }
++
++    /** Extensión (sin punto) para subir un archivo de este tipo MIME, o null si el servidor no la acepta. */
++    public static String extensionPara(String mime) {
++        if (mime == null) return null;
++        mime = mime.toLowerCase(Locale.ROOT);
++        if ("image/jpeg".equals(mime)) return "jpg";
++        String extension = MimeTypeMap.getSingleton().getExtensionFromMimeType(mime);
++        if (extension == null) return null;
++        extension = extension.toLowerCase(Locale.ROOT);
++        return EXTENSIONES.contains(extension) ? extension : null;
++    }
+ }
+diff --git a/app/src/main/java/com/example/smartdrop/AdminDashboardActivity.java b/app/src/main/java/com/example/smartdrop/AdminDashboardActivity.java
+index cfdaae6..a4c14f6 100644
+--- a/app/src/main/java/com/example/smartdrop/AdminDashboardActivity.java
++++ b/app/src/main/java/com/example/smartdrop/AdminDashboardActivity.java
+@@ -287,11 +287,11 @@ public class AdminDashboardActivity extends BaseActivity {
+                     } else {
+                         adapterLogs.setLogs(null);
+                     }
+-                } else {
+-                    try {
+-                        String err = response.errorBody() != null ? response.errorBody().string() : "Error " + response.code();
+-                        Toast.makeText(AdminDashboardActivity.this, "Error al obtener historial: " + err, Toast.LENGTH_SHORT).show();
+-                    } catch (Exception ignored) {}
++                } else if (response.code() != ErrorApi.DEMASIADAS_SOLICITUDES) {
++                    // Con 429 no se insiste con un aviso: el siguiente refresco lo vuelve a intentar.
++                    Toast.makeText(AdminDashboardActivity.this,
++                            ErrorApi.de(response, "No se pudo obtener el historial de la válvula."),
++                            Toast.LENGTH_SHORT).show();
+                 }
+             }
+ 
+@@ -326,7 +326,7 @@ public class AdminDashboardActivity extends BaseActivity {
+     private void cerrarSesion() {
+         AvisosUsuario.cancelar(this);
+         AvisosFuga.cancelar(this);
+-        Sesion.limpiar(this);
++        Sesion.cerrar(this);
+         Intent intent = new Intent(AdminDashboardActivity.this, MainActivity.class);
+         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+         startActivity(intent);
+diff --git a/app/src/main/java/com/example/smartdrop/ApiClient.java b/app/src/main/java/com/example/smartdrop/ApiClient.java
+index 48f5c64..711d9e3 100644
+--- a/app/src/main/java/com/example/smartdrop/ApiClient.java
++++ b/app/src/main/java/com/example/smartdrop/ApiClient.java
+@@ -1,7 +1,6 @@
+ package com.example.smartdrop;
+ 
+ import android.content.Context;
+-import android.content.SharedPreferences;
+ 
+ import com.google.gson.JsonObject;
+ import com.google.gson.JsonParser;
+@@ -60,11 +59,10 @@ public class ApiClient {
+ 
+     public static Retrofit getClientAutenticado(Context context) {
+         if (retrofitAutenticado == null) {
+-            SharedPreferences prefs = context.getApplicationContext()
+-                    .getSharedPreferences("sesion", Context.MODE_PRIVATE);
++            Context app = context.getApplicationContext();
+ 
+             Interceptor authInterceptor = chain -> {
+-                String token = prefs.getString("access_token", "");
++                String token = Sesion.accessToken(app);
+                 Request original = chain.request();
+                 Request nuevo = original.newBuilder()
+                         .addHeader("Authorization", "Bearer " + token)
+@@ -76,7 +74,7 @@ public class ApiClient {
+             OkHttpClient client = new OkHttpClient.Builder()
+                     .readTimeout(60, TimeUnit.SECONDS)
+                     .addInterceptor(authInterceptor)
+-                    .authenticator(new TokenAuthenticator(prefs))
++                    .authenticator(new TokenAuthenticator(app))
+                     .build();
+             httpAutenticado = client;
+ 
+@@ -88,21 +86,22 @@ public class ApiClient {
+         }
+         return retrofitAutenticado;
+     }
++
+     /** Renueva el token de acceso con el token de renovación cuando el servidor responde 401. */
+     private static class TokenAuthenticator implements Authenticator {
+-        private final SharedPreferences prefs;
++        private final Context app;
+ 
+-        TokenAuthenticator(SharedPreferences prefs) {
+-            this.prefs = prefs;
++        TokenAuthenticator(Context app) {
++            this.app = app;
+         }
+ 
+         @Override
+         public synchronized Request authenticate(Route route, Response response) throws IOException {
+             if (responseCount(response) >= 2) return null;
+-            String refresh = prefs.getString("refresh_token", "");
++            String refresh = Sesion.refreshToken(app);
+             if (refresh.isEmpty()) return null;
+ 
+-            String actual = prefs.getString("access_token", "");
++            String actual = Sesion.accessToken(app);
+             String usado = response.request().header("Authorization");
+             if (usado != null && !usado.equals("Bearer " + actual)) {
+                 // Otra petición ya renovó el token mientras esta esperaba.
+@@ -111,10 +110,14 @@ public class ApiClient {
+ 
+             String nuevo = renovar(refresh);
+             if (nuevo == null) return null;
+-            prefs.edit().putString("access_token", nuevo).apply();
++            Sesion.guardarAccess(app, nuevo);
+             return response.request().newBuilder().header("Authorization", "Bearer " + nuevo).build();
+         }
+ 
++        /**
++         * Pide un token de acceso nuevo; null si no se pudo. Solo un 401 cierra la sesión: un 503 (base de
++         * datos caída), un 429 o la falta de red son pasajeros y la sesión se conserva.
++         */
+         private String renovar(String refresh) {
+             JsonObject cuerpo = new JsonObject();
+             cuerpo.addProperty("refresh", refresh);
+@@ -123,8 +126,14 @@ public class ApiClient {
+                     .post(RequestBody.create(cuerpo.toString(), MediaType.parse("application/json")))
+                     .build();
+             try (Response respuesta = new OkHttpClient().newCall(peticion).execute()) {
++                if (respuesta.code() == 401) {
++                    // Token vencido, cerrado o cuenta desactivada. Si mientras tanto se inició otra
++                    // sesión (otro token de renovación), esa no se toca.
++                    if (refresh.equals(Sesion.refreshToken(app))) Sesion.expirar(app);
++                    return null;
++                }
+                 if (!respuesta.isSuccessful() || respuesta.body() == null) return null;
+-                JsonObject json = new JsonParser().parse(respuesta.body().string()).getAsJsonObject();
++                JsonObject json = JsonParser.parseString(respuesta.body().string()).getAsJsonObject();
+                 return json.has("access") ? json.get("access").getAsString() : null;
+             } catch (IOException | RuntimeException e) {
+                 return null;
+diff --git a/app/src/main/java/com/example/smartdrop/ApiService.java b/app/src/main/java/com/example/smartdrop/ApiService.java
+index b1b36e0..aa0fd03 100644
+--- a/app/src/main/java/com/example/smartdrop/ApiService.java
++++ b/app/src/main/java/com/example/smartdrop/ApiService.java
+@@ -25,6 +25,10 @@ public interface ApiService {
+     @POST("auth/login/")
+     Call<LoginResponse> loginUsuario(@Body LoginRequest request);
+ 
++    // Invalida en el servidor el token de renovación ({"refresh": ...}); siempre responde 200.
++    @POST("auth/logout/")
++    Call<ResponseBody> cerrarSesion(@Body Map<String, String> cuerpo);
++
+     @GET("api/graficas/")
+     Call<GraficasResponse> obtenerGraficas(
+             @Query("parametros") String parametros,
+diff --git a/app/src/main/java/com/example/smartdrop/AvisosFuga.java b/app/src/main/java/com/example/smartdrop/AvisosFuga.java
+index 777452d..7a789d6 100644
+--- a/app/src/main/java/com/example/smartdrop/AvisosFuga.java
++++ b/app/src/main/java/com/example/smartdrop/AvisosFuga.java
+@@ -55,7 +55,7 @@ public final class AvisosFuga {
+     /** True si hay una sesión de administrador guardada en este dispositivo. */
+     public static boolean esAdminConSesion(Context context) {
+         SharedPreferences sesion = context.getApplicationContext().getSharedPreferences("sesion", Context.MODE_PRIVATE);
+-        return sesion.getInt("id_rol", 0) == 2 && !sesion.getString("access_token", "").isEmpty();
++        return sesion.getInt("id_rol", 0) == 2 && Sesion.activa(context);
+     }
+ 
+     /** Pide el permiso de notificaciones (Android 13+) la primera vez que el admin abre su panel. */
+@@ -183,12 +183,20 @@ public final class AvisosFuga {
+         PendingIntent abrir = PendingIntent.getActivity(
+                 app, id, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+ 
++        // En la pantalla de bloqueo solo se ve un aviso genérico: el texto completo (y la frase de Gotita)
++        // lleva la dirección de la vivienda.
++        NotificationCompat.Builder publica = new NotificationCompat.Builder(app, CANAL)
++                .setSmallIcon(R.drawable.ic_warning)
++                .setContentTitle("SmartDrop")
++                .setContentText("Tienes un aviso nuevo");
+         NotificationCompat.Builder builder = new NotificationCompat.Builder(app, CANAL)
+                 .setSmallIcon(R.drawable.ic_warning)
+                 .setContentTitle(titulo(alerta))
+                 .setContentText(resumen(alerta))
+                 .setStyle(new NotificationCompat.BigTextStyle().bigText(detalle(alerta)))
+                 .setPriority(NotificationCompat.PRIORITY_HIGH)
++                .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
++                .setPublicVersion(publica.build())
+                 .setAutoCancel(true)
+                 .setContentIntent(abrir);
+         NotificationManagerCompat.from(app).notify(id, builder.build());
+diff --git a/app/src/main/java/com/example/smartdrop/AvisosUsuario.java b/app/src/main/java/com/example/smartdrop/AvisosUsuario.java
+index 843f31b..8aa373a 100644
+--- a/app/src/main/java/com/example/smartdrop/AvisosUsuario.java
++++ b/app/src/main/java/com/example/smartdrop/AvisosUsuario.java
+@@ -50,8 +50,7 @@ public final class AvisosUsuario {
+     private AvisosUsuario() { }
+ 
+     static boolean tieneSesion(Context context) {
+-        SharedPreferences sesion = context.getApplicationContext().getSharedPreferences("sesion", Context.MODE_PRIVATE);
+-        return !sesion.getString("access_token", "").isEmpty();
++        return Sesion.activa(context);
+     }
+ 
+     /** Pide el permiso de notificaciones (Android 13+) y programa la revisión en segundo plano. */
+@@ -178,12 +177,20 @@ public final class AvisosUsuario {
+         // Si Gotita redactó el aviso, se usa su frase (más clara); si no, el mensaje de siempre.
+         String mensaje = aviso.gotita != null && !aviso.gotita.isEmpty() ? aviso.gotita
+                 : (aviso.mensaje == null ? "" : aviso.mensaje);
++        // En la pantalla de bloqueo solo se ve un aviso genérico: el mensaje (o la frase de Gotita)
++        // puede incluir la dirección.
++        NotificationCompat.Builder publica = new NotificationCompat.Builder(app, CANAL)
++                .setSmallIcon(R.drawable.ic_warning)
++                .setContentTitle("SmartDrop")
++                .setContentText("Tienes un aviso nuevo");
+         NotificationCompat.Builder builder = new NotificationCompat.Builder(app, CANAL)
+                 .setSmallIcon(R.drawable.ic_warning)
+                 .setContentTitle(aviso.titulo == null ? "SmartDrop" : aviso.titulo)
+                 .setContentText(mensaje)
+                 .setStyle(new NotificationCompat.BigTextStyle().bigText(mensaje))
+                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
++                .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
++                .setPublicVersion(publica.build())
+                 .setAutoCancel(true)
+                 .setContentIntent(abrir);
+         NotificationManagerCompat.from(app).notify(id, builder.build());
+diff --git a/app/src/main/java/com/example/smartdrop/ComunidadActivity.java b/app/src/main/java/com/example/smartdrop/ComunidadActivity.java
+index 2e5ffef..cfa4353 100644
+--- a/app/src/main/java/com/example/smartdrop/ComunidadActivity.java
++++ b/app/src/main/java/com/example/smartdrop/ComunidadActivity.java
+@@ -43,8 +43,9 @@ public class ComunidadActivity extends BaseActivity {
+         }
+ 
+         if (btnReportar != null) {
+-            btnReportar.setOnClickListener(v ->
+-                    startActivity(new Intent(this, ReportarProblemaActivity.class)));
++            // Solo los reportes hechos desde el muro se publican en la comunidad; los demás son privados.
++            btnReportar.setOnClickListener(v -> startActivity(
++                    new Intent(this, ReportarProblemaActivity.class).putExtra("comunitario", true)));
+         }
+ 
+         adapter = new ReportesAdapter(reporte -> {
+diff --git a/app/src/main/java/com/example/smartdrop/ErrorApi.java b/app/src/main/java/com/example/smartdrop/ErrorApi.java
+index 7504bc5..2b56728 100644
+--- a/app/src/main/java/com/example/smartdrop/ErrorApi.java
++++ b/app/src/main/java/com/example/smartdrop/ErrorApi.java
+@@ -9,10 +9,14 @@ import com.google.gson.JsonParser;
+  *
+  * El backend responde {"error": "..."} (o {"detail": "..."} en errores de DRF). Con 429 el servidor
+  * limitó las peticiones (rate limiting): se muestra su mensaje ("Espera N segundos...").
++ * Nunca se muestra el cuerpo crudo: solo el texto de esos campos, y si es demasiado largo (una traza o
++ * una página de error) se usa el mensaje genérico.
+  */
+ final class ErrorApi {
+ 
+     static final int DEMASIADAS_SOLICITUDES = 429;
++    /** Un mensaje pensado para el usuario cabe de sobra; más largo ya no es un mensaje. */
++    static final int LARGO_MAXIMO = 300;
+ 
+     private ErrorApi() { }
+ 
+@@ -38,15 +42,13 @@ final class ErrorApi {
+     static String mensajeDelCuerpo(String cuerpo) {
+         if (cuerpo == null || cuerpo.trim().isEmpty()) return null;
+         try {
+-            // converter-gson 2.9.0 trae Gson 2.8.5, que aún no tiene JsonParser.parseString().
+-            @SuppressWarnings("deprecation")
+-            JsonElement raiz = new JsonParser().parse(cuerpo);
++            JsonElement raiz = JsonParser.parseString(cuerpo);
+             if (!raiz.isJsonObject()) return null;
+             JsonObject json = raiz.getAsJsonObject();
+             for (String clave : new String[]{"error", "detail", "mensaje"}) {
+                 if (json.has(clave) && json.get(clave).isJsonPrimitive()) {
+                     String texto = json.get(clave).getAsString().trim();
+-                    if (!texto.isEmpty()) return texto;
++                    if (!texto.isEmpty() && texto.length() <= LARGO_MAXIMO) return texto;
+                 }
+             }
+         } catch (RuntimeException e) {
+@@ -68,4 +70,14 @@ final class ErrorApi {
+     static String de(retrofit2.Response<?> respuesta) {
+         return mensaje(respuesta.code(), cuerpo(respuesta));
+     }
++
++    /** Mensaje del servidor si lo trae; si no, el texto dado (cuando el código ya dice qué pasó). */
++    static String de(retrofit2.Response<?> respuesta, String porDefecto) {
++        return mensajeOPorDefecto(cuerpo(respuesta), porDefecto);
++    }
++
++    static String mensajeOPorDefecto(String cuerpo, String porDefecto) {
++        String delServidor = mensajeDelCuerpo(cuerpo);
++        return delServidor != null ? delServidor : porDefecto;
++    }
+ }
+diff --git a/app/src/main/java/com/example/smartdrop/Gotita.java b/app/src/main/java/com/example/smartdrop/Gotita.java
+index 107625a..c283498 100644
+--- a/app/src/main/java/com/example/smartdrop/Gotita.java
++++ b/app/src/main/java/com/example/smartdrop/Gotita.java
+@@ -228,8 +228,24 @@ final class Gotita implements GotitaVoz.Escucha, GotitaOido.Escucha {
+         oido.detener(true);
+     }
+ 
+-    /** Al cerrar sesión: olvida la conversación y se calla. */
++    /**
++     * Al cerrar o vencer la sesión. Puede llegar desde cualquier hilo (al vencer, desde OkHttp); si Gotita
++     * nunca se abrió no hay nada que olvidar, y no se crea solo para eso.
++     */
++    static void olvidarSesion() {
++        Gotita gotita;
++        synchronized (Gotita.class) {
++            gotita = instancia;
++        }
++        if (gotita != null) gotita.olvidar();
++    }
++
++    /** Olvida la conversación y se calla. Toca la pantalla, la voz y el micrófono: va en el hilo principal. */
+     void olvidar() {
++        if (Looper.myLooper() != Looper.getMainLooper()) {
++            principal.post(this::olvidar);
++            return;
++        }
+         parar();
+         oido.detener(false);
+         chat.clear();
+diff --git a/app/src/main/java/com/example/smartdrop/GotitaVista.java b/app/src/main/java/com/example/smartdrop/GotitaVista.java
+index 39c902f..5bd9250 100644
+--- a/app/src/main/java/com/example/smartdrop/GotitaVista.java
++++ b/app/src/main/java/com/example/smartdrop/GotitaVista.java
+@@ -4,9 +4,7 @@ import android.Manifest;
+ import android.animation.ObjectAnimator;
+ import android.animation.ValueAnimator;
+ import android.app.Activity;
+-import android.content.Context;
+ import android.content.Intent;
+-import android.content.SharedPreferences;
+ import android.content.pm.PackageManager;
+ import android.graphics.drawable.GradientDrawable;
+ import android.os.Handler;
+@@ -98,8 +96,7 @@ final class GotitaVista implements Gotita.Vista {
+         if ("SplashActivity".equals(nombre) || "MainActivity".equals(nombre) || "RegisterActivity".equals(nombre)) {
+             return null;
+         }
+-        SharedPreferences sesion = actividad.getSharedPreferences("sesion", Context.MODE_PRIVATE);
+-        if (sesion.getString("access_token", "").isEmpty()) return null;
++        if (!Sesion.activa(actividad)) return null; // los tokens van cifrados: se pregunta a Sesion
+         View contenido = actividad.findViewById(android.R.id.content);
+         if (!(contenido instanceof FrameLayout)) return null;
+         return new GotitaVista(actividad, (FrameLayout) contenido);
+diff --git a/app/src/main/java/com/example/smartdrop/InicioActivity.java b/app/src/main/java/com/example/smartdrop/InicioActivity.java
+index bf0ccaa..4cc03f8 100644
+--- a/app/src/main/java/com/example/smartdrop/InicioActivity.java
++++ b/app/src/main/java/com/example/smartdrop/InicioActivity.java
+@@ -321,7 +321,7 @@ public class InicioActivity extends BaseActivity {
+ 
+     private void cerrarSesion() {
+         AvisosUsuario.cancelar(this);
+-        Sesion.limpiar(this);
++        Sesion.cerrar(this);
+         Intent intent = new Intent(InicioActivity.this, MainActivity.class);
+         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+         startActivity(intent);
+diff --git a/app/src/main/java/com/example/smartdrop/MainActivity.java b/app/src/main/java/com/example/smartdrop/MainActivity.java
+index a87c728..d1ea479 100644
+--- a/app/src/main/java/com/example/smartdrop/MainActivity.java
++++ b/app/src/main/java/com/example/smartdrop/MainActivity.java
+@@ -65,11 +65,10 @@ public class MainActivity extends BaseActivity {
+ 
+                     LoginResponse body = response.body();
+ 
+-                    // Guardar token y datos de sesión
++                    // Guardar tokens (cifrados) y datos de sesión
++                    Sesion.guardarTokens(MainActivity.this, body.getAccess(), body.getRefresh());
+                     SharedPreferences prefs = getSharedPreferences("sesion", MODE_PRIVATE);
+                     SharedPreferences.Editor editor = prefs.edit();
+-                    editor.putString("access_token", body.getAccess());
+-                    editor.putString("refresh_token", body.getRefresh() != null ? body.getRefresh() : "");
+                     editor.putString("nombre", body.getNombre());
+                     editor.putString("email", correoVal);
+                     editor.putString("nombre_rol", body.getNombreRol() != null ? body.getNombreRol() : (body.getIdRol() == 2 ? "Administrador" : "Usuario Estándar"));
+@@ -92,10 +91,10 @@ public class MainActivity extends BaseActivity {
+                 } else if (response.code() == 400) {
+                     // Escenario 2 y 3: credenciales incorrectas o usuario no encontrado
+                     Toast.makeText(MainActivity.this,
+-                            "Correo o contraseña incorrectos.",
++                            ErrorApi.de(response, "Correo o contraseña incorrectos."),
+                             Toast.LENGTH_LONG).show();
+                 } else {
+-                    // 429: demasiados intentos (el servidor dice cuántos segundos esperar).
++                    // 429: demasiados intentos (el servidor dice cuántos segundos esperar); 503: no puede validar ahora.
+                     Toast.makeText(MainActivity.this, ErrorApi.de(response), Toast.LENGTH_LONG).show();
+                 }
+             }
+diff --git a/app/src/main/java/com/example/smartdrop/PerfilActivity.java b/app/src/main/java/com/example/smartdrop/PerfilActivity.java
+index ac510e9..6da795c 100644
+--- a/app/src/main/java/com/example/smartdrop/PerfilActivity.java
++++ b/app/src/main/java/com/example/smartdrop/PerfilActivity.java
+@@ -316,7 +316,7 @@ public class PerfilActivity extends BaseActivity {
+     protected void cerrarSesion() {
+         AvisosUsuario.cancelar(this);
+         AvisosFuga.cancelar(this);
+-        Sesion.limpiar(this);
++        Sesion.cerrar(this);
+         Intent intent = new Intent(this, MainActivity.class);
+         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+         startActivity(intent);
+diff --git a/app/src/main/java/com/example/smartdrop/RealtimeClient.java b/app/src/main/java/com/example/smartdrop/RealtimeClient.java
+index 949331a..7191793 100644
+--- a/app/src/main/java/com/example/smartdrop/RealtimeClient.java
++++ b/app/src/main/java/com/example/smartdrop/RealtimeClient.java
+@@ -2,7 +2,6 @@ package com.example.smartdrop;
+ 
+ import android.content.Context;
+ import android.content.Intent;
+-import android.content.SharedPreferences;
+ 
+ import org.json.JSONObject;
+ 
+@@ -27,9 +26,7 @@ public final class RealtimeClient {
+     public static synchronized void connect(Context context) {
+         if (socket != null) return;
+ 
+-        SharedPreferences preferences = context.getApplicationContext()
+-                .getSharedPreferences("sesion", Context.MODE_PRIVATE);
+-        String token = preferences.getString("access_token", "");
++        String token = Sesion.accessToken(context);
+         if (token.isEmpty()) return;
+ 
+         Request request = new Request.Builder()
+diff --git a/app/src/main/java/com/example/smartdrop/RegisterActivity.java b/app/src/main/java/com/example/smartdrop/RegisterActivity.java
+index bbb8e7b..a833878 100644
+--- a/app/src/main/java/com/example/smartdrop/RegisterActivity.java
++++ b/app/src/main/java/com/example/smartdrop/RegisterActivity.java
+@@ -68,9 +68,11 @@ public class RegisterActivity extends BaseActivity {
+                     finish();
+                 } else if (response.code() == 409) {
+                     // El servidor responde 409 cuando el correo ya existe (400 = datos incompletos).
+-                    Toast.makeText(RegisterActivity.this, "El correo ya está registrado.", Toast.LENGTH_LONG).show();
++                    Toast.makeText(RegisterActivity.this,
++                            ErrorApi.de(response, "El correo ya está registrado."), Toast.LENGTH_LONG).show();
+                 } else {
+-                    // 400 (datos), 429 (demasiados intentos: "Espera N segundos…") o error del servidor.
++                    // 400 (contraseña o correo no válidos), 429 (demasiados intentos: "Espera N segundos…")
++                    // o error del servidor. El servidor explica el motivo.
+                     Toast.makeText(RegisterActivity.this, ErrorApi.de(response), Toast.LENGTH_LONG).show();
+                 }
+             }
+diff --git a/app/src/main/java/com/example/smartdrop/ReportarProblemaActivity.java b/app/src/main/java/com/example/smartdrop/ReportarProblemaActivity.java
+index 68dbcf7..b4b7411 100644
+--- a/app/src/main/java/com/example/smartdrop/ReportarProblemaActivity.java
++++ b/app/src/main/java/com/example/smartdrop/ReportarProblemaActivity.java
+@@ -1,10 +1,12 @@
+ package com.example.smartdrop;
+ 
+ import android.content.Intent;
++import android.content.UriPermission;
+ import android.database.Cursor;
+ import android.net.Uri;
+ import android.os.Bundle;
+ import android.text.Editable;
++import android.text.TextUtils;
+ import android.text.TextWatcher;
+ import android.provider.OpenableColumns;
+ import android.view.View;
+@@ -48,19 +50,25 @@ public class ReportarProblemaActivity extends BaseActivity {
+     private final List<MaterialCardView> tarjetasTipos = new ArrayList<>();
+     private int maxAdjuntos = 5;
+     private final List<Uri> adjuntos = new ArrayList<>();
++    // Abierto desde el muro de la comunidad: el reporte se publica ahí (si no, es privado).
++    private boolean comunitario = false;
+ 
++    // El permiso temporal del selector basta: los archivos se copian al enviar, con esta pantalla abierta.
+     private final ActivityResultLauncher<String[]> selectorArchivos =
+             registerForActivityResult(new ActivityResultContracts.OpenMultipleDocuments(), uris -> {
+                 adjuntos.clear();
++                boolean rechazados = false;
+                 if (uris != null) {
+                     for (Uri uri : uris) {
+-                        if (adjuntos.size() < maxAdjuntos) {
+-                            getContentResolver().takePersistableUriPermission(
+-                                    uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
++                        // Formatos que el servidor no acepta se descartan aquí y se avisa.
++                        if (Adjunto.extensionPara(getContentResolver().getType(uri)) == null) {
++                            rechazados = true;
++                        } else if (adjuntos.size() < maxAdjuntos) {
+                             adjuntos.add(uri);
+                         }
+                     }
+                 }
++                if (rechazados) Toast.makeText(this, Adjunto.FORMATO_NO_PERMITIDO, Toast.LENGTH_LONG).show();
+                 actualizarListaAdjuntos();
+             });
+ 
+@@ -68,6 +76,8 @@ public class ReportarProblemaActivity extends BaseActivity {
+     protected void onCreate(Bundle savedInstanceState) {
+         super.onCreate(savedInstanceState);
+         setContentView(R.layout.activity_reportar_problema);
++        comunitario = getIntent().getBooleanExtra("comunitario", false);
++        liberarPermisosAntiguos();
+ 
+         ImageButton btnVolver = findViewById(R.id.btnVolver);
+         etDescripcion = findViewById(R.id.etDescripcion);
+@@ -96,6 +106,16 @@ public class ReportarProblemaActivity extends BaseActivity {
+         cargarCatalogo();
+     }
+ 
++    /** Las versiones anteriores guardaban acceso permanente a cada archivo adjuntado; aquí se devuelve. */
++    private void liberarPermisosAntiguos() {
++        for (UriPermission permiso : getContentResolver().getPersistedUriPermissions()) {
++            try {
++                getContentResolver().releasePersistableUriPermission(
++                        permiso.getUri(), Intent.FLAG_GRANT_READ_URI_PERMISSION);
++            } catch (SecurityException ignored) { }
++        }
++    }
++
+     private void cargarCatalogo() {
+         ApiService api = ApiClient.getClientAutenticado(this).create(ApiService.class);
+         api.obtenerCatalogoReportes().enqueue(new Callback<ReporteCatalogoResponse>() {
+@@ -234,10 +254,14 @@ public class ReportarProblemaActivity extends BaseActivity {
+         return uri.getLastPathSegment() != null ? uri.getLastPathSegment() : "adjunto";
+     }
+ 
+-    private File copiarACache(Uri uri) {
++    private File copiarACache(Uri uri, String extension) {
++        File destino = null;
+         try {
+-            String nombre = nombreArchivo(uri);
+-            File destino = new File(getCacheDir(), System.currentTimeMillis() + "_" + nombre);
++            // El servidor reconoce el formato por la extensión: se usa la del tipo real del archivo.
++            String nombre = nombreArchivo(uri).replace('/', '_').replace('\\', '_');
++            int punto = nombre.lastIndexOf('.');
++            if (punto > 0) nombre = nombre.substring(0, punto);
++            destino = new File(getCacheDir(), System.currentTimeMillis() + "_" + nombre + "." + extension);
+             try (InputStream in = getContentResolver().openInputStream(uri);
+                  FileOutputStream out = new FileOutputStream(destino)) {
+                 byte[] buffer = new byte[8192];
+@@ -246,10 +270,16 @@ public class ReportarProblemaActivity extends BaseActivity {
+             }
+             return destino;
+         } catch (Exception e) {
++            if (destino != null) destino.delete();
+             return null;
+         }
+     }
+ 
++    /** Borra las copias temporales de los adjuntos una vez terminada la subida (con o sin éxito). */
++    private static void borrarCopias(List<File> copias) {
++        for (File copia : copias) copia.delete();
++    }
++
+     private void enviarReporte() {
+         String descripcion = etDescripcion.getText().toString().trim();
+         if (tipoSeleccionado == null || descripcion.length() < 10) {
+@@ -267,13 +297,17 @@ public class ReportarProblemaActivity extends BaseActivity {
+         String zona = etZona.getText().toString().trim();
+         if (!ubicacion.isEmpty()) campos.put("ubicacion", RequestBody.create(ubicacion, MediaType.parse("text/plain")));
+         if (!zona.isEmpty()) campos.put("zona", RequestBody.create(zona, MediaType.parse("text/plain")));
++        if (comunitario) campos.put("comunitario", RequestBody.create("true", MediaType.parse("text/plain")));
+ 
+         List<MultipartBody.Part> partes = new ArrayList<>();
++        List<File> copias = new ArrayList<>();
+         for (Uri uri : adjuntos) {
+-            File archivo = copiarACache(uri);
+-            if (archivo == null) continue;
+             String mime = getContentResolver().getType(uri);
+-            if (mime == null) mime = "application/octet-stream";
++            String extension = Adjunto.extensionPara(mime);
++            if (extension == null) continue;
++            File archivo = copiarACache(uri, extension);
++            if (archivo == null) continue;
++            copias.add(archivo);
+             RequestBody cuerpo = RequestBody.create(archivo, MediaType.parse(mime));
+             partes.add(MultipartBody.Part.createFormData("adjuntos", archivo.getName(), cuerpo));
+         }
+@@ -282,14 +316,20 @@ public class ReportarProblemaActivity extends BaseActivity {
+         api.crearReporte(campos, partes).enqueue(new Callback<ReporteCrearResponse>() {
+             @Override
+             public void onResponse(Call<ReporteCrearResponse> call, Response<ReporteCrearResponse> response) {
++                borrarCopias(copias);
+                 btnEnviar.setEnabled(true);
+                 btnEnviar.setText(R.string.enviar_reporte);
+                 if (response.isSuccessful() && response.body() != null && response.body().isOk()) {
+-                    Toast.makeText(ReportarProblemaActivity.this,
+-                            "Reporte enviado. El equipo lo revisará pronto.", Toast.LENGTH_LONG).show();
++                    String mensaje = "Reporte enviado. El equipo lo revisará pronto.";
++                    List<String> errores = response.body().getAdjuntosErrores();
++                    if (errores != null && !errores.isEmpty()) {
++                        mensaje += "\nNo se guardó: " + TextUtils.join(" ", errores);
++                    }
++                    Toast.makeText(ReportarProblemaActivity.this, mensaje, Toast.LENGTH_LONG).show();
+                     finish();
+                 } else {
+-                    String error = response.body() != null ? response.body().getError() : null;
++                    String error = response.body() != null
++                            ? response.body().getError() : ErrorApi.de(response);
+                     Toast.makeText(ReportarProblemaActivity.this,
+                             "No se pudo enviar: " + (error != null ? error : "error " + response.code()),
+                             Toast.LENGTH_LONG).show();
+@@ -298,6 +338,7 @@ public class ReportarProblemaActivity extends BaseActivity {
+ 
+             @Override
+             public void onFailure(Call<ReporteCrearResponse> call, Throwable t) {
++                borrarCopias(copias);
+                 btnEnviar.setEnabled(true);
+                 btnEnviar.setText(R.string.enviar_reporte);
+                 Toast.makeText(ReportarProblemaActivity.this,
+diff --git a/app/src/main/java/com/example/smartdrop/ReporteDetalleActivity.java b/app/src/main/java/com/example/smartdrop/ReporteDetalleActivity.java
+index a98fc0e..81ee086 100644
+--- a/app/src/main/java/com/example/smartdrop/ReporteDetalleActivity.java
++++ b/app/src/main/java/com/example/smartdrop/ReporteDetalleActivity.java
+@@ -5,6 +5,7 @@ import android.net.Uri;
+ import android.os.Bundle;
+ import android.os.Handler;
+ import android.os.Looper;
++import android.text.TextUtils;
+ import android.view.View;
+ import android.widget.EditText;
+ import android.widget.ImageButton;
+@@ -224,40 +225,78 @@ public class ReporteDetalleActivity extends BaseActivity {
+ 
+     private void subirEvidencia(List<Uri> uris) {
+         List<MultipartBody.Part> partes = new ArrayList<>();
++        // Copias temporales en caché: se borran al terminar la subida, con o sin éxito.
++        List<File> copias = new ArrayList<>();
++        boolean rechazados = false;
+         for (Uri uri : uris) {
++            // El servidor reconoce el formato por la extensión del nombre: se toma del tipo real del archivo.
++            String mime = getContentResolver().getType(uri);
++            String extension = Adjunto.extensionPara(mime);
++            if (extension == null) {
++                rechazados = true;
++                continue;
++            }
+             try {
+-                String nombre = "evidencia_" + System.currentTimeMillis();
++                String nombre = "evidencia_" + System.currentTimeMillis() + "_" + copias.size() + "." + extension;
+                 File destino = new File(getCacheDir(), nombre);
++                copias.add(destino);
+                 try (InputStream in = getContentResolver().openInputStream(uri);
+                      FileOutputStream out = new FileOutputStream(destino)) {
+                     byte[] buffer = new byte[8192];
+                     int leido;
+                     while ((leido = in.read(buffer)) != -1) out.write(buffer, 0, leido);
+                 }
+-                String mime = getContentResolver().getType(uri);
+-                if (mime == null) mime = "application/octet-stream";
+                 partes.add(MultipartBody.Part.createFormData(
+                         "adjuntos", nombre, RequestBody.create(destino, MediaType.parse(mime))));
+             } catch (Exception ignored) { }
+         }
+-        if (partes.isEmpty()) return;
++        if (rechazados) Toast.makeText(this, Adjunto.FORMATO_NO_PERMITIDO, Toast.LENGTH_LONG).show();
++        if (partes.isEmpty()) {
++            borrarCopias(copias);
++            return;
++        }
+ 
+         ApiService api = ApiClient.getClientAutenticado(this).create(ApiService.class);
+         api.adjuntarEvidencia(idReporte, partes).enqueue(new Callback<ReporteCrearResponse>() {
+             @Override
+             public void onResponse(Call<ReporteCrearResponse> call, Response<ReporteCrearResponse> response) {
+-                if (response.isSuccessful() && response.body() != null && response.body().isOk()) {
+-                    Toast.makeText(ReporteDetalleActivity.this,
+-                            "Evidencia agregada", Toast.LENGTH_SHORT).show();
++                borrarCopias(copias);
++                ReporteCrearResponse cuerpo = response.body();
++                // Solo se confirma si el servidor guardó al menos un archivo.
++                if (response.isSuccessful() && cuerpo != null && cuerpo.isOk() && cuerpo.getAdjuntosGuardados() > 0) {
++                    String mensaje = "Evidencia agregada";
++                    if (cuerpo.getAdjuntosErrores() != null && !cuerpo.getAdjuntosErrores().isEmpty()) {
++                        mensaje += ". No se guardó: " + TextUtils.join(" ", cuerpo.getAdjuntosErrores());
++                    }
++                    Toast.makeText(ReporteDetalleActivity.this, mensaje, Toast.LENGTH_LONG).show();
+                     cargarDetalle();
++                } else {
++                    Toast.makeText(ReporteDetalleActivity.this, errorSubida(response), Toast.LENGTH_LONG).show();
+                 }
+             }
+ 
+             @Override
+             public void onFailure(Call<ReporteCrearResponse> call, Throwable t) {
++                borrarCopias(copias);
+                 Toast.makeText(ReporteDetalleActivity.this,
+                         "Sin conexión al subir evidencia", Toast.LENGTH_SHORT).show();
+             }
+         });
+     }
++
++    /** Por qué no se guardó ninguna evidencia, con el texto del servidor cuando lo trae. */
++    private static String errorSubida(Response<ReporteCrearResponse> response) {
++        String porDefecto = "No se pudo agregar la evidencia.";
++        ReporteCrearResponse cuerpo = response.body();
++        if (cuerpo == null) return ErrorApi.de(response, porDefecto);
++        if (cuerpo.getError() != null && !cuerpo.getError().isEmpty()) return cuerpo.getError();
++        if (cuerpo.getAdjuntosErrores() != null && !cuerpo.getAdjuntosErrores().isEmpty()) {
++            return TextUtils.join(" ", cuerpo.getAdjuntosErrores());
++        }
++        return porDefecto;
++    }
++
++    private static void borrarCopias(List<File> copias) {
++        for (File copia : copias) copia.delete();
++    }
+ }
+diff --git a/app/src/main/java/com/example/smartdrop/Sesion.java b/app/src/main/java/com/example/smartdrop/Sesion.java
+index b38f463..747ee51 100644
+--- a/app/src/main/java/com/example/smartdrop/Sesion.java
++++ b/app/src/main/java/com/example/smartdrop/Sesion.java
+@@ -1,19 +1,201 @@
+ package com.example.smartdrop;
+ 
++import android.app.ActivityManager;
+ import android.content.Context;
++import android.content.Intent;
+ import android.content.SharedPreferences;
++import android.os.Handler;
++import android.os.Looper;
++import android.security.keystore.KeyGenParameterSpec;
++import android.security.keystore.KeyProperties;
++import android.util.Base64;
++import android.widget.Toast;
++
++import java.nio.charset.StandardCharsets;
++import java.security.Key;
++import java.security.KeyStore;
++import java.util.HashMap;
++import java.util.Map;
++
++import javax.crypto.Cipher;
++import javax.crypto.KeyGenerator;
++import javax.crypto.SecretKey;
++import javax.crypto.spec.GCMParameterSpec;
++
++import okhttp3.ResponseBody;
++import retrofit2.Call;
++import retrofit2.Callback;
++import retrofit2.Response;
+ 
+ /** Datos de la sesión guardados en el teléfono. */
+ public final class Sesion {
+ 
++    private static final String PREFS = "sesion";
++    // Los tokens se guardan cifrados (AES-GCM) con una clave del almacén de claves de Android, que no sale
++    // del teléfono. Las versiones anteriores los guardaban sin cifrar en "access_token" y "refresh_token":
++    // esos valores se borran y cuentan como sesión cerrada (la app siempre empieza en el inicio de sesión).
++    private static final String ACCESS = "access_cifrado";
++    private static final String REFRESH = "refresh_cifrado";
++    private static final String[] CLAVES_ANTIGUAS = {"access_token", "refresh_token"};
++    private static final String ALIAS_CLAVE = "smartdrop_sesion";
++    private static final String CIFRADO = "AES/GCM/NoPadding";
++
++    // Tokens ya descifrados: así no se consulta el almacén de claves en cada petición.
++    private static final Map<String, String> enMemoria = new HashMap<>();
++
+     private Sesion() { }
+ 
+-    /** Cierra la sesión del teléfono conservando el tema (la web lo recuerda igual). */
+-    public static void limpiar(Context context) {
+-        SharedPreferences sesion = context.getApplicationContext()
+-                .getSharedPreferences("sesion", Context.MODE_PRIVATE);
++    public static synchronized String accessToken(Context context) {
++        return leer(context, ACCESS);
++    }
++
++    public static synchronized String refreshToken(Context context) {
++        return leer(context, REFRESH);
++    }
++
++    /** True si hay una sesión iniciada en este teléfono. */
++    public static boolean activa(Context context) {
++        return !accessToken(context).isEmpty();
++    }
++
++    /** Guarda los tokens que devuelve el inicio de sesión. */
++    public static synchronized void guardarTokens(Context context, String access, String refresh) {
++        guardar(context, ACCESS, access);
++        guardar(context, REFRESH, refresh);
++    }
++
++    /** Guarda el token de acceso renovado. */
++    public static synchronized void guardarAccess(Context context, String access) {
++        guardar(context, ACCESS, access);
++    }
++
++    /**
++     * Cierra la sesión: corta el tiempo real, borra los datos del teléfono y pide al servidor que invalide
++     * el token de renovación (sin esperar respuesta ni mostrar errores).
++     */
++    public static void cerrar(Context context) {
++        Context app = context.getApplicationContext();
++        String refresh = refreshToken(app); // antes de borrarlo
++        RealtimeClient.disconnect();
++        limpiar(app);
++        if (refresh.isEmpty()) return;
++
++        Map<String, String> cuerpo = new HashMap<>();
++        cuerpo.put("refresh", refresh);
++        ApiClient.getClient().create(ApiService.class).cerrarSesion(cuerpo).enqueue(new Callback<ResponseBody>() {
++            @Override
++            public void onResponse(Call<ResponseBody> call, Response<ResponseBody> response) { }
++
++            @Override
++            public void onFailure(Call<ResponseBody> call, Throwable t) {
++                // En el teléfono la sesión ya está cerrada; el token vence solo en el servidor.
++            }
++        });
++    }
++
++    /**
++     * El servidor rechazó el token de renovación (vencido, cerrado o cuenta desactivada): se borra la sesión
++     * y, si la app está en pantalla, se vuelve al inicio de sesión.
++     */
++    static void expirar(Context context) {
++        Context app = context.getApplicationContext();
++        RealtimeClient.disconnect();
++        AvisosUsuario.cancelar(app);
++        AvisosFuga.cancelar(app);
++        limpiar(app);
++
++        ActivityManager.RunningAppProcessInfo proceso = new ActivityManager.RunningAppProcessInfo();
++        ActivityManager.getMyMemoryState(proceso);
++        if (proceso.importance != ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND) return;
++        new Handler(Looper.getMainLooper()).post(() -> {
++            Toast.makeText(app, "Tu sesión terminó. Inicia sesión de nuevo.", Toast.LENGTH_LONG).show();
++            Intent intent = new Intent(app, MainActivity.class);
++            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
++            app.startActivity(intent);
++        });
++    }
++
++    /** Borra la sesión del teléfono conservando el tema (la web lo recuerda igual). */
++    private static synchronized void limpiar(Context context) {
++        enMemoria.clear();
++        SharedPreferences sesion = prefs(context);
+         boolean oscuro = sesion.getBoolean("modo_oscuro", false);
+         sesion.edit().clear().putBoolean("modo_oscuro", oscuro).apply();
+-        Gotita.de(context).olvidar(); // Gotita se calla y olvida la conversación de esta cuenta.
++        // Gotita se calla y olvida la conversación de esta cuenta (en el hilo principal: expirar() llega
++        // desde un hilo de OkHttp).
++        Gotita.olvidarSesion();
++    }
++
++    private static SharedPreferences prefs(Context context) {
++        return context.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
++    }
++
++    private static String leer(Context context, String clave) {
++        String texto = enMemoria.get(clave);
++        if (texto != null) return texto;
++
++        SharedPreferences prefs = prefs(context);
++        for (String antigua : CLAVES_ANTIGUAS) {
++            if (prefs.contains(antigua)) prefs.edit().remove(antigua).apply();
++        }
++        texto = descifrar(prefs.getString(clave, ""));
++        enMemoria.put(clave, texto);
++        return texto;
++    }
++
++    private static void guardar(Context context, String clave, String valor) {
++        String texto = valor == null ? "" : valor;
++        enMemoria.put(clave, texto);
++        String cifrado = cifrar(texto);
++        // Si el almacén de claves falla, el token queda solo en memoria: nunca se escribe sin cifrar.
++        SharedPreferences.Editor editor = prefs(context).edit();
++        if (cifrado == null) editor.remove(clave);
++        else editor.putString(clave, cifrado);
++        editor.apply();
++    }
++
++    private static SecretKey clave() throws Exception {
++        KeyStore almacen = KeyStore.getInstance("AndroidKeyStore");
++        almacen.load(null);
++        Key existente = almacen.getKey(ALIAS_CLAVE, null);
++        if (existente instanceof SecretKey) return (SecretKey) existente;
++
++        KeyGenerator generador = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore");
++        generador.init(new KeyGenParameterSpec.Builder(ALIAS_CLAVE,
++                KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT)
++                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
++                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
++                .setKeySize(256)
++                .build());
++        return generador.generateKey();
++    }
++
++    /** Devuelve "iv:datos" en Base64, o null si no se pudo cifrar. */
++    private static String cifrar(String texto) {
++        if (texto.isEmpty()) return "";
++        try {
++            Cipher cifrador = Cipher.getInstance(CIFRADO);
++            cifrador.init(Cipher.ENCRYPT_MODE, clave()); // el almacén de claves genera un IV nuevo cada vez
++            byte[] datos = cifrador.doFinal(texto.getBytes(StandardCharsets.UTF_8));
++            return Base64.encodeToString(cifrador.getIV(), Base64.NO_WRAP) + ":"
++                    + Base64.encodeToString(datos, Base64.NO_WRAP);
++        } catch (Exception e) {
++            return null;
++        }
++    }
++
++    /** Devuelve el token descifrado, o "" si no hay o no se puede descifrar (equivale a sesión cerrada). */
++    private static String descifrar(String guardado) {
++        int separador = guardado.indexOf(':');
++        if (separador <= 0) return "";
++        try {
++            byte[] iv = Base64.decode(guardado.substring(0, separador), Base64.NO_WRAP);
++            byte[] datos = Base64.decode(guardado.substring(separador + 1), Base64.NO_WRAP);
++            Cipher cifrador = Cipher.getInstance(CIFRADO);
++            cifrador.init(Cipher.DECRYPT_MODE, clave(), new GCMParameterSpec(128, iv));
++            return new String(cifrador.doFinal(datos), StandardCharsets.UTF_8);
++        } catch (Exception e) {
++            return "";
++        }
+     }
+ }
+diff --git a/app/src/main/res/xml/backup_rules.xml b/app/src/main/res/xml/backup_rules.xml
+index 7feb239..cd5c907 100644
+--- a/app/src/main/res/xml/backup_rules.xml
++++ b/app/src/main/res/xml/backup_rules.xml
+@@ -1,7 +1,8 @@
+-<?xml version="1.0" encoding="utf-8"?>
+-<!--
+-   Android 11 o menor: la sesión (tokens JWT en sesion.xml) no se incluye en copias de seguridad.
+-   Además allowBackup="false" en el manifiesto.
++<?xml version="1.0" encoding="utf-8"?><!--
++   Reglas de copia de seguridad para Android 11 o anterior.
++   La app tiene allowBackup="false"; aun así la sesión (tokens de acceso en sesion.xml)
++   se excluye por si algún día se vuelve a activar la copia.
++   See https://developer.android.com/guide/topics/data/autobackup
+ -->
+ <full-backup-content>
+     <exclude domain="sharedpref" path="sesion.xml" />
+diff --git a/app/src/main/res/xml/data_extraction_rules.xml b/app/src/main/res/xml/data_extraction_rules.xml
+index 4a5568c..dcfc14c 100644
+--- a/app/src/main/res/xml/data_extraction_rules.xml
++++ b/app/src/main/res/xml/data_extraction_rules.xml
+@@ -1,7 +1,9 @@
+-<?xml version="1.0" encoding="utf-8"?>
+-<!--
+-   Android 12+: la sesión (tokens JWT en sesion.xml) nunca sale del teléfono, ni en la copia en la nube
+-   ni al pasar los datos a otro teléfono. Además allowBackup="false" en el manifiesto.
++<?xml version="1.0" encoding="utf-8"?><!--
++   Reglas de copia de seguridad para Android 12 o superior.
++   La transferencia entre teléfonos se hace aunque allowBackup sea "false",
++   por eso la sesión (tokens de acceso en sesion.xml) se excluye de ambas: nunca sale
++   del teléfono, ni en la copia en la nube ni al pasar los datos a otro teléfono.
++   See https://developer.android.com/about/versions/12/backup-restore#xml-changes
+ -->
+ <data-extraction-rules>
+     <cloud-backup>
+diff --git a/app/src/main/res/xml/network_security_config.xml b/app/src/main/res/xml/network_security_config.xml
+index 7e1aa34..f750df1 100644
+--- a/app/src/main/res/xml/network_security_config.xml
++++ b/app/src/main/res/xml/network_security_config.xml
+@@ -1,6 +1,9 @@
+-<?xml version="1.0" encoding="utf-8"?>
+-<!-- App publicada: solo conexiones seguras (HTTPS/WSS) y solo certificados de verdad del sistema.
+-     Así nadie puede espiar ni cambiar los datos en el camino, aunque instale un certificado falso. -->
++<?xml version="1.0" encoding="utf-8"?><!--
++   App publicada (release): solo HTTPS/WSS y solo certificados de autoridades del sistema
++   (no se confía en certificados instalados por el usuario). Así nadie puede espiar ni
++   cambiar los datos en el camino.
++   La versión de depuración (src/debug/res/xml) permite HTTP para el servidor en la LAN.
++-->
+ <network-security-config>
+     <base-config cleartextTrafficPermitted="false">
+         <trust-anchors>
+diff --git a/app/src/test/java/com/example/smartdrop/ErrorApiTest.java b/app/src/test/java/com/example/smartdrop/ErrorApiTest.java
+index 92c650b..3c8248c 100644
+--- a/app/src/test/java/com/example/smartdrop/ErrorApiTest.java
++++ b/app/src/test/java/com/example/smartdrop/ErrorApiTest.java
+@@ -29,4 +29,26 @@ public class ErrorApiTest {
+         assertEquals("No tienes permiso para hacer esto.", ErrorApi.mensaje(403, ""));
+         assertEquals("Ese dato ya está registrado.", ErrorApi.mensaje(409, "[]"));
+     }
++
++    @Test
++    public void nuncaMuestraElCuerpoCrudo() {
++        // Un texto que no es un objeto JSON, o un "error" que es una traza larga, no se muestra.
++        assertNull(ErrorApi.mensajeDelCuerpo("Internal Server Error"));
++        assertNull(ErrorApi.mensajeDelCuerpo("\"texto suelto\""));
++        StringBuilder traza = new StringBuilder("{\"error\": \"");
++        for (int i = 0; i < 100; i++) traza.append("Traceback line ").append(i).append(' ');
++        traza.append("\"}");
++        assertNull(ErrorApi.mensajeDelCuerpo(traza.toString()));
++        assertTrue(ErrorApi.mensaje(500, traza.toString()).startsWith("El servidor no pudo"));
++        assertNull(ErrorApi.mensajeDelCuerpo("{\"error\": {\"campo\": [\"x\"]}}"));
++    }
++
++    @Test
++    public void conTextoPorDefectoSoloLoCambiaSiElServidorExplicaElMotivo() {
++        assertEquals("Correo o contraseña incorrectos.",
++                ErrorApi.mensajeOPorDefecto("<html>400</html>", "Correo o contraseña incorrectos."));
++        assertEquals("La contraseña es muy débil.",
++                ErrorApi.mensajeOPorDefecto("{\"error\": \"La contraseña es muy débil.\"}", "x"));
++        assertNull(ErrorApi.mensajeOPorDefecto(null, null));
++    }
+ }
+-- 
+2.43.0
+
+
+From 6f6250e4d228b6e07f0cb2c26fb06e9c1fdbc7d3 Mon Sep 17 00:00:00 2001
+From: Robert <robertoantoniolopezramirez1@gmail.com>
+Date: Sat, 24 Oct 2026 22:11:19 +0000
+Subject: [PATCH 2/2] =?UTF-8?q?Gotita:=20privacidad=20del=20micr=C3=B3fono?=
+ =?UTF-8?q?=20y=20de=20la=20pantalla,=20y=20cierre=20de=20sesi=C3=B3n?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Micrófono
+- "Oye Gotita" solo despierta a Gotita al inicio de la frase (oye, hey o ey
+  + gotita); una frase que nada más menciona "gotita" se ignora y ya no se
+  manda al servidor. Se quitan "got it a" y "cotita". "Gotita, para" se
+  atiende en el teléfono.
+- El reconocimiento de voz se hace en el teléfono cuando se puede (Android
+  12+ con reconocimiento en el dispositivo; si no, EXTRA_PREFER_OFFLINE). Si
+  el teléfono no lo tiene para el idioma, se usa el del sistema.
+- El reconocedor se libera al apagar "Oye Gotita", al salir de la app y al
+  cerrar sesión.
+
+Pantalla
+- El texto, las partes y la captura de la pantalla solo se mandan cuando la
+  pregunta es sobre esa pantalla ("Explícame esta pantalla", "¿qué estoy
+  viendo?"…); en las demás preguntas solo va en qué pantalla está.
+- Nunca desde Perfil, Configuración, inicio de sesión ni registro, ni desde
+  las pantallas del admin con datos de otras personas (panel, reportes,
+  predicción de fugas y de suministro, detalle de zona; y para el admin
+  también comunidad, detalle de reporte, válvula y búsqueda).
+- Lo escrito en los campos no va en el texto y sale tapado en la captura.
+
+Sesión
+- Cerrar sesión o que venza borra los ajustes de Gotita ("Oye Gotita",
+  modo, idioma, voz) y la conversación: la siguiente cuenta empieza de cero.
+  Se hace en el hilo principal aunque el vencimiento llegue desde OkHttp.
+- Al parar la voz también se borra de la caché el audio que estaba sonando.
+
+Errores
+- Las acciones, eventos e historial de Gotita que manda el servidor se leen
+  revisando cada campo: si falta o viene mal, se ignora en vez de cerrar la
+  app.
+- Sin conexión se muestra "Sin conexión con el servidor. Revisa tu
+  internet." en vez del detalle técnico del error.
+- Se quita GET api/valvula/estado/: no existe en el servidor y nada lo
+  usaba.
+
+Pruebas: "Oye Gotita" y "Gotita, para", qué pantallas y preguntas mandan la
+pantalla, y el contrato del estado de la válvula con abierta_desde.
+---
+ .../com/example/smartdrop/ApiService.java     |   3 -
+ .../example/smartdrop/BusquedaActivity.java   |   2 +-
+ .../java/com/example/smartdrop/ErrorApi.java  |   2 +
+ .../java/com/example/smartdrop/Gotita.java    | 102 ++++++++++++----
+ .../com/example/smartdrop/GotitaCliente.java  |  34 ++++--
+ .../com/example/smartdrop/GotitaOido.java     | 109 ++++++++++++++----
+ .../com/example/smartdrop/GotitaPantalla.java |  33 +++++-
+ .../com/example/smartdrop/GotitaVista.java    |  15 ++-
+ .../java/com/example/smartdrop/GotitaVoz.java |   8 ++
+ .../smartdrop/GraficasMonitoreoActivity.java  |   2 +-
+ .../com/example/smartdrop/MainActivity.java   |   4 +-
+ .../example/smartdrop/RegisterActivity.java   |   2 +-
+ .../smartdrop/ReporteDetalleActivity.java     |   2 +-
+ .../java/com/example/smartdrop/Sesion.java    |   6 +-
+ .../example/smartdrop/ValvulaActivity.java    |   2 +-
+ .../ValvulaEstadoPublicoResponse.java         |  33 ------
+ .../smartdrop/VincularViviendaActivity.java   |   3 +-
+ .../smartdrop/ContratoValvulaTest.java        |  13 ++-
+ .../com/example/smartdrop/GotitaOidoTest.java |  52 +++++++++
+ .../example/smartdrop/GotitaPantallaTest.java |  39 +++++++
+ 20 files changed, 350 insertions(+), 116 deletions(-)
+ delete mode 100644 app/src/main/java/com/example/smartdrop/ValvulaEstadoPublicoResponse.java
+ create mode 100644 app/src/test/java/com/example/smartdrop/GotitaOidoTest.java
+ create mode 100644 app/src/test/java/com/example/smartdrop/GotitaPantallaTest.java
+
+diff --git a/app/src/main/java/com/example/smartdrop/ApiService.java b/app/src/main/java/com/example/smartdrop/ApiService.java
+index aa0fd03..7bf5c6f 100644
+--- a/app/src/main/java/com/example/smartdrop/ApiService.java
++++ b/app/src/main/java/com/example/smartdrop/ApiService.java
+@@ -77,9 +77,6 @@ public interface ApiService {
+     @GET("api/valvula/{id}/estado/")
+     Call<ValvulaEstadoResponse> obtenerEstadoValvula(@Path("id") int idValvula);
+ 
+-    @GET("api/valvula/estado/")
+-    Call<ValvulaEstadoPublicoResponse> obtenerEstadoValvulaPublico();
+-
+     @POST("api/valvula/{id}/control/")
+     Call<ResponseBody> controlarValvula(@Path("id") int idValvula, @Body ValvulaControlRequest request);
+ 
+diff --git a/app/src/main/java/com/example/smartdrop/BusquedaActivity.java b/app/src/main/java/com/example/smartdrop/BusquedaActivity.java
+index 12ab23e..5c16b0a 100644
+--- a/app/src/main/java/com/example/smartdrop/BusquedaActivity.java
++++ b/app/src/main/java/com/example/smartdrop/BusquedaActivity.java
+@@ -109,7 +109,7 @@ public class BusquedaActivity extends BaseActivity {
+             @Override
+             public void onFailure(Call<BusquedaGlobalResponse> call, Throwable t) {
+                 pbSearchLoading.setVisibility(View.GONE);
+-                tvSearchEmpty.setText("Error de conexión: " + t.getMessage());
++                tvSearchEmpty.setText(ErrorApi.SIN_CONEXION);
+                 tvSearchEmpty.setVisibility(View.VISIBLE);
+             }
+         });
+diff --git a/app/src/main/java/com/example/smartdrop/ErrorApi.java b/app/src/main/java/com/example/smartdrop/ErrorApi.java
+index 2b56728..3b593bd 100644
+--- a/app/src/main/java/com/example/smartdrop/ErrorApi.java
++++ b/app/src/main/java/com/example/smartdrop/ErrorApi.java
+@@ -15,6 +15,8 @@ import com.google.gson.JsonParser;
+ final class ErrorApi {
+ 
+     static final int DEMASIADAS_SOLICITUDES = 429;
++    /** Cuando no hubo respuesta del servidor. El detalle técnico del error no se muestra. */
++    static final String SIN_CONEXION = "Sin conexión con el servidor. Revisa tu internet.";
+     /** Un mensaje pensado para el usuario cabe de sobra; más largo ya no es un mensaje. */
+     static final int LARGO_MAXIMO = 300;
+ 
+diff --git a/app/src/main/java/com/example/smartdrop/Gotita.java b/app/src/main/java/com/example/smartdrop/Gotita.java
+index c283498..558571b 100644
+--- a/app/src/main/java/com/example/smartdrop/Gotita.java
++++ b/app/src/main/java/com/example/smartdrop/Gotita.java
+@@ -12,10 +12,13 @@ import com.google.gson.JsonNull;
+ import com.google.gson.JsonObject;
+ 
+ import java.util.ArrayList;
++import java.util.Arrays;
+ import java.util.Collections;
+ import java.util.HashMap;
++import java.util.HashSet;
+ import java.util.List;
+ import java.util.Map;
++import java.util.Set;
+ import java.util.regex.Pattern;
+ 
+ import okhttp3.Call;
+@@ -30,6 +33,9 @@ import okhttp3.Call;
+  *
+  * La conversación se guarda en el servidor (20 días) con un número. Mientras la app siga abierta se sigue la
+  * misma; si se cierra la app, la próxima vez empieza una nueva (las anteriores quedan en el historial).
++ *
++ * Lo que se ve en la pantalla (su texto, sus partes y una captura) solo se manda cuando la pregunta es sobre
++ * esa pantalla, nunca lo escrito en los campos y nunca desde las pantallas privadas (ver mandarPantalla).
+  */
+ final class Gotita implements GotitaVoz.Escucha, GotitaOido.Escucha {
+ 
+@@ -69,10 +75,20 @@ final class Gotita implements GotitaVoz.Escucha, GotitaOido.Escucha {
+     private static final int MAX_CHAT = 60;
+     private static final int MAX_HISTORIAL = 6;
+     private static final int MAX_PREGUNTA = 600;
++    private static final String PREFS = "gotita";
+     private static final Pattern PIDE_PANTALLA = Pattern.compile(
+             "(esta pantalla|lo que (veo|estoy viendo|sale|aparece)|qu[eé] (estoy viendo|veo|es esto|significa esto)"
+-                    + "|esta gr[aá]fica|este gr[aá]fico|expl[ií]ca(me)? (esto|la pantalla)|this screen"
+-                    + "|what am i (seeing|looking at)|this chart)", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
++                    + "|estas? gr[aá]ficas?|estos? gr[aá]ficos?|expl[ií]ca(me)? (esto|la pantalla)|this screen"
++                    + "|what am i (seeing|looking at)|th(is|ese) charts?)", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
++    // Pantallas cuyo contenido nunca se manda: los datos de la cuenta, el inicio de sesión, el registro y las
++    // del administrador con datos de otras personas (nombres, direcciones, reportes y viviendas).
++    private static final Set<String> PANTALLAS_PRIVADAS = new HashSet<>(Arrays.asList(
++            "perfil", "configuracion", "main", "register", "splash",
++            "panel", "reportes_admin", "prediccion_fugas", "prediccion_suministro", "zonapredicciondetalle"));
++    // Al administrador estas le muestran datos de otras personas: los reportes de todos y su chat, quién abrió
++    // la válvula y la búsqueda general.
++    private static final Set<String> PRIVADAS_PARA_ADMIN = new HashSet<>(Arrays.asList(
++            "comunidad", "reportedetalle", "valvulas", "buscar"));
+ 
+     private static Gotita instancia;
+ 
+@@ -99,7 +115,7 @@ final class Gotita implements GotitaVoz.Escucha, GotitaOido.Escucha {
+ 
+     private Gotita(Context app) {
+         this.app = app;
+-        ajustes = app.getSharedPreferences("gotita", Context.MODE_PRIVATE);
++        ajustes = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+         voz = GotitaVoz.de(app);
+         voz.setEscucha(this);
+         oido = new GotitaOido(app);
+@@ -230,17 +246,22 @@ final class Gotita implements GotitaVoz.Escucha, GotitaOido.Escucha {
+ 
+     /**
+      * Al cerrar o vencer la sesión. Puede llegar desde cualquier hilo (al vencer, desde OkHttp); si Gotita
+-     * nunca se abrió no hay nada que olvidar, y no se crea solo para eso.
++     * nunca se abrió no se crea solo para esto, pero igual se borran sus ajustes.
+      */
+-    static void olvidarSesion() {
++    static void olvidarSesion(Context context) {
+         Gotita gotita;
+         synchronized (Gotita.class) {
+             gotita = instancia;
+         }
+         if (gotita != null) gotita.olvidar();
++        else context.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().apply();
+     }
+ 
+-    /** Olvida la conversación y se calla. Toca la pantalla, la voz y el micrófono: va en el hilo principal. */
++    /**
++     * Olvida la conversación y los ajustes de esta cuenta (la siguiente empieza sin "Oye Gotita" ni el modo o
++     * idioma de esta), se calla y suelta el micrófono. Toca la pantalla, la voz y el micrófono: va en el hilo
++     * principal.
++     */
+     void olvidar() {
+         if (Looper.myLooper() != Looper.getMainLooper()) {
+             principal.post(this::olvidar);
+@@ -248,8 +269,13 @@ final class Gotita implements GotitaVoz.Escucha, GotitaOido.Escucha {
+         }
+         parar();
+         oido.detener(false);
++        ajustes.edit().clear().apply();
++        aplicarVoz();
+         chat.clear();
+         conversacionId = null;
++        enCurso = null;
++        navegarA = null;
++        escuchaPendiente = false;
+         estadoConsultado = false;
+         activa = true;
+     }
+@@ -293,16 +319,19 @@ final class Gotita implements GotitaVoz.Escucha, GotitaOido.Escucha {
+ 
+     /** Sigue una conversación del historial (el JSON que manda el servidor). */
+     void abrirConversacion(JsonObject datos) {
+-        if (datos == null || !datos.has("id") || !datos.has("mensajes")) return;
++        Integer id = GotitaCliente.numero(datos, "id");
++        if (id == null || !datos.has("mensajes") || !datos.get("mensajes").isJsonArray()) return;
+         parar();
+         chat.clear();
+         for (JsonElement elemento : datos.getAsJsonArray("mensajes")) {
++            if (!elemento.isJsonObject()) continue;
+             JsonObject m = elemento.getAsJsonObject();
+-            String rol = m.has("rol") && "gotita".equals(m.get("rol").getAsString()) ? "gotita" : "usuario";
+-            chat.add(new Mensaje(rol, m.has("texto") ? m.get("texto").getAsString() : "", null));
++            String rol = "gotita".equals(GotitaCliente.texto(m, "rol")) ? "gotita" : "usuario";
++            String texto = GotitaCliente.texto(m, "texto");
++            chat.add(new Mensaje(rol, texto != null ? texto : "", null));
+         }
+         while (chat.size() > MAX_CHAT) chat.remove(0);
+-        conversacionId = datos.get("id").getAsInt();
++        conversacionId = id;
+         if (vista != null) {
+             vista.alCambiarMensajes();
+             vista.alCambiarConversacion();
+@@ -334,12 +363,13 @@ final class Gotita implements GotitaVoz.Escucha, GotitaOido.Escucha {
+         ponerEstado(estadoBase());
+     }
+ 
+-    void preguntar(String texto, boolean conCaptura) {
+-        preguntar(texto, conCaptura, false);
++    /** pidePantalla: se tocó "Explícame esta pantalla". */
++    void preguntar(String texto, boolean pidePantalla) {
++        preguntar(texto, pidePantalla, false);
+     }
+ 
+     /** porVoz: la pregunta llegó por el micrófono o con "Oye Gotita". */
+-    void preguntar(String texto, boolean conCaptura, boolean porVoz) {
++    void preguntar(String texto, boolean pidePantalla, boolean porVoz) {
+         String pregunta = texto == null ? "" : texto.trim();
+         if (pregunta.isEmpty()) return;
+         if (pregunta.length() > MAX_PREGUNTA) pregunta = pregunta.substring(0, MAX_PREGUNTA);
+@@ -385,15 +415,21 @@ final class Gotita implements GotitaVoz.Escucha, GotitaOido.Escucha {
+         Activity actividad = vista != null ? vista.actividad() : null;
+         if (actividad != null) {
+             JsonObject pantalla = new JsonObject();
+-            pantalla.addProperty("id", GotitaPantalla.id(actividad));
++            String id = GotitaPantalla.id(actividad);
++            pantalla.addProperty("id", id);
+             pantalla.addProperty("titulo", GotitaPantalla.titulo(actividad));
+-            pantalla.addProperty("texto", GotitaPantalla.texto(actividad));
+-            pantalla.add("secciones", vista.secciones());
+-            cuerpo.add("pantalla", pantalla);
+-            if (conCaptura || PIDE_PANTALLA.matcher(pregunta).find()) {
++            boolean vistaDeAdmin = esAdmin() || actividad.getIntent().getBooleanExtra("es_admin", false);
++            if (mandarPantalla(id, vistaDeAdmin, pregunta, pidePantalla)) {
++                pantalla.addProperty("texto", GotitaPantalla.texto(actividad));
++                pantalla.add("secciones", vista.secciones());
+                 String captura = GotitaPantalla.captura(actividad);
+                 if (captura != null) cuerpo.addProperty("captura", captura);
++            } else {
++                // Solo se dice en qué pantalla está la persona, no lo que muestra.
++                pantalla.addProperty("texto", "");
++                pantalla.add("secciones", new JsonArray());
+             }
++            cuerpo.add("pantalla", pantalla);
+         }
+ 
+         enCurso = null;
+@@ -451,23 +487,41 @@ final class Gotita implements GotitaVoz.Escucha, GotitaOido.Escucha {
+         llamada = esta[0];
+     }
+ 
++    /**
++     * ¿Se manda lo que se ve en la pantalla (texto, partes y captura)? Solo si la pregunta es sobre esta pantalla
++     * y la pantalla no es privada.
++     */
++    static boolean mandarPantalla(String idPantalla, boolean vistaDeAdmin, String pregunta, boolean pidePantalla) {
++        if (idPantalla == null || PANTALLAS_PRIVADAS.contains(idPantalla)) return false;
++        if (vistaDeAdmin && PRIVADAS_PARA_ADMIN.contains(idPantalla)) return false;
++        return pidePantalla || (pregunta != null && PIDE_PANTALLA.matcher(pregunta).find());
++    }
++
++    /** Las acciones llegan del servidor: un campo que falta o no es texto se ignora. */
+     private void ejecutarAccion(JsonObject accion) {
+-        String tipo = accion.has("tipo") ? accion.get("tipo").getAsString() : "";
++        String tipo = GotitaCliente.texto(accion, "tipo");
++        if (tipo == null) return;
++        String valor;
+         switch (tipo) {
+             case "modo":
+-                cambiarModo(accion.get("modo").getAsString(), false);
++                valor = GotitaCliente.texto(accion, "modo");
++                if (valor != null) cambiarModo(valor, false);
+                 break;
+             case "velocidad":
+-                cambiarVelocidad("lenta".equals(accion.get("velocidad").getAsString()), false);
++                valor = GotitaCliente.texto(accion, "velocidad");
++                if (valor != null) cambiarVelocidad("lenta".equals(valor), false);
+                 break;
+             case "idioma":
+-                cambiarIdioma(accion.get("idioma").getAsString(), false);
++                valor = GotitaCliente.texto(accion, "idioma");
++                if (valor != null) cambiarIdioma(valor, false);
+                 break;
+             case "navegar":
+-                if (accion.has("destino")) navegarA = accion.get("destino").getAsString();
++                valor = GotitaCliente.texto(accion, "destino");
++                if (valor != null) navegarA = valor;
+                 break;
+             case "seccion":
+-                if (accion.has("seccion") && vista != null) vista.alMostrarSeccion(accion.get("seccion").getAsString());
++                valor = GotitaCliente.texto(accion, "seccion");
++                if (valor != null && vista != null) vista.alMostrarSeccion(valor);
+                 break;
+             default:
+                 break;
+diff --git a/app/src/main/java/com/example/smartdrop/GotitaCliente.java b/app/src/main/java/com/example/smartdrop/GotitaCliente.java
+index 998fca9..19f8c1a 100644
+--- a/app/src/main/java/com/example/smartdrop/GotitaCliente.java
++++ b/app/src/main/java/com/example/smartdrop/GotitaCliente.java
+@@ -4,6 +4,7 @@ import android.content.Context;
+ import android.os.Handler;
+ import android.os.Looper;
+ 
++import com.google.gson.JsonElement;
+ import com.google.gson.JsonObject;
+ import com.google.gson.JsonParser;
+ 
+@@ -49,6 +50,25 @@ final class GotitaCliente {
+ 
+     private GotitaCliente() { }
+ 
++    /** Texto de un campo del JSON del servidor, o null si falta o no es un valor simple. */
++    static String texto(JsonObject json, String campo) {
++        if (json == null || !json.has(campo)) return null;
++        JsonElement valor = json.get(campo);
++        return valor != null && valor.isJsonPrimitive() ? valor.getAsString() : null;
++    }
++
++    /** Número entero de un campo del JSON del servidor, o null si falta o no es un número. */
++    static Integer numero(JsonObject json, String campo) {
++        if (json == null || !json.has(campo)) return null;
++        JsonElement valor = json.get(campo);
++        if (valor == null || !valor.isJsonPrimitive() || !valor.getAsJsonPrimitive().isNumber()) return null;
++        try {
++            return valor.getAsInt();
++        } catch (NumberFormatException e) {
++            return null;
++        }
++    }
++
+     private static OkHttpClient http(Context context, int segundos) {
+         return ApiClient.getHttpAutenticado(context).newBuilder()
+                 .readTimeout(segundos, TimeUnit.SECONDS)
+@@ -160,23 +180,19 @@ final class GotitaCliente {
+         }
+         switch (tipo) {
+             case "texto":
+-                if (json.has("t")) {
+-                    String frase = json.get("t").getAsString();
+-                    PRINCIPAL.post(() -> eventos.alTexto(frase));
+-                }
++                String frase = texto(json, "t");
++                if (frase != null) PRINCIPAL.post(() -> eventos.alTexto(frase));
+                 break;
+             case "accion":
+                 PRINCIPAL.post(() -> eventos.alAccion(json));
+                 break;
+             case "error":
+-                String mensaje = json.has("mensaje") ? json.get("mensaje").getAsString() : null;
++                String mensaje = texto(json, "mensaje");
+                 PRINCIPAL.post(() -> eventos.alError(mensaje));
+                 break;
+             case "conversacion":
+-                if (json.has("id") && json.get("id").isJsonPrimitive()) {
+-                    int id = json.get("id").getAsInt();
+-                    PRINCIPAL.post(() -> eventos.alConversacion(id));
+-                }
++                Integer id = numero(json, "id");
++                if (id != null) PRINCIPAL.post(() -> eventos.alConversacion(id));
+                 break;
+             default:
+                 break;
+diff --git a/app/src/main/java/com/example/smartdrop/GotitaOido.java b/app/src/main/java/com/example/smartdrop/GotitaOido.java
+index 9b28d75..30e52c1 100644
+--- a/app/src/main/java/com/example/smartdrop/GotitaOido.java
++++ b/app/src/main/java/com/example/smartdrop/GotitaOido.java
+@@ -16,9 +16,11 @@ import java.util.regex.Pattern;
+ 
+ /**
+  * Oído de Gotita (reconocimiento de voz del teléfono). Dos modos:
+- * - VIGILANDO: escucha seguido mientras la app está abierta y solo reacciona a "Oye Gotita".
++ * - VIGILANDO: escucha seguido mientras la app está abierta y solo reacciona a "Oye Gotita" al inicio de la frase.
+  * - COMANDO: escucha una pregunta (botón del micrófono o justo después de "Oye Gotita").
+  * Se apaga al salir de la app y vuelve a encenderse al regresar, si el interruptor está encendido.
++ * Se prefiere el reconocimiento dentro del teléfono (la voz no sale a la nube); si el teléfono no lo tiene
++ * para el idioma, se usa el reconocimiento normal del sistema.
+  */
+ final class GotitaOido implements RecognitionListener {
+ 
+@@ -33,14 +35,21 @@ final class GotitaOido implements RecognitionListener {
+ 
+     enum Modo { APAGADO, VIGILANDO, COMANDO }
+ 
+-    // Formas en que el teléfono puede entender "Gotita" en español o inglés ("go tita", "godita"…).
+-    static final String NOMBRE = "(?:gotita|gotitas|go\\s?tita|got\\s?ita|got it a|godita|gotica|cotita)";
++    // Formas en que el teléfono puede entender "Gotita" ("go tita", "godita"…). Solo cuentan justo después de
++    // "Oye", "Hey" o "Ey": una frase que solo menciona la palabra no despierta a Gotita.
++    static final String NOMBRE = "(?:gotita|gotitas|go\\s?tita|got\\s?ita|godita|gotica)";
++    private static final String LLAMADO = "(?:oye|hey|ey)[\\s,]+";
++    // "Oye Gotita" tiene que ir al inicio de la frase; lo que sigue es la pregunta.
+     static final Pattern DESPERTAR = Pattern.compile(
+-            "(?:^|[\\s,.¡!¿?])(?:(?:hey|oye|oiga|ok|okay|okey|hola|ey|ei|hi|mira|mirá|vaya|ve)[\\s,]+)?" + NOMBRE
+-                    + "\\b[\\s,.:;!?¡¿]*(.*)$", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+-    static final Pattern PARAR = Pattern.compile(
+-            "^(?:" + NOMBRE + "[\\s,]*)?(?:para(?:le)?|p[aá]rale|detente|alto|silencio|c[aá]llate|c[aá]llese|basta|ya basta|ya estuvo|ya no|ya|stop|be quiet|shut up)[\\s.!]*$",
++            "^[\\s¡¿\"“]*" + LLAMADO + NOMBRE + "\\b[\\s,.:;!?¡¿]*(.*)$", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
++    private static final String ALTO =
++            "(?:para(?:le)?|p[aá]rale|detente|alto|silencio|c[aá]llate|c[aá]llese|basta|ya basta|ya estuvo|ya no|ya|stop|be quiet|shut up)[\\s.!]*$";
++    // Para lo escrito o lo dicho después de "Oye Gotita" (el nombre es opcional).
++    static final Pattern PARAR = Pattern.compile("^(?:" + NOMBRE + "[\\s,]*)?" + ALTO,
+             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
++    // Con el micrófono abierto solo calla a Gotita la frase entera "(Oye) Gotita, para".
++    private static final Pattern PARAR_CON_NOMBRE = Pattern.compile(
++            "^[\\s¡¿\"“]*(?:" + LLAMADO + ")?" + NOMBRE + "[\\s,]*" + ALTO, Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+ 
+     private final Context app;
+     private final Handler principal = new Handler(Looper.getMainLooper());
+@@ -52,12 +61,27 @@ final class GotitaOido implements RecognitionListener {
+     private int reintentos;
+     private String idioma = "es";
+     private String ultimoParcial = "";
++    // Mientras sea true se pide reconocer sin internet; se apaga si el teléfono no puede hacerlo.
++    private boolean enElTelefono = true;
+     private final Runnable tiempoComando = () -> terminarComando(ultimoParcial);
+ 
+     GotitaOido(Context context) {
+         app = context.getApplicationContext();
+     }
+ 
++    /** Lo que sigue a "Oye/Hey/Ey Gotita" ("" si no dijo más), o null si la frase no empieza así. */
++    static String trasDespertar(String texto) {
++        if (texto == null) return null;
++        Matcher coincide = DESPERTAR.matcher(texto);
++        if (!coincide.matches()) return null;
++        return coincide.group(1) == null ? "" : coincide.group(1).trim();
++    }
++
++    /** ¿La frase completa es "(Oye) Gotita, para" (o callate, basta…)? */
++    static boolean pideParar(String texto) {
++        return texto != null && PARAR_CON_NOMBRE.matcher(texto).matches();
++    }
++
+     static boolean disponible(Context context) {
+         return SpeechRecognizer.isRecognitionAvailable(context.getApplicationContext());
+     }
+@@ -95,18 +119,23 @@ final class GotitaOido implements RecognitionListener {
+         principal.postDelayed(tiempoComando, 10000);
+     }
+ 
+-    /** Deja de escuchar del todo (interruptor apagado o la app pasa a segundo plano). */
++    /**
++     * Deja de escuchar del todo (interruptor apagado, la app pasa a segundo plano o se cierra la sesión) y suelta
++     * el reconocedor del sistema; al volver a escuchar se crea otro. Se llama en el hilo principal.
++     */
+     void detener(boolean recordarVigilancia) {
+         vigilarDespues = recordarVigilancia && vigilarDespues;
+         principal.removeCallbacksAndMessages(null);
+         if (modo == Modo.COMANDO && escucha != null) escucha.alCambiarEscucha(false);
+         modo = Modo.APAGADO;
+         detenerReconocedor();
++        destruirReconocedor();
+     }
+ 
+     void apagarVigilancia() {
+         vigilarDespues = false;
+         if (modo == Modo.VIGILANDO) detener(false);
++        else if (modo == Modo.APAGADO) destruirReconocedor();
+     }
+ 
+     void reanudar() {
+@@ -116,7 +145,7 @@ final class GotitaOido implements RecognitionListener {
+     private void arrancar() {
+         if (corriendo) return;
+         if (reconocedor == null) {
+-            reconocedor = SpeechRecognizer.createSpeechRecognizer(app);
++            reconocedor = crearReconocedor();
+             reconocedor.setRecognitionListener(this);
+         }
+         Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+@@ -137,6 +166,8 @@ final class GotitaOido implements RecognitionListener {
+         intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
+         intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
+         intent.putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, app.getPackageName());
++        // Que la voz se reconozca en el teléfono, sin mandarla a la nube (si el teléfono tiene el idioma).
++        if (enElTelefono) intent.putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true);
+         try {
+             reconocedor.startListening(intent);
+             corriendo = true;
+@@ -146,6 +177,37 @@ final class GotitaOido implements RecognitionListener {
+         }
+     }
+ 
++    /** Android 12+: el reconocedor que trabaja dentro del teléfono, si lo hay; si no, el normal del sistema. */
++    private SpeechRecognizer crearReconocedor() {
++        if (enElTelefono && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
++                && SpeechRecognizer.isOnDeviceRecognitionAvailable(app)) {
++            try {
++                return SpeechRecognizer.createOnDeviceSpeechRecognizer(app);
++            } catch (RuntimeException ignored) {
++                // No se pudo crear: se usa el normal.
++            }
++        }
++        return SpeechRecognizer.createSpeechRecognizer(app);
++    }
++
++    private void destruirReconocedor() {
++        if (reconocedor == null) return;
++        try {
++            reconocedor.destroy();
++        } catch (RuntimeException ignored) {
++            // Ya estaba liberado.
++        }
++        reconocedor = null;
++        corriendo = false;
++    }
++
++    /** Errores con los que el teléfono dice que no puede reconocer sin internet (o ese idioma). */
++    static boolean faltaReconocimientoLocal(int error) {
++        return error == SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED || error == SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE
++                || error == SpeechRecognizer.ERROR_NETWORK || error == SpeechRecognizer.ERROR_NETWORK_TIMEOUT
++                || error == SpeechRecognizer.ERROR_SERVER || error == SpeechRecognizer.ERROR_SERVER_DISCONNECTED;
++    }
++
+     private void detenerReconocedor() {
+         if (reconocedor != null) {
+             try {
+@@ -173,23 +235,23 @@ final class GotitaOido implements RecognitionListener {
+             escucha.alOirPregunta(texto == null ? "" : texto.trim());
+         }
+         if (modo == Modo.VIGILANDO) reiniciar(600);
++        else destruirReconocedor(); // Sin "Oye Gotita" no se queda el micrófono preparado.
+     }
+ 
+     private void manejarVigilancia(String texto, boolean hablando) {
+-        Matcher coincide = DESPERTAR.matcher(texto);
+-        if (!coincide.find()) return;
+-        String resto = coincide.group(1) == null ? "" : coincide.group(1).trim();
+-        if (hablando) {
+-            // Mientras Gotita habla, su propia voz llega al micrófono: solo se atiende "Gotita, para".
+-            if (!resto.isEmpty() && PARAR.matcher(resto).matches() && escucha != null) escucha.alPedirParar();
++        // "Gotita, para" se atiende aquí mismo: no se manda nada al servidor.
++        if (pideParar(texto)) {
++            if (escucha != null) escucha.alPedirParar();
+             return;
+         }
++        // Mientras Gotita habla, su propia voz llega al micrófono: solo se atiende "Gotita, para".
++        if (hablando) return;
++        // Solo despierta "Oye Gotita" al inicio; una frase que nada más menciona "gotita" se ignora y no sale
++        // del teléfono.
++        String resto = trasDespertar(texto);
++        if (resto == null) return;
+         if (resto.length() > 1) {
+-            if (PARAR.matcher(resto).matches()) {
+-                if (escucha != null) escucha.alPedirParar();
+-            } else if (escucha != null) {
+-                escucha.alOirPregunta(resto);
+-            }
++            if (escucha != null) escucha.alOirPregunta(resto);
+             return;
+         }
+         if (escucha != null) escucha.alDespertar();
+@@ -237,6 +299,13 @@ final class GotitaOido implements RecognitionListener {
+             if (escucha != null) escucha.alSinPermiso();
+             return;
+         }
++        if (enElTelefono && faltaReconocimientoLocal(error)) {
++            // El teléfono no reconoce sin internet (o no tiene el idioma): se usa el reconocimiento del sistema.
++            enElTelefono = false;
++            destruirReconocedor();
++            if (modo != Modo.APAGADO) reiniciar(200);
++            return;
++        }
+         if (modo == Modo.COMANDO) {
+             if (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT
+                     || reintentos >= 2) {
+diff --git a/app/src/main/java/com/example/smartdrop/GotitaPantalla.java b/app/src/main/java/com/example/smartdrop/GotitaPantalla.java
+index 25d371a..93f755a 100644
+--- a/app/src/main/java/com/example/smartdrop/GotitaPantalla.java
++++ b/app/src/main/java/com/example/smartdrop/GotitaPantalla.java
+@@ -5,6 +5,7 @@ import android.content.Intent;
+ import android.graphics.Bitmap;
+ import android.graphics.Canvas;
+ import android.graphics.Color;
++import android.graphics.Paint;
+ import android.graphics.Rect;
+ import android.graphics.drawable.GradientDrawable;
+ import android.util.Base64;
+@@ -29,9 +30,10 @@ import java.util.Map;
+ import java.util.Set;
+ 
+ /**
+- * Lo que Gotita "ve": el nombre de la pantalla, todo su texto (también lo que está más abajo), sus partes
+- * (cada título) y, cuando se pide, una captura. También abre las pantallas a las que Gotita puede llevar a la
+- * persona y baja la vista hasta una parte de la pantalla.
++ * Lo que Gotita "ve": el nombre de la pantalla y, cuando la pregunta es sobre ella (ver Gotita.mandarPantalla),
++ * todo su texto (también lo que está más abajo), sus partes (cada título) y una captura. Lo escrito en los
++ * campos nunca se incluye: ni en el texto ni en la captura. También abre las pantallas a las que Gotita puede
++ * llevar a la persona y baja la vista hasta una parte de la pantalla.
+  */
+ final class GotitaPantalla {
+ 
+@@ -196,9 +198,12 @@ final class GotitaPantalla {
+         parte.postDelayed(() -> parte.getOverlay().remove(marco), 3500);
+     }
+ 
+-    /** Foto pequeña de la pantalla actual, sin Gotita; null si no se pudo. */
++    /** Foto pequeña de la pantalla actual, sin Gotita y con los campos de texto tapados; null si no se pudo. */
+     static String captura(Activity activity) {
+-        View raiz = activity.getWindow().getDecorView().getRootView();
++        View vistaRaiz = activity.getWindow().getDecorView().getRootView();
++        // Sin poder ubicar los campos para taparlos, no se manda foto.
++        if (!(vistaRaiz instanceof ViewGroup)) return null;
++        ViewGroup raiz = (ViewGroup) vistaRaiz;
+         View capa = raiz.findViewWithTag(ETIQUETA_GOTITA);
+         int visibilidad = capa != null ? capa.getVisibility() : View.GONE;
+         try {
+@@ -211,6 +216,9 @@ final class GotitaPantalla {
+             lienzo.drawColor(Color.WHITE);
+             lienzo.scale(escala, escala);
+             raiz.draw(lienzo);
++            Paint tapa = new Paint();
++            tapa.setColor(Color.LTGRAY);
++            taparCampos(raiz, raiz, lienzo, tapa);
+             ByteArrayOutputStream salida = new ByteArrayOutputStream();
+             imagen.compress(Bitmap.CompressFormat.JPEG, 70, salida);
+             imagen.recycle();
+@@ -222,6 +230,21 @@ final class GotitaPantalla {
+         }
+     }
+ 
++    /** Tapa en la foto cada campo de texto visible: lo que la persona escribe no sale del teléfono. */
++    private static void taparCampos(ViewGroup raiz, View vista, Canvas lienzo, Paint tapa) {
++        if (vista == null || !vista.isShown()) return;
++        if (vista instanceof EditText) {
++            Rect zona = new Rect(0, 0, vista.getWidth(), vista.getHeight());
++            raiz.offsetDescendantRectToMyCoords(vista, zona);
++            lienzo.drawRect(zona, tapa);
++            return;
++        }
++        if (vista instanceof ViewGroup) {
++            ViewGroup grupo = (ViewGroup) vista;
++            for (int i = 0; i < grupo.getChildCount(); i++) taparCampos(raiz, grupo.getChildAt(i), lienzo, tapa);
++        }
++    }
++
+     /** Prepara la pantalla a la que Gotita quiere llevar, o null si no existe en la app. */
+     static Intent intentPara(Activity desde, String destino, boolean esAdmin) {
+         Class<? extends Activity> pantalla = PANTALLAS.get(destino);
+diff --git a/app/src/main/java/com/example/smartdrop/GotitaVista.java b/app/src/main/java/com/example/smartdrop/GotitaVista.java
+index 5bd9250..fe9c883 100644
+--- a/app/src/main/java/com/example/smartdrop/GotitaVista.java
++++ b/app/src/main/java/com/example/smartdrop/GotitaVista.java
+@@ -584,7 +584,7 @@ final class GotitaVista implements Gotita.Vista {
+             if (vistaPanel == null) return;
+             LinearLayout lista = vistaPanel.findViewById(R.id.gotitaHistorialLista);
+             lista.removeAllViews();
+-            if (json == null || !json.has("conversaciones")) {
++            if (json == null || !json.has("conversaciones") || !json.get("conversaciones").isJsonArray()) {
+                 lista.addView(textoSimple(gotita.t("historial_error")));
+                 return;
+             }
+@@ -593,7 +593,11 @@ final class GotitaVista implements Gotita.Vista {
+                 lista.addView(textoSimple(gotita.t("sin_historial")));
+                 return;
+             }
+-            for (JsonElement elemento : conversaciones) lista.addView(filaHistorial(elemento.getAsJsonObject()));
++            for (JsonElement elemento : conversaciones) {
++                // Una conversación sin número (dato dañado del servidor) no se muestra.
++                if (!elemento.isJsonObject() || GotitaCliente.numero(elemento.getAsJsonObject(), "id") == null) continue;
++                lista.addView(filaHistorial(elemento.getAsJsonObject()));
++            }
+         });
+     }
+ 
+@@ -606,8 +610,9 @@ final class GotitaVista implements Gotita.Vista {
+     }
+ 
+     private View filaHistorial(JsonObject conversacion) {
+-        int id = conversacion.get("id").getAsInt();
+-        String titulo = conversacion.has("titulo") ? conversacion.get("titulo").getAsString() : "";
++        int id = GotitaCliente.numero(conversacion, "id");
++        String guardado = GotitaCliente.texto(conversacion, "titulo");
++        String titulo = guardado != null ? guardado : "";
+         Integer actual = gotita.conversacionId();
+ 
+         LinearLayout fila = new LinearLayout(actividad);
+@@ -624,7 +629,7 @@ final class GotitaVista implements Gotita.Vista {
+         nombre.setMaxLines(1);
+         nombre.setEllipsize(TextUtils.TruncateAt.END);
+         TextView cuando = new TextView(actividad);
+-        cuando.setText(fechaCorta(conversacion.has("actualizada") ? conversacion.get("actualizada").getAsString() : null));
++        cuando.setText(fechaCorta(GotitaCliente.texto(conversacion, "actualizada")));
+         cuando.setTextAppearance(R.style.TextAppearance_SmartDrop_Caption);
+         textos.addView(nombre);
+         textos.addView(cuando);
+diff --git a/app/src/main/java/com/example/smartdrop/GotitaVoz.java b/app/src/main/java/com/example/smartdrop/GotitaVoz.java
+index 8431f02..c10fcdb 100644
+--- a/app/src/main/java/com/example/smartdrop/GotitaVoz.java
++++ b/app/src/main/java/com/example/smartdrop/GotitaVoz.java
+@@ -55,6 +55,7 @@ final class GotitaVoz extends UtteranceProgressListener implements TextToSpeech.
+     private final List<String> pendientes = new ArrayList<>();
+     private final Deque<Frase> colaNatural = new ArrayDeque<>();
+     private MediaPlayer reproductor;
++    private Frase sonandoAhora; // la frase cuyo audio se está reproduciendo
+     private boolean natural;
+     private boolean sonando;
+     private int generacion;
+@@ -173,6 +174,11 @@ final class GotitaVoz extends UtteranceProgressListener implements TextToSpeech.
+         for (Frase frase : colaNatural) frase.borrar();
+         colaNatural.clear();
+         soltarReproductor();
++        // El audio que estaba sonando tampoco se queda en la caché.
++        if (sonandoAhora != null) {
++            sonandoAhora.borrar();
++            sonandoAhora = null;
++        }
+         if (lista) tts.stop();
+         if (enCola > 0) {
+             enCola = 0;
+@@ -263,6 +269,7 @@ final class GotitaVoz extends UtteranceProgressListener implements TextToSpeech.
+             return;
+         }
+         colaNatural.poll();
++        sonandoAhora = frase;
+         try {
+             reproductor = new MediaPlayer();
+             reproductor.setAudioAttributes(new AudioAttributes.Builder()
+@@ -287,6 +294,7 @@ final class GotitaVoz extends UtteranceProgressListener implements TextToSpeech.
+     private void terminarFrase(Frase frase) {
+         soltarReproductor();
+         frase.borrar();
++        if (sonandoAhora == frase) sonandoAhora = null;
+         unaMenos();
+         reproducirSiguiente();
+     }
+diff --git a/app/src/main/java/com/example/smartdrop/GraficasMonitoreoActivity.java b/app/src/main/java/com/example/smartdrop/GraficasMonitoreoActivity.java
+index 519dbf9..d308d4b 100644
+--- a/app/src/main/java/com/example/smartdrop/GraficasMonitoreoActivity.java
++++ b/app/src/main/java/com/example/smartdrop/GraficasMonitoreoActivity.java
+@@ -228,7 +228,7 @@ public class GraficasMonitoreoActivity extends BaseActivity {
+             @Override
+             public void onFailure(@NonNull Call<GraficasResponse> call, @NonNull Throwable t) {
+                 terminarCarga();
+-                Toast.makeText(GraficasMonitoreoActivity.this, "Error de conexión: " + t.getMessage(), Toast.LENGTH_LONG).show();
++                Toast.makeText(GraficasMonitoreoActivity.this, ErrorApi.SIN_CONEXION, Toast.LENGTH_LONG).show();
+             }
+         });
+     }
+diff --git a/app/src/main/java/com/example/smartdrop/MainActivity.java b/app/src/main/java/com/example/smartdrop/MainActivity.java
+index d1ea479..49f126e 100644
+--- a/app/src/main/java/com/example/smartdrop/MainActivity.java
++++ b/app/src/main/java/com/example/smartdrop/MainActivity.java
+@@ -102,9 +102,7 @@ public class MainActivity extends BaseActivity {
+             @Override
+             public void onFailure(Call<LoginResponse> call, Throwable t) {
+                 btnLogin.setEnabled(true);
+-                Toast.makeText(MainActivity.this,
+-                        "No se pudo conectar al servidor: " + t.getMessage(),
+-                        Toast.LENGTH_LONG).show();
++                Toast.makeText(MainActivity.this, ErrorApi.SIN_CONEXION, Toast.LENGTH_LONG).show();
+             }
+         });
+     }
+diff --git a/app/src/main/java/com/example/smartdrop/RegisterActivity.java b/app/src/main/java/com/example/smartdrop/RegisterActivity.java
+index a833878..ad452ae 100644
+--- a/app/src/main/java/com/example/smartdrop/RegisterActivity.java
++++ b/app/src/main/java/com/example/smartdrop/RegisterActivity.java
+@@ -80,7 +80,7 @@ public class RegisterActivity extends BaseActivity {
+             @Override
+             public void onFailure(Call<RegisterResponse> call, Throwable t) {
+ 
+-                Toast.makeText(RegisterActivity.this, "No se pudo conectar al servidor: " + t.getMessage(), Toast.LENGTH_LONG).show();
++                Toast.makeText(RegisterActivity.this, ErrorApi.SIN_CONEXION, Toast.LENGTH_LONG).show();
+ 
+             }
+         });
+diff --git a/app/src/main/java/com/example/smartdrop/ReporteDetalleActivity.java b/app/src/main/java/com/example/smartdrop/ReporteDetalleActivity.java
+index 81ee086..4f99a84 100644
+--- a/app/src/main/java/com/example/smartdrop/ReporteDetalleActivity.java
++++ b/app/src/main/java/com/example/smartdrop/ReporteDetalleActivity.java
+@@ -137,7 +137,7 @@ public class ReporteDetalleActivity extends BaseActivity {
+ 
+             @Override
+             public void onFailure(Call<ReporteDetalleResponse> call, Throwable t) {
+-                avisarErrorUnaVez("Error al cargar el reporte: " + t.getMessage());
++                avisarErrorUnaVez(ErrorApi.SIN_CONEXION);
+             }
+         });
+     }
+diff --git a/app/src/main/java/com/example/smartdrop/Sesion.java b/app/src/main/java/com/example/smartdrop/Sesion.java
+index 747ee51..1cec0fe 100644
+--- a/app/src/main/java/com/example/smartdrop/Sesion.java
++++ b/app/src/main/java/com/example/smartdrop/Sesion.java
+@@ -121,9 +121,9 @@ public final class Sesion {
+         SharedPreferences sesion = prefs(context);
+         boolean oscuro = sesion.getBoolean("modo_oscuro", false);
+         sesion.edit().clear().putBoolean("modo_oscuro", oscuro).apply();
+-        // Gotita se calla y olvida la conversación de esta cuenta (en el hilo principal: expirar() llega
+-        // desde un hilo de OkHttp).
+-        Gotita.olvidarSesion();
++        // Gotita se calla y olvida la conversación y los ajustes de esta cuenta (en el hilo principal:
++        // expirar() llega desde un hilo de OkHttp).
++        Gotita.olvidarSesion(context);
+     }
+ 
+     private static SharedPreferences prefs(Context context) {
+diff --git a/app/src/main/java/com/example/smartdrop/ValvulaActivity.java b/app/src/main/java/com/example/smartdrop/ValvulaActivity.java
+index 18d19e4..7afcf35 100644
+--- a/app/src/main/java/com/example/smartdrop/ValvulaActivity.java
++++ b/app/src/main/java/com/example/smartdrop/ValvulaActivity.java
+@@ -327,7 +327,7 @@ public class ValvulaActivity extends BaseActivity {
+             public void onFailure(Call<ResponseBody> call, Throwable t) {
+                 comandoEnCurso = false;
+                 habilitarControles(true);
+-                Toast.makeText(ValvulaActivity.this, "Fallo de conexión: " + t.getMessage(), Toast.LENGTH_LONG).show();
++                Toast.makeText(ValvulaActivity.this, ErrorApi.SIN_CONEXION, Toast.LENGTH_LONG).show();
+             }
+         });
+     }
+diff --git a/app/src/main/java/com/example/smartdrop/ValvulaEstadoPublicoResponse.java b/app/src/main/java/com/example/smartdrop/ValvulaEstadoPublicoResponse.java
+deleted file mode 100644
+index 731a1ca..0000000
+--- a/app/src/main/java/com/example/smartdrop/ValvulaEstadoPublicoResponse.java
++++ /dev/null
+@@ -1,33 +0,0 @@
+-package com.example.smartdrop;
+-
+-import com.google.gson.annotations.SerializedName;
+-
+-public class ValvulaEstadoPublicoResponse {
+-    @SerializedName("ok")
+-    private boolean ok;
+-    
+-    @SerializedName("valvula")
+-    private ValvulaData valvula;
+-
+-    public boolean isOk() { return ok; }
+-    public ValvulaData getValvula() { return valvula; }
+-
+-    public static class ValvulaData {
+-        @SerializedName("id_valvula")
+-        private int idValvula;
+-        @SerializedName("nombre")
+-        private String nombre;
+-        @SerializedName("estado")
+-        private String estado;
+-        @SerializedName("clase")
+-        private String clase;
+-        @SerializedName("ultima_actualizacion")
+-        private String ultimaActualizacion;
+-
+-        public int getIdValvula() { return idValvula; }
+-        public String getNombre() { return nombre; }
+-        public String getEstado() { return estado; }
+-        public String getClase() { return clase; }
+-        public String getUltimaActualizacion() { return ultimaActualizacion; }
+-    }
+-}
+diff --git a/app/src/main/java/com/example/smartdrop/VincularViviendaActivity.java b/app/src/main/java/com/example/smartdrop/VincularViviendaActivity.java
+index 116570b..2b6ae9c 100644
+--- a/app/src/main/java/com/example/smartdrop/VincularViviendaActivity.java
++++ b/app/src/main/java/com/example/smartdrop/VincularViviendaActivity.java
+@@ -74,8 +74,7 @@ public class VincularViviendaActivity extends BaseActivity {
+             @Override
+             public void onFailure(Call<VincularViviendaResponse> call, Throwable t) {
+                 btnVincular.setEnabled(true);
+-                Toast.makeText(VincularViviendaActivity.this,
+-                        "Sin conexión: " + t.getMessage(), Toast.LENGTH_LONG).show();
++                Toast.makeText(VincularViviendaActivity.this, ErrorApi.SIN_CONEXION, Toast.LENGTH_LONG).show();
+             }
+         });
+     }
+diff --git a/app/src/test/java/com/example/smartdrop/ContratoValvulaTest.java b/app/src/test/java/com/example/smartdrop/ContratoValvulaTest.java
+index 64779e4..670ced1 100644
+--- a/app/src/test/java/com/example/smartdrop/ContratoValvulaTest.java
++++ b/app/src/test/java/com/example/smartdrop/ContratoValvulaTest.java
+@@ -16,13 +16,18 @@ public class ContratoValvulaTest {
+ 
+     @Test
+     public void leeLaCuentaRegresivaDelEstado() {
+-        String json = "{\"id_valvula\": 1, \"estado_actual\": \"abierta\", \"abierta_desde\": \"2026-10-22T16:00:00+00:00\","
+-                + " \"temporizador_activo\": {\"duracion_programada\": 30, \"segundos_restantes\": 27, \"fin\": \"x\"}}";
++        // Tal cual responde GET api/valvula/<id>/estado/.
++        String json = "{\"id_valvula\":3,\"nombre\":\"Válvula principal\",\"estado_actual\":\"abierta\","
++                + "\"ultima_apertura\":\"2026-10-24T10:00:00+00:00\",\"abierta_desde\":\"2026-10-24T10:00:00+00:00\","
++                + "\"temporizador_activo\":{\"duracion_programada\":30,\"segundos_restantes\":12,"
++                + "\"fin\":\"2026-10-24T10:00:30+00:00\"}}";
+         ValvulaEstadoResponse estado = gson.fromJson(json, ValvulaEstadoResponse.class);
+         assertEquals("abierta", estado.getEstadoActual());
+-        assertEquals(27, estado.getTemporizadorActivo().getSegundosRestantes());
++        assertEquals(12, estado.getTemporizadorActivo().getSegundosRestantes());
+         assertEquals(30, estado.getTemporizadorActivo().getDuracionProgramada());
+-        assertEquals("2026-10-22T16:00:00+00:00", estado.getAbiertaDesde());
++        assertEquals("2026-10-24T10:00:00+00:00", estado.getAbiertaDesde());
++        // "Abierta desde las hh:mm:ss" sale de esta hora (10:00 UTC).
++        assertEquals(Fechas.parse("2026-10-24T10:00:00Z"), Fechas.parse(estado.getAbiertaDesde()));
+     }
+ 
+     @Test
+diff --git a/app/src/test/java/com/example/smartdrop/GotitaOidoTest.java b/app/src/test/java/com/example/smartdrop/GotitaOidoTest.java
+new file mode 100644
+index 0000000..2b197df
+--- /dev/null
++++ b/app/src/test/java/com/example/smartdrop/GotitaOidoTest.java
+@@ -0,0 +1,52 @@
++package com.example.smartdrop;
++
++import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.assertFalse;
++import static org.junit.Assert.assertNull;
++import static org.junit.Assert.assertTrue;
++
++import org.junit.Test;
++
++/** "Oye Gotita" solo despierta a Gotita al inicio de la frase: lo demás no sale del teléfono. */
++public class GotitaOidoTest {
++
++    @Test
++    public void despiertaConOyeHeyOEyAlInicio() {
++        assertEquals("cómo está mi tanque", GotitaOido.trasDespertar("oye gotita cómo está mi tanque"));
++        assertEquals("hay alertas?", GotitaOido.trasDespertar("Oye, Gotita, ¿hay alertas?"));
++        assertEquals("how is my tank", GotitaOido.trasDespertar("Hey Gotita how is my tank"));
++        assertEquals("", GotitaOido.trasDespertar("ey gotita"));
++        assertEquals("", GotitaOido.trasDespertar("¡Oye Gotita!"));
++    }
++
++    @Test
++    public void aceptaComoSueleEntenderElTelefonoGotitaSoloDespuesDelLlamado() {
++        assertEquals("qué tal", GotitaOido.trasDespertar("oye godita qué tal"));
++        assertEquals("qué tal", GotitaOido.trasDespertar("oye go tita qué tal"));
++        assertNull(GotitaOido.trasDespertar("godita qué tal"));
++    }
++
++    @Test
++    public void unaFraseQueSoloMencionaGotitaSeIgnora() {
++        assertNull(GotitaOido.trasDespertar("gotita cómo está mi tanque"));
++        assertNull(GotitaOido.trasDespertar("le dije a mi hermana oye gotita cómo está el tanque"));
++        assertNull(GotitaOido.trasDespertar("se cayó una gotita del grifo"));
++        assertNull(GotitaOido.trasDespertar("ok gotita apaga todo"));
++        assertNull(GotitaOido.trasDespertar("I got it a minute ago"));
++        assertNull(GotitaOido.trasDespertar("oye got it a question"));
++        assertNull(GotitaOido.trasDespertar("oye cotita qué tal"));
++        assertNull(GotitaOido.trasDespertar("oye gotitaaa"));
++        assertNull(GotitaOido.trasDespertar(""));
++        assertNull(GotitaOido.trasDespertar(null));
++    }
++
++    @Test
++    public void pararNecesitaElNombreYLaFraseCompleta() {
++        assertTrue(GotitaOido.pideParar("gotita para"));
++        assertTrue(GotitaOido.pideParar("Oye Gotita, ya basta"));
++        assertTrue(GotitaOido.pideParar("gotita cállate."));
++        assertFalse(GotitaOido.pideParar("para"));
++        assertFalse(GotitaOido.pideParar("la gotita para el tanque"));
++        assertFalse(GotitaOido.pideParar("oye gotita para qué sirve la válvula"));
++    }
++}
+diff --git a/app/src/test/java/com/example/smartdrop/GotitaPantallaTest.java b/app/src/test/java/com/example/smartdrop/GotitaPantallaTest.java
+new file mode 100644
+index 0000000..0fffdd6
+--- /dev/null
++++ b/app/src/test/java/com/example/smartdrop/GotitaPantallaTest.java
+@@ -0,0 +1,39 @@
++package com.example.smartdrop;
++
++import static org.junit.Assert.assertFalse;
++import static org.junit.Assert.assertTrue;
++
++import org.junit.Test;
++
++/** Qué pantallas y qué preguntas mandan a Gotita lo que se ve (texto, partes y captura). */
++public class GotitaPantallaTest {
++
++    @Test
++    public void soloSeMandaSiLaPreguntaEsSobreLaPantalla() {
++        assertTrue(Gotita.mandarPantalla("tanque", false, "¿Qué estoy viendo?", false));
++        assertTrue(Gotita.mandarPantalla("graficas", false, "¿Qué muestran estas gráficas?", false));
++        assertTrue(Gotita.mandarPantalla("presion", false, "Explain this screen", false));
++        // El botón "Explícame esta pantalla".
++        assertTrue(Gotita.mandarPantalla("consumo", false, "lo que sea", true));
++        assertFalse(Gotita.mandarPantalla("tanque", false, "¿Cuánta agua me queda?", false));
++        assertFalse(Gotita.mandarPantalla("inicio", false, "¿Cómo está mi agua hoy?", false));
++    }
++
++    @Test
++    public void nuncaDesdeLaCuentaElLoginNiElRegistro() {
++        for (String id : new String[]{"perfil", "configuracion", "main", "register"}) {
++            assertFalse(id, Gotita.mandarPantalla(id, false, "Explícame esta pantalla", true));
++        }
++    }
++
++    @Test
++    public void nuncaDesdeLasPantallasDelAdminConDatosDeOtrasPersonas() {
++        for (String id : new String[]{"panel", "reportes_admin", "prediccion_fugas", "prediccion_suministro",
++                "zonapredicciondetalle", "comunidad", "reportedetalle", "valvulas", "buscar"}) {
++            assertFalse(id, Gotita.mandarPantalla(id, true, "¿Qué muestra esta pantalla?", true));
++        }
++        // Al usuario normal la válvula no le muestra quién la abrió; las gráficas del admin son promedios.
++        assertTrue(Gotita.mandarPantalla("valvulas", false, "¿Qué muestra esta pantalla?", false));
++        assertTrue(Gotita.mandarPantalla("graficas", true, "¿Qué muestran estas gráficas?", false));
++    }
++}
+-- 
+2.43.0
+
