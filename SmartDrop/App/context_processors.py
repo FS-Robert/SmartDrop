@@ -22,4 +22,15 @@ def preferencias_ui(request):
         contexto['ui_idioma'] = 'es'
     if contexto['ui_idioma'] == 'en':
         contexto['ui_i18n_version'] = (i18n.catalogo('en') or {}).get('version', 0)
+    if user and user.is_authenticated:
+        from .asistente import claude, destinos, voz
+        if claude.disponible():
+            # Gotita (botón, chat y voz) y las pantallas a las que puede llevar a esta persona.
+            rol = destinos.rol_de(user)
+            contexto['gotita'] = {
+                'rol': rol,
+                'destinos': {d: destinos.url_web(d) for d in destinos.disponibles(rol, destinos.WEB)},
+                'voz_natural': voz.disponible(),
+                'dictado_natural': voz.dictado_disponible(),
+            }
     return contexto

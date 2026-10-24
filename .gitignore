@@ -33,6 +33,9 @@ staticfiles/
 # Modelos generados por el pipeline ML
 ml_models/
 
+# Audios guardados de la voz de Gotita
+gotita_audio/
+
 # IDE y sistema
 .vscode/
 .idea/

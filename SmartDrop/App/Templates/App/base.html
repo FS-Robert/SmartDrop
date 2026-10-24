@@ -12,6 +12,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet"/>
   <link rel="stylesheet" href="{% static 'App/css/smartdrop.css' %}?v=20261018-agua1"/>
+  {% if gotita %}<link rel="stylesheet" href="{% static 'App/css/gotita.css' %}?v=20261023-6"/>{% endif %}
   {% block extra_css %}{% endblock %}
   <script>
     (function () {
@@ -357,6 +358,9 @@
     <script src="{% static 'App/js/admin_leak_alerts.js' %}" data-alerts-url="{% url 'ml_engine:leak_alerts' %}" data-leaks-url="{% url 'ml_engine:leaks' %}"></script>
   {% endif %}
   <script src="{% static 'App/js/sd_motion.js' %}?v=20261011-zona2"></script>
+  {% if gotita %}
+    {% include 'App/_gotita.html' %}
+  {% endif %}
   {% block extra_js %}{% endblock %}
 </body>
 </html>

@@ -109,3 +109,37 @@ class PreferenciasUsuario(models.Model):
 
     def __str__(self):
         return f'Preferencias de {self.id_usuario}'
+
+
+class ConversacionGotita(models.Model):
+    """Una conversación con Gotita. Se borra sola cuando lleva 20 días sin usarse (ver asistente/historial.py)."""
+
+    id_usuario = models.BigIntegerField(db_index=True)
+    plataforma = models.CharField(max_length=4, default='web')
+    titulo = models.CharField(max_length=80)
+    creada = models.DateTimeField(auto_now_add=True)
+    actualizada = models.DateTimeField(auto_now=True, db_index=True)
+
+    class Meta:
+        db_table = 'gotita_conversacion'
+        ordering = ['-actualizada']
+        verbose_name = 'conversación con Gotita'
+        verbose_name_plural = 'conversaciones con Gotita'
+
+    def __str__(self):
+        return f'{self.titulo} ({self.id_usuario})'
+
+
+class MensajeGotita(models.Model):
+    """Un mensaje de una conversación con Gotita: lo que preguntó la persona o lo que respondió Gotita."""
+
+    ROLES = (('user', 'Persona'), ('gotita', 'Gotita'))
+
+    conversacion = models.ForeignKey(ConversacionGotita, on_delete=models.CASCADE, related_name='mensajes')
+    rol = models.CharField(max_length=6, choices=ROLES)
+    texto = models.TextField()
+    creado = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'gotita_mensaje'
+        ordering = ['id']

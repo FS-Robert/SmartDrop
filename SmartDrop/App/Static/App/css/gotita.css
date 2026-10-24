@@ -1,0 +1,915 @@
+/* Gotita, la asistente: botón en la esquina, burbuja de avisos y chat. Usa los mismos colores de la
+   página (también en modo oscuro). La gotita cambia según lo que hace: espera, escucha, piensa o habla. */
+
+.gotita-simbolos {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.gotita {
+  --gotita-tam: 64px;
+  --gotita-margen: 20px;
+  position: fixed;
+  right: var(--gotita-margen);
+  bottom: var(--gotita-margen);
+  z-index: 1200;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--s-3);
+  font-family: var(--font-text);
+  pointer-events: none;
+}
+
+.gotita > * {
+  pointer-events: auto;
+}
+
+/* ── Botón con la gota ───────────────────────────────────────────── */
+
+.gotita-boton {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: var(--gotita-tam);
+  height: var(--gotita-tam);
+  padding: 0;
+  border: 1px solid var(--c-line);
+  border-radius: 50%;
+  background: var(--c-surface);
+  box-shadow: var(--shadow-overlay);
+  cursor: pointer;
+  transition: transform var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
+}
+
+.gotita-boton:hover {
+  transform: translateY(-2px);
+}
+
+.gotita-boton:focus-visible,
+.gotita button:focus-visible,
+.gotita textarea:focus-visible,
+.gotita input:focus-visible + .gotita-interruptor-pista {
+  outline: 3px solid var(--c-agua-claro);
+  outline-offset: 2px;
+}
+
+.gotita-boton .gotita-gota {
+  width: 44px;
+  height: 44px;
+  overflow: visible;
+}
+
+.gotita-boton::after {
+  /* Anillo que late mientras Gotita escucha */
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border: 3px solid var(--c-agua);
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.gotita-punto {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--c-surface);
+  border-radius: 50%;
+  background: var(--c-bad-dot);
+}
+
+.gotita-gota .gotita-boca {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.gotita-gota .gotita-ojos {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.gotita-gota .gotita-cuerpo {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+}
+
+/* Reposo: la gota flota despacio y parpadea de vez en cuando */
+@media (prefers-reduced-motion: no-preference) {
+  .gotita[data-estado="reposo"] .gotita-boton .gotita-gota,
+  .gotita[data-estado="vigilando"] .gotita-boton .gotita-gota {
+    animation: gotita-flotar 4s var(--ease) infinite;
+  }
+
+  .gotita .gotita-boton .gotita-ojos {
+    animation: gotita-parpadeo 5s infinite;
+  }
+
+  .gotita[data-estado="escuchando"] .gotita-boton::after {
+    animation: gotita-latido 1.2s ease-out infinite;
+  }
+
+  .gotita[data-estado="escuchando"] .gotita-cuerpo {
+    animation: gotita-respirar 1.2s ease-in-out infinite;
+  }
+
+  .gotita[data-estado="pensando"] .gotita-ojos {
+    animation: gotita-pensar 1.4s ease-in-out infinite;
+  }
+
+  .gotita[data-estado="hablando"] .gotita-boca {
+    animation: gotita-hablar .32s ease-in-out infinite alternate;
+  }
+}
+
+.gotita[data-estado="vigilando"] .gotita-boton {
+  border-color: var(--c-agua-claro);
+}
+
+.gotita[data-estado="escuchando"] .gotita-boton {
+  border-color: var(--c-agua);
+}
+
+.gotita[data-estado="hablando"] .gotita-sonrisa {
+  opacity: 0;
+}
+
+.gotita[data-estado="hablando"] .gotita-boca {
+  opacity: 1;
+}
+
+@keyframes gotita-flotar {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+
+@keyframes gotita-parpadeo {
+  0%, 92%, 100% { transform: scaleY(1); }
+  95% { transform: scaleY(.1); }
+}
+
+@keyframes gotita-latido {
+  0% { opacity: .7; transform: scale(.92); }
+  100% { opacity: 0; transform: scale(1.18); }
+}
+
+@keyframes gotita-respirar {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05, .96); }
+}
+
+@keyframes gotita-pensar {
+  0%, 100% { transform: translate(0, 0); }
+  30% { transform: translate(-1.5px, -2px); }
+  60% { transform: translate(1.5px, -2px); }
+}
+
+@keyframes gotita-hablar {
+  from { transform: scaleY(.35); }
+  to { transform: scaleY(1.1); }
+}
+
+/* ── Burbuja de avisos y frases ──────────────────────────────────── */
+
+.gotita-burbuja {
+  position: relative;
+  max-width: min(340px, calc(100vw - 2 * var(--gotita-margen)));
+  padding: var(--s-4) var(--s-7) var(--s-3) var(--s-4);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-lg) var(--r-lg) var(--r-xs) var(--r-lg);
+  background: var(--c-surface);
+  color: var(--c-ink);
+  box-shadow: var(--shadow-overlay);
+  animation: gotita-aparecer var(--dur-2, 200ms) var(--ease);
+}
+
+.gotita-burbuja[data-tipo="aviso"] {
+  border-left: 4px solid var(--c-warn-dot);
+}
+
+.gotita-burbuja-texto {
+  margin: 0;
+  font-size: var(--t-md);
+  line-height: 1.45;
+}
+
+.gotita-burbuja-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  margin-top: var(--s-2);
+}
+
+.gotita-burbuja-cerrar {
+  position: absolute;
+  top: var(--s-2);
+  right: var(--s-2);
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--c-ink-3);
+  cursor: pointer;
+}
+
+.gotita-burbuja-cerrar:hover {
+  background: var(--c-surface-tint);
+}
+
+@keyframes gotita-aparecer {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ── Panel ───────────────────────────────────────────────────────── */
+
+.gotita-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(400px, calc(100vw - 2 * var(--gotita-margen)));
+  height: min(620px, calc(100vh - var(--gotita-tam) - 3 * var(--gotita-margen)));
+  height: min(620px, calc(100dvh - var(--gotita-tam) - 3 * var(--gotita-margen)));
+  overflow: hidden;
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-xl);
+  background: var(--c-surface);
+  color: var(--c-ink);
+  box-shadow: var(--shadow-overlay);
+  animation: gotita-aparecer var(--dur-2, 200ms) var(--ease);
+}
+
+.gotita-panel[hidden],
+.gotita-burbuja[hidden],
+.gotita-ajustes[hidden],
+.gotita-historial[hidden] {
+  display: none;
+}
+
+/* Con el historial abierto el panel se ensancha y la lista queda a la par del chat */
+.gotita-panel.con-historial {
+  width: min(660px, calc(100vw - 2 * var(--gotita-margen)));
+}
+
+.gotita-centro {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.gotita-conversacion {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* ── Historial de conversaciones ─────────────────────────────────── */
+
+.gotita-historial {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--s-2);
+  width: 240px;
+  min-height: 0;
+  padding: var(--s-3);
+  border-right: 1px solid var(--c-line);
+  background: var(--c-surface-2);
+}
+
+.gotita-historial-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+}
+
+.gotita-historial-titulo {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--t-md);
+  font-weight: 700;
+  color: var(--c-ink);
+}
+
+.gotita-icono--chico {
+  width: 32px;
+  height: 32px;
+}
+
+.gotita-nueva {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+  min-height: 40px;
+  padding: 0 var(--s-3);
+  border: 1px dashed var(--c-anil);
+  border-radius: var(--r-md);
+  background: var(--c-surface);
+  color: var(--c-anil);
+  font: 600 var(--t-sm) / 1.2 var(--font-text);
+  cursor: pointer;
+}
+
+.gotita-nueva:hover {
+  background: var(--c-agua-soft);
+}
+
+.gotita-nueva .icon {
+  width: 1.1em;
+  height: 1.1em;
+}
+
+.gotita-historial-lista {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+}
+
+.gotita-historial-item {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: var(--r-sm);
+}
+
+.gotita-historial-item:hover,
+.gotita-historial-item[aria-current="true"] {
+  background: var(--c-agua-soft);
+}
+
+.gotita-historial-abrir {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: var(--s-2);
+  border: 0;
+  background: none;
+  color: var(--c-ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.gotita-historial-abrir strong {
+  overflow: hidden;
+  font: 600 var(--t-sm) / 1.3 var(--font-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gotita-historial-abrir span {
+  font-size: var(--t-xs, 12px);
+  color: var(--c-ink-2);
+}
+
+.gotita-historial-borrar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--c-ink-2);
+  cursor: pointer;
+}
+
+.gotita-historial-borrar:hover {
+  color: var(--c-danger, #DC2626);
+}
+
+.gotita-historial-borrar .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.gotita-historial-vacio,
+.gotita-historial-nota {
+  margin: 0;
+  font-size: var(--t-xs, 12px);
+  line-height: 1.4;
+  color: var(--c-ink-2);
+}
+
+.gotita-historial-vacio {
+  padding: var(--s-2);
+}
+
+.gotita-historial-todo {
+  align-self: flex-start;
+  font-size: var(--t-xs, 12px);
+}
+
+/* Parte de la página que Gotita está mostrando */
+.gotita-resaltado {
+  outline: 3px solid var(--c-anil) !important;
+  outline-offset: 4px;
+  border-radius: var(--r-md);
+  transition: outline-color .4s ease;
+}
+
+.gotita-cabecera {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-4) var(--s-3) var(--s-3) var(--s-4);
+  background: var(--g-agua);
+  border-bottom: 1px solid var(--c-line);
+}
+
+.gotita-cabecera-texto {
+  flex: 1;
+  min-width: 0;
+}
+
+.gotita-titulo {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--t-lg);
+  font-weight: 700;
+  color: var(--c-ink);
+}
+
+.gotita-estado {
+  margin: 2px 0 0;
+  font-size: var(--t-sm);
+  color: var(--c-ink-2);
+}
+
+.gotita-avatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--c-agua-soft);
+}
+
+.gotita-avatar svg {
+  width: 26px;
+  height: 26px;
+}
+
+.gotita-avatar--grande {
+  width: 48px;
+  height: 48px;
+  background: var(--c-surface);
+  box-shadow: var(--shadow-soft);
+}
+
+.gotita-avatar--grande svg {
+  width: 38px;
+  height: 38px;
+}
+
+.gotita-icono {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--c-ink-2);
+  cursor: pointer;
+}
+
+.gotita-icono:hover,
+.gotita-icono[aria-expanded="true"] {
+  background: var(--c-surface);
+  color: var(--c-anil);
+}
+
+.gotita-barra,
+.gotita-ajustes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  border-bottom: 1px solid var(--c-line);
+}
+
+.gotita-ajustes {
+  flex-direction: column;
+  align-items: stretch;
+  background: var(--c-surface-2);
+}
+
+.gotita-fila {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+}
+
+.gotita-fila-texto,
+.gotita-interruptor-texto {
+  font-size: var(--t-sm);
+  color: var(--c-ink);
+}
+
+.gotita-ayuda {
+  flex-basis: 100%;
+  margin: calc(-1 * var(--s-2)) 0 0;
+  font-size: var(--t-xs);
+  line-height: 1.4;
+  color: var(--c-ink-3);
+}
+
+.gotita-fila--voz {
+  flex-wrap: wrap;
+}
+
+.gotita-select {
+  flex: 1;
+  min-width: 0;
+  min-height: 36px;
+  padding: 0 var(--s-2);
+  border: 1px solid var(--c-line-strong);
+  border-radius: var(--r-sm);
+  background: var(--c-surface);
+  color: var(--c-ink);
+  font: var(--t-sm) / 1.2 var(--font-text);
+}
+
+.gotita-nota {
+  margin: 0;
+  font-size: var(--t-xs);
+  line-height: 1.45;
+  color: var(--c-ink-3);
+}
+
+/* Botones de dos opciones (Sencillo/Técnico, ES/EN…) */
+.gotita-segmento {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: var(--r-pill);
+  background: var(--c-surface-tint);
+}
+
+.gotita-segmento button {
+  min-height: 34px;
+  padding: 0 var(--s-3);
+  border: 0;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--c-ink-2);
+  font: 600 var(--t-sm) / 1 var(--font-text);
+  cursor: pointer;
+}
+
+.gotita-segmento button[aria-checked="true"] {
+  background: var(--c-surface);
+  color: var(--c-anil);
+  box-shadow: var(--shadow-soft);
+}
+
+/* Interruptor */
+.gotita-interruptor {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: 34px;
+  cursor: pointer;
+}
+
+.gotita-interruptor input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+
+.gotita-interruptor-pista {
+  position: relative;
+  flex: none;
+  width: 40px;
+  height: 22px;
+  border-radius: var(--r-pill);
+  background: var(--c-line-strong);
+  transition: background var(--dur-1) var(--ease);
+}
+
+.gotita-interruptor-pista::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .2);
+  transition: transform var(--dur-1) var(--ease);
+}
+
+.gotita-interruptor input:checked + .gotita-interruptor-pista {
+  background: var(--c-anil);
+}
+
+.gotita-interruptor input:checked + .gotita-interruptor-pista::after {
+  transform: translateX(18px);
+}
+
+.gotita-interruptor input:disabled + .gotita-interruptor-pista {
+  opacity: .5;
+}
+
+/* ── Conversación ───────────────────────────────────────────────── */
+
+.gotita-chat {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-4);
+  background: var(--g-agua-tenue);
+}
+
+.gotita-msj {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--s-2);
+  max-width: 92%;
+}
+
+.gotita-msj p {
+  margin: 0;
+  padding: var(--s-3) var(--s-4);
+  border-radius: var(--r-lg);
+  font-size: var(--t-md);
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.gotita-msj--gotita p,
+.gotita-msj--aviso p {
+  border: 1px solid var(--c-line);
+  border-bottom-left-radius: var(--r-xs);
+  background: var(--c-surface);
+  color: var(--c-ink);
+}
+
+.gotita-msj--aviso p {
+  border-left: 4px solid var(--c-warn-dot);
+}
+
+.gotita-msj--usuario {
+  align-self: flex-end;
+}
+
+.gotita-msj--usuario p {
+  border-bottom-right-radius: var(--r-xs);
+  background: var(--c-anil);
+  color: var(--c-on-anil);
+}
+
+.gotita-msj--error p {
+  border: 1px solid var(--c-bad-bg);
+  background: var(--c-bad-bg);
+  color: var(--c-bad);
+}
+
+.gotita-msj--interino p {
+  opacity: .7;
+  font-style: italic;
+}
+
+.gotita-msj-enlace {
+  display: inline-block;
+  margin-top: var(--s-2);
+}
+
+.gotita-escribiendo {
+  display: inline-flex;
+  gap: 4px;
+  padding: var(--s-3) var(--s-4);
+}
+
+.gotita-escribiendo span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--c-agua);
+  opacity: .4;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .gotita-escribiendo span {
+    animation: gotita-gotitas 1s infinite ease-in-out;
+  }
+
+  .gotita-escribiendo span:nth-child(2) { animation-delay: .15s; }
+  .gotita-escribiendo span:nth-child(3) { animation-delay: .3s; }
+}
+
+@keyframes gotita-gotitas {
+  0%, 100% { opacity: .35; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-4px); }
+}
+
+.gotita-bienvenida {
+  margin: auto 0 0;
+  font-size: var(--t-sm);
+  color: var(--c-ink-2);
+  text-align: center;
+}
+
+/* ── Sugerencias y entrada ──────────────────────────────────────── */
+
+.gotita-sugerencias {
+  display: flex;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-4);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.gotita-sugerencias:empty {
+  display: none;
+}
+
+.gotita-chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 var(--s-3);
+  border: 1px solid var(--c-line-strong);
+  border-radius: var(--r-pill);
+  background: var(--c-surface);
+  color: var(--c-anil);
+  font: 600 var(--t-sm) / 1 var(--font-text);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.gotita-chip:hover {
+  background: var(--c-anil-soft);
+}
+
+.gotita-chip .icon {
+  width: 1.1em;
+  height: 1.1em;
+}
+
+.gotita-entrada {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--s-2);
+  padding: var(--s-3) var(--s-3) var(--s-3) var(--s-4);
+  border-top: 1px solid var(--c-line);
+}
+
+.gotita-entrada textarea {
+  flex: 1;
+  min-height: 44px;
+  max-height: 120px;
+  padding: 11px var(--s-3);
+  border: 1px solid var(--c-line-strong);
+  border-radius: var(--r-md);
+  background: var(--c-surface);
+  color: var(--c-ink);
+  font: var(--t-md) / 1.4 var(--font-text);
+  resize: none;
+}
+
+.gotita-accion {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--c-surface-tint);
+  color: var(--c-anil);
+  cursor: pointer;
+}
+
+.gotita-accion .icon {
+  width: 22px;
+  height: 22px;
+}
+
+.gotita-accion--enviar {
+  background: var(--g-agua-boton);
+  color: #fff;
+}
+
+.gotita-accion--mic[aria-pressed="true"] {
+  background: var(--c-bad-dot);
+  color: #fff;
+}
+
+.gotita-accion--parar {
+  background: var(--c-bad-bg);
+  color: var(--c-bad);
+}
+
+.gotita-accion[hidden] {
+  display: none;
+}
+
+.gotita-enlace {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--c-anil);
+  font: 600 var(--t-sm) / 1.2 var(--font-text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.gotita-enlace[hidden] {
+  display: none;
+}
+
+.gotita-enlace .icon {
+  width: 1.15em;
+  height: 1.15em;
+}
+
+/* ── Teléfonos: el panel ocupa el ancho como hoja inferior ──────── */
+
+@media (max-width: 599.98px) {
+  .gotita {
+    --gotita-tam: 58px;
+    --gotita-margen: 16px;
+  }
+
+  .gotita.is-abierta {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    align-items: stretch;
+    padding: 0;
+  }
+
+  .gotita.is-abierta .gotita-boton {
+    display: none;
+  }
+
+  .gotita-panel,
+  .gotita-panel.con-historial {
+    /* Ocupa todo el ancho de lo que se ve, aunque la página sea más ancha que el teléfono */
+    width: 100%;
+    height: min(86vh, 640px);
+    height: min(86dvh, 640px);
+    border-radius: var(--r-xl) var(--r-xl) 0 0;
+  }
+
+  /* En el teléfono el historial tapa el chat hasta que eliges una conversación */
+  .gotita-historial {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    width: auto;
+    border-right: 0;
+  }
+}
+
+/* Al imprimir no aparece */
+@media print {
+  .gotita {
+    display: none;
+  }
+}

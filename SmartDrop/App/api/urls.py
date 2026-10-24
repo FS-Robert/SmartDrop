@@ -1,5 +1,12 @@
 from django.urls import path
 
+from ..asistente.vistas import (
+    AsistenteConversacionesView,
+    AsistenteConversacionView,
+    AsistenteEstadoView,
+    AsistenteTurnoView,
+    AsistenteVozView,
+)
 from .views_auth import MobileLoginView, MobileMeView, MobileRefreshView, MobileRegisterView
 from .views_mobile_data import (
     MobileEstadoAguaView,
@@ -49,4 +56,11 @@ urlpatterns = [
     path('api/reportes/comunidad/', MobileReportesComunidadView.as_view(), name='mobile_reportes_comunidad'),
     path('api/reportes/<int:reporte_id>/', MobileReporteDetalleView.as_view(), name='mobile_reporte_detalle'),
     path('api/reportes/<int:reporte_id>/adjuntar/', MobileReporteAdjuntarView.as_view(), name='mobile_reporte_adjuntar'),
+    path('api/asistente/', AsistenteEstadoView.as_view(), name='mobile_asistente'),
+    path('api/asistente/turno/', AsistenteTurnoView.as_view(), name='mobile_asistente_turno'),
+    path('api/asistente/voz/', AsistenteVozView.as_view(), name='mobile_asistente_voz'),
+    path('api/asistente/conversaciones/', AsistenteConversacionesView.as_view(),
+         name='mobile_asistente_conversaciones'),
+    path('api/asistente/conversaciones/<int:conversacion_id>/', AsistenteConversacionView.as_view(),
+         name='mobile_asistente_conversacion'),
 ]

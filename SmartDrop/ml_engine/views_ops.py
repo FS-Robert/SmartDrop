@@ -139,7 +139,8 @@ def _alert_payload(alerta, notificacion):
 class LeakAlertsView(AdminOnlyAPIView):
     """GET /v1/ml/leaks/alerts — avisos de fuga del motor para este admin (con contador de no leídos).
 
-    `?solo_no_leidas=1` limita a los no leídos; `?desde_id=N` devuelve solo alertas con id mayor (para polling).
+    `?solo_no_leidas=1` limita a los no leídos; `?desde_id=N` devuelve solo alertas con id mayor (para polling);
+    Si se pide, las no leídas traen también la frase corta de Gotita.
     """
 
     def get(self, request):
@@ -166,6 +167,10 @@ class LeakAlertsView(AdminOnlyAPIView):
         items = [_alert_payload(a, notificaciones.get(a['id_alerta'])) for a in alertas]
         if request.query_params.get('solo_no_leidas') == '1':
             items = [item for item in items if not item['leida']]
+        if request.query_params.get('gotita') == '1':
+            # Las no leídas más recientes traen la frase corta de Gotita.
+            from App.asistente.avisos import agregar_a_alertas_de_fuga
+            agregar_a_alertas_de_fuga(items, request.user)
         return Response({
             'no_leidas': sum(1 for item in items if not item['leida']),
             'alertas': items,

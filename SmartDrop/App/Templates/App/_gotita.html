@@ -1,0 +1,166 @@
+{% load static %}
+<!-- Gotita, la asistente: botón en la esquina, burbuja de avisos y chat con voz.
+     Lo que hace está en gotita.js y cómo se ve en gotita.css. -->
+
+<svg class="gotita-simbolos" aria-hidden="true" focusable="false">
+  <defs>
+    <linearGradient id="gotita-agua-s" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7DD3FC"/>
+      <stop offset="1" stop-color="#0284C7"/>
+    </linearGradient>
+  </defs>
+  <symbol id="gotita-simbolo" viewBox="0 0 64 64">
+    <path d="M32 5C32 5 13 27.5 13 40.5C13 51 21.5 59 32 59C42.5 59 51 51 51 40.5C51 27.5 32 5 32 5Z" fill="url(#gotita-agua-s)"/>
+    <path d="M22.5 31.5c-2.6 3.6-4 7.3-4 10.4" stroke="#fff" stroke-opacity=".75" stroke-width="3" stroke-linecap="round" fill="none"/>
+    <ellipse cx="25.5" cy="40" rx="2.6" ry="3.3" fill="#0B2A42"/>
+    <ellipse cx="38.5" cy="40" rx="2.6" ry="3.3" fill="#0B2A42"/>
+    <circle cx="26.4" cy="38.7" r=".95" fill="#fff"/>
+    <circle cx="39.4" cy="38.7" r=".95" fill="#fff"/>
+    <circle cx="20.5" cy="46.5" r="2.6" fill="#FB7185" fill-opacity=".45"/>
+    <circle cx="43.5" cy="46.5" r="2.6" fill="#FB7185" fill-opacity=".45"/>
+    <path d="M27.5 47c2.6 3 6.4 3 9 0" stroke="#0B2A42" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+  </symbol>
+  <!-- Dibujos de los botones de Gotita (micrófono, enviar, parar…) -->
+  <symbol id="i-gotita-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5a3 3 0 0 1 6 0v5a3 3 0 0 1 -6 0z"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M8 21h8"/><path d="M12 17v4"/></symbol>
+  <symbol id="i-gotita-enviar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14l11 -11"/><path d="M21 3l-6.5 18a.55 .55 0 0 1 -1 0l-3.5 -7l-7 -3.5a.55 .55 0 0 1 0 -1l18 -6.5"/></symbol>
+  <symbol id="i-gotita-parar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v10a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2z"/></symbol>
+  <symbol id="i-gotita-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6l-12 12"/><path d="M6 6l12 12"/></symbol>
+  <symbol id="i-gotita-pantalla" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7v-1a2 2 0 0 1 2 -2h2"/><path d="M4 17v1a2 2 0 0 0 2 2h2"/><path d="M16 4h2a2 2 0 0 1 2 2v1"/><path d="M16 20h2a2 2 0 0 0 2 -2v-1"/><path d="M5 12h14"/></symbol>
+  <symbol id="i-gotita-historial" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l2 2"/><path d="M3.05 11a9 9 0 1 1 .5 4m-.5 5v-5h5"/></symbol>
+  <symbol id="i-gotita-mas" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5l0 14"/><path d="M5 12l14 0"/></symbol>
+  <symbol id="i-gotita-basura" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7l16 0"/><path d="M10 11l0 6"/><path d="M14 11l0 6"/><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3"/></symbol>
+  <symbol id="i-gotita-volumen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 8a5 5 0 0 1 0 8"/><path d="M17.7 5a9 9 0 0 1 0 14"/><path d="M6 15h-2a1 1 0 0 1 -1 -1v-4a1 1 0 0 1 1 -1h2l3.5 -4.5a.8 .8 0 0 1 1.5 .5v14a.8 .8 0 0 1 -1.5 .5l-3.5 -4.5"/></symbol>
+</svg>
+
+<div class="gotita" id="gotita" data-estado="reposo" data-no-translate>
+
+  <div class="gotita-burbuja" id="gotita-burbuja" role="status" aria-live="polite" hidden>
+    <p class="gotita-burbuja-texto" id="gotita-burbuja-texto"></p>
+    <div class="gotita-burbuja-acciones">
+      <button type="button" class="gotita-enlace" id="gotita-burbuja-escuchar" hidden><svg class="icon" aria-hidden="true"><use href="#i-gotita-volumen"></use></svg>Escuchar</button>
+      <button type="button" class="gotita-enlace" id="gotita-burbuja-ver" hidden>Ver</button>
+      <button type="button" class="gotita-enlace" id="gotita-burbuja-abrir">Abrir chat</button>
+    </div>
+    <button type="button" class="gotita-burbuja-cerrar" id="gotita-burbuja-cerrar" aria-label="Cerrar aviso"><svg class="icon" aria-hidden="true"><use href="#i-gotita-x"></use></svg></button>
+  </div>
+
+  <section class="gotita-panel" id="gotita-panel" role="dialog" aria-modal="false" aria-labelledby="gotita-titulo" hidden>
+    <header class="gotita-cabecera">
+      <span class="gotita-avatar gotita-avatar--grande" aria-hidden="true">{% include 'App/_gotita_logo.html' with gota_id='panel' %}</span>
+      <div class="gotita-cabecera-texto">
+        <h2 class="gotita-titulo" id="gotita-titulo">Gotita</h2>
+        <p class="gotita-estado" id="gotita-estado">Lista para ayudarte</p>
+      </div>
+      <button type="button" class="gotita-icono" id="gotita-historial-boton" aria-expanded="false" aria-controls="gotita-historial" aria-label="Conversaciones anteriores" title="Historial">
+        <svg class="icon" aria-hidden="true"><use href="#i-gotita-historial"></use></svg>
+      </button>
+      <button type="button" class="gotita-icono" id="gotita-ajustes-boton" aria-expanded="false" aria-controls="gotita-ajustes" aria-label="Ajustes de Gotita" title="Ajustes">
+        <svg class="icon" aria-hidden="true"><use href="#i-settings"></use></svg>
+      </button>
+      <button type="button" class="gotita-icono" id="gotita-cerrar" aria-label="Cerrar Gotita" title="Cerrar">
+        <svg class="icon" aria-hidden="true"><use href="#i-gotita-x"></use></svg>
+      </button>
+    </header>
+
+    <div class="gotita-barra">
+      <div class="gotita-segmento" role="radiogroup" aria-label="Forma de explicar">
+        <button type="button" role="radio" data-modo="sencillo" aria-checked="true">Sencillo</button>
+        <button type="button" role="radio" data-modo="tecnico" aria-checked="false">Técnico</button>
+      </div>
+      <div class="gotita-segmento" role="radiogroup" aria-label="Idioma de Gotita / Gotita's language">
+        <button type="button" role="radio" data-idioma="es" aria-checked="true" title="Gotita habla en español">ES</button>
+        <button type="button" role="radio" data-idioma="en" aria-checked="false" title="Gotita speaks English">EN</button>
+      </div>
+      <label class="gotita-interruptor" title="Encendido: Gotita te escucha mientras la página está abierta. Di “Oye Gotita” y tu pregunta, sin tocar nada.">
+        <input type="checkbox" id="gotita-escucha" aria-describedby="gotita-escucha-ayuda"/>
+        <span class="gotita-interruptor-pista" aria-hidden="true"></span>
+        <span class="gotita-interruptor-texto">Llamarla con “Oye Gotita”</span>
+      </label>
+      <p class="gotita-ayuda" id="gotita-escucha-ayuda">Enciéndelo para hablarle sin tocar nada: di “Oye Gotita” y tu pregunta.</p>
+    </div>
+
+    <div class="gotita-ajustes" id="gotita-ajustes" hidden>
+      <label class="gotita-interruptor">
+        <input type="checkbox" id="gotita-voz"/>
+        <span class="gotita-interruptor-pista" aria-hidden="true"></span>
+        <span class="gotita-interruptor-texto">Responder con voz</span>
+      </label>
+      <label class="gotita-interruptor">
+        <input type="checkbox" id="gotita-leer-avisos"/>
+        <span class="gotita-interruptor-pista" aria-hidden="true"></span>
+        <span class="gotita-interruptor-texto">Leer los avisos en voz alta</span>
+      </label>
+      <div class="gotita-fila gotita-fila--voz">
+        <label class="gotita-fila-texto" for="gotita-voz-lista">Voz de Gotita</label>
+        <select id="gotita-voz-lista" class="gotita-select"></select>
+        <button type="button" class="gotita-enlace" id="gotita-voz-probar">Probar</button>
+      </div>
+      <div class="gotita-fila">
+        <span class="gotita-fila-texto">Velocidad de la voz</span>
+        <div class="gotita-segmento" role="radiogroup" aria-label="Velocidad de la voz">
+          <button type="button" role="radio" data-velocidad="normal" aria-checked="true">Normal</button>
+          <button type="button" role="radio" data-velocidad="lenta" aria-checked="false">Lenta</button>
+        </div>
+      </div>
+      <button type="button" class="gotita-enlace" id="gotita-borrar">Borrar esta conversación</button>
+      <p class="gotita-nota">Gotita solo responde, explica y te lleva a otras pantallas. No cambia datos, no inicia ni cierra sesión y no maneja las electroválvulas.</p>
+    </div>
+
+    <div class="gotita-centro">
+      <!-- Historial: conversaciones de los últimos 20 días (se borran solas) -->
+      <aside class="gotita-historial" id="gotita-historial" aria-labelledby="gotita-historial-titulo" hidden>
+        <div class="gotita-historial-cabecera">
+          <h3 class="gotita-historial-titulo" id="gotita-historial-titulo">Conversaciones</h3>
+          <button type="button" class="gotita-icono gotita-icono--chico" id="gotita-historial-cerrar" aria-label="Cerrar historial" title="Cerrar">
+            <svg class="icon" aria-hidden="true"><use href="#i-gotita-x"></use></svg>
+          </button>
+        </div>
+        <button type="button" class="gotita-nueva" id="gotita-nueva">
+          <svg class="icon" aria-hidden="true"><use href="#i-gotita-mas"></use></svg><span>Nueva conversación</span>
+        </button>
+        <ul class="gotita-historial-lista" id="gotita-historial-lista"></ul>
+        <p class="gotita-historial-nota" id="gotita-historial-nota">Se borran solas a los 20 días.</p>
+        <button type="button" class="gotita-enlace gotita-historial-todo" id="gotita-historial-todo">Borrar todo el historial</button>
+      </aside>
+
+      <div class="gotita-conversacion">
+        <div class="gotita-chat" id="gotita-chat" aria-live="polite"></div>
+
+        <div class="gotita-sugerencias" id="gotita-sugerencias"></div>
+
+        <form class="gotita-entrada" id="gotita-form" autocomplete="off">
+          <label class="sr-only" for="gotita-texto">Escribe tu pregunta para Gotita</label>
+          <textarea id="gotita-texto" rows="1" maxlength="600" placeholder="Escribe tu pregunta…"></textarea>
+          <button type="button" class="gotita-accion gotita-accion--parar" id="gotita-parar" aria-label="Parar a Gotita" title="Parar" hidden>
+            <svg class="icon" aria-hidden="true"><use href="#i-gotita-parar"></use></svg>
+          </button>
+          <button type="button" class="gotita-accion gotita-accion--mic" id="gotita-mic" aria-label="Hablar con Gotita" title="Hablar" aria-pressed="false">
+            <svg class="icon" aria-hidden="true"><use href="#i-gotita-mic"></use></svg>
+          </button>
+          <button type="submit" class="gotita-accion gotita-accion--enviar" id="gotita-enviar" aria-label="Enviar" title="Enviar">
+            <svg class="icon" aria-hidden="true"><use href="#i-gotita-enviar"></use></svg>
+          </button>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <button type="button" class="gotita-boton" id="gotita-boton" aria-label="Hablar con Gotita, tu asistente" aria-expanded="false" aria-controls="gotita-panel" title="Gotita">
+    {% include 'App/_gotita_logo.html' with gota_id='boton' %}
+    <span class="gotita-punto" id="gotita-punto" hidden></span>
+  </button>
+</div>
+
+{{ gotita.destinos|json_script:"gotita-destinos" }}
+<script src="{% static 'App/js/gotita.js' %}?v=20261023-10"
+        data-turno-url="{% url 'asistente_turno' %}"
+        data-historial-url="{% url 'asistente_conversaciones' %}"
+        data-avisos-url="{% url 'asistente_avisos' %}"
+        data-voz-url="{% url 'asistente_voz' %}"
+        data-dictado-url="{% url 'asistente_dictado' %}"
+        data-dictado-natural="{% if gotita.dictado_natural %}1{% else %}0{% endif %}"
+        data-voz-natural="{% if gotita.voz_natural %}1{% else %}0{% endif %}"
+        data-csrf="{{ csrf_token }}"
+        data-rol="{{ gotita.rol }}"
+        data-usuario="{{ user.pk }}"
+        defer></script>

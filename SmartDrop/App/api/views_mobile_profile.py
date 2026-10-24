@@ -214,6 +214,7 @@ class MobileNotificacionesView(APIView):
 
     `sensor:*` trae el estado actual de cada parámetro (la app avisa cuando pasa de Normal a Alta/Baja);
     `alerta:*` son alertas nuevas dirigidas al usuario (la app avisa una sola vez por id).
+    Si la app lo pide, los avisos fuera de lo normal traen también la frase corta de Gotita.
     """
     permission_classes = [IsAuthenticatedUser]
 
@@ -225,4 +226,7 @@ class MobileNotificacionesView(APIView):
         except supabase_client.SupabaseError:
             logger.exception('No se pudieron preparar los avisos móviles')
             return Response({'error': 'No se pudieron cargar los avisos.'}, status=status.HTTP_502_BAD_GATEWAY)
+        if request.query_params.get('gotita') == '1':
+            from ..asistente.avisos import con_texto_de_gotita
+            avisos = con_texto_de_gotita(avisos, 'admin' if is_admin(request.user) else 'user', prefs.idioma or 'es')
         return Response({'ok': True, 'preferencias': preferencias.como_dict(prefs), 'avisos': avisos})

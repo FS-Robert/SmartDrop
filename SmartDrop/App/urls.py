@@ -1,6 +1,7 @@
 from django.urls import path
 from . import views
 from . import i18n, views_reportes
+from .asistente import vistas as asistente
 
 urlpatterns = [
     path('i18n/<str:idioma>.js', i18n.catalogo_js, name='i18n_js'),
@@ -41,5 +42,13 @@ urlpatterns = [
     path('admin-reportes/',     views_reportes.admin_reportes,      name='admin_reportes'),
     path('admin-reportes/export/', views_reportes.admin_reportes_export, name='admin_reportes_export'),
     path('admin-reportes/<int:reporte_id>/actualizar/', views_reportes.admin_reporte_update, name='admin_reporte_update'),
-    
+
+    # ── Gotita, la asistente ──
+    path('asistente/turno/',    asistente.turno_web,              name='asistente_turno'),
+    path('asistente/avisos/',   asistente.avisos_web,             name='asistente_avisos'),
+    path('asistente/voz/',      asistente.voz_web,                name='asistente_voz'),
+    path('asistente/dictado/',  asistente.dictado_web,            name='asistente_dictado'),
+    path('asistente/conversaciones/', asistente.conversaciones_web, name='asistente_conversaciones'),
+    path('asistente/conversaciones/<int:conversacion_id>/', asistente.conversacion_web,
+         name='asistente_conversacion'),
 ]

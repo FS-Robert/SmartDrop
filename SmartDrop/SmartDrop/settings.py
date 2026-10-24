@@ -57,6 +57,13 @@ if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
+    # El navegador recuerda por un año que SmartDrop solo se abre con candado (HTTPS).
+    SECURE_HSTS_SECONDS = int(os.environ.get('SECURE_HSTS_SECONDS', '31536000') or 0)
+
+# No contarle a otras páginas desde qué pantalla de SmartDrop se llegó.
+SECURE_REFERRER_POLICY = 'same-origin'
+# La página no se puede mostrar dentro de otra.
+X_FRAME_OPTIONS = 'DENY'
 
 
 # Application definition
@@ -76,6 +83,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'App.seguridad_web.CabecerasDeSeguridad',
     'django.middleware.gzip.GZipMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -296,3 +304,21 @@ SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=30),
 }
+
+# Gotita, la asistente de voz (App/asistente/). La llave de Claude solo vive en el .env del servidor y
+# nunca se manda a la web ni a la app. ASISTENTE_ACTIVO=0 apaga a Gotita para todos.
+ASISTENTE_ACTIVO = os.environ.get('ASISTENTE_ACTIVO', '1').strip().lower() not in ('0', 'false', 'no')
+ASISTENTE_MODELO = os.environ.get('ANTHROPIC_MODEL', '').strip() or 'claude-sonnet-5-5'
+ASISTENTE_LIMITE_DIARIO = int(os.environ.get('ASISTENTE_LIMITE_DIARIO', '150') or 150)
+# Voz natural de Gotita con ElevenLabs (la llave ELEVENLABS_API_KEY también vive solo en el .env).
+# Sin llave, Gotita usa la voz del navegador o del teléfono.
+ELEVENLABS_VOZ = os.environ.get('ELEVENLABS_VOICE_ID', '').strip() or 'EXAVITQu4vr4xnSDxMaL'
+ELEVENLABS_MODELO = os.environ.get('ELEVENLABS_MODEL', '').strip() or 'eleven_flash_v2_5'
+ASISTENTE_VOZ_POR_DIA = int(os.environ.get('ASISTENTE_VOZ_POR_DIA', '400') or 400)
+# Dictado: ElevenLabs pasa a texto lo que dice la persona y detecta solo si habla español o inglés.
+# La llave necesita el permiso "Speech to Text"; sin él, se usa el dictado del navegador.
+ELEVENLABS_DICTADO_MODELO = os.environ.get('ELEVENLABS_STT_MODEL', '').strip() or 'scribe_v2'
+ASISTENTE_DICTADO_POR_DIA = int(os.environ.get('ASISTENTE_DICTADO_POR_DIA', '300') or 300)
+# Topes de todo el sistema por día (todas las cuentas juntas), por si alguien crea muchas cuentas.
+ASISTENTE_LIMITE_GLOBAL_DIARIO = int(os.environ.get('ASISTENTE_LIMITE_GLOBAL_DIARIO', '3000') or 3000)
+ASISTENTE_VOZ_GLOBAL_DIARIO = int(os.environ.get('ASISTENTE_VOZ_GLOBAL_DIARIO', '3000') or 3000)
