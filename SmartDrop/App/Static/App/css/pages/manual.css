@@ -107,3 +107,116 @@
     display: none !important;
   }
 }
+
+/* ── Manual técnico (Markdown convertido) ─────────────────────────────── */
+
+.manual-tecnico {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s-6);
+}
+
+@media (min-width: 1100px) {
+  .manual-tecnico {
+    grid-template-columns: 16rem minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .manual-tecnico-indice {
+    position: sticky;
+    top: var(--s-6);
+    max-height: calc(100vh - 2 * var(--s-6));
+    overflow-y: auto;
+  }
+}
+
+.manual-tecnico-indice ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  line-height: 1.5;
+}
+
+.manual-tecnico-texto {
+  max-width: 100ch;
+}
+
+.manual-tecnico-texto h1 {
+  display: none; /* el título ya está arriba de la página */
+}
+
+.manual-tecnico-texto h2 {
+  margin: var(--s-7) 0 var(--s-3);
+  padding-top: var(--s-4);
+  border-top: 1px solid var(--c-line);
+  font-family: var(--font-display);
+  font-size: var(--t-xl);
+  scroll-margin-top: var(--s-6);
+}
+
+.manual-tecnico-texto h3 {
+  margin: var(--s-5) 0 var(--s-2);
+  font-size: var(--t-lg);
+  scroll-margin-top: var(--s-6);
+}
+
+.manual-tecnico-texto table {
+  display: block;
+  max-width: 100%;
+  margin: var(--s-3) 0 var(--s-5);
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: var(--t-sm);
+}
+
+.manual-tecnico-texto th,
+.manual-tecnico-texto td {
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--c-line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.manual-tecnico-texto th {
+  background: var(--c-surface-2);
+}
+
+.manual-tecnico-texto code {
+  padding: 0.1em 0.35em;
+  border-radius: var(--r-xs);
+  background: var(--c-surface-2);
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+}
+
+.manual-tecnico-texto pre {
+  margin: var(--s-3) 0 var(--s-5);
+  padding: var(--s-4);
+  overflow-x: auto;
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  background: var(--c-surface-2);
+}
+
+.manual-tecnico-texto pre code {
+  padding: 0;
+  background: none;
+  overflow-wrap: normal;
+}
+
+.manual-tecnico-texto pre.mermaid {
+  display: flex;
+  justify-content: center;
+  background: var(--c-surface);
+}
+
+.manual-tecnico-texto blockquote {
+  margin: var(--s-4) 0;
+  padding: var(--s-3) var(--s-4);
+  border-left: 4px solid var(--c-warn-dot);
+  border-radius: var(--r-sm);
+  background: var(--c-warn-bg);
+}
+
+.manual-tecnico-texto blockquote p {
+  margin: 0;
+}

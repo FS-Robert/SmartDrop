@@ -31,6 +31,9 @@ urlpatterns = [
     path('usuario/preferencias/', views.usuario_preferencias, name='usuario_preferencias'),
     path('vincular-vivienda/',  views.vincular_vivienda,  name='vincular_vivienda'),
     path('manual/',             views_manual.manual_usuario, name='manual_usuario'),
+    path('manual-admin/',       views_manual.manual_admin,   name='manual_admin'),
+    path('manual-tecnico/',     views_manual.manual_tecnico, name='manual_tecnico'),
+    path('manual-tecnico/postman/', views_manual.manual_tecnico_postman, name='manual_tecnico_postman'),
 
     # ── Sistema de reportes de usuarios ──
     path('reportar/',           views_reportes.reportes_panel,      name='reportes_panel'),

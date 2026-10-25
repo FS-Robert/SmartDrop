@@ -1,0 +1,34 @@
+/* Íconos de Tabler que no vienen en la fuente recortada (tabler-icons.woff2). Se dibujan con su SVG como máscara,
+   así toman el color del texto igual que los demás. Para agregar uno: copia su trazo de tabler.io/icons. */
+.ti-book::before,
+.ti-code::before,
+.ti-report-analytics::before,
+.ti-file-spreadsheet::before,
+.ti-file-type-pdf::before,
+.ti-printer::before,
+.ti-alert-octagon::before,
+.ti-trending-up::before,
+.ti-calendar-stats::before,
+.ti-arrow-big-up-lines::before,
+.ti-droplet-off::before {
+  content: "";
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.125em;
+  background-color: currentColor;
+  -webkit-mask: var(--ti-svg) no-repeat center / contain;
+  mask: var(--ti-svg) no-repeat center / contain;
+}
+
+.ti-book { --ti-svg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 19a9 9 0 0 1 9 0a9 9 0 0 1 9 0'/%3E%3Cpath d='M3 6a9 9 0 0 1 9 0a9 9 0 0 1 9 0'/%3E%3Cpath d='M3 6l0 13'/%3E%3Cpath d='M12 6l0 13'/%3E%3Cpath d='M21 6l0 13'/%3E%3C/svg%3E"); }
+.ti-code { --ti-svg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 8l-4 4l4 4'/%3E%3Cpath d='M17 8l4 4l-4 4'/%3E%3Cpath d='M14 4l-4 16'/%3E%3C/svg%3E"); }
+.ti-report-analytics { --ti-svg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 5h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2h-2'/%3E%3Cpath d='M9 5a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2a2 2 0 0 1 -2 2h-2a2 2 0 0 1 -2 -2z'/%3E%3Cpath d='M9 17v-5'/%3E%3Cpath d='M12 17v-1'/%3E%3Cpath d='M15 17v-3'/%3E%3C/svg%3E"); }
+.ti-file-spreadsheet { --ti-svg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 3v4a1 1 0 0 0 1 1h4'/%3E%3Cpath d='M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z'/%3E%3Cpath d='M8 11h8v7h-8z'/%3E%3Cpath d='M8 15h8'/%3E%3Cpath d='M11 11v7'/%3E%3C/svg%3E"); }
+.ti-file-type-pdf { --ti-svg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 3v4a1 1 0 0 0 1 1h4'/%3E%3Cpath d='M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z'/%3E%3Cpath d='M9 9l1 0'/%3E%3Cpath d='M9 13l6 0'/%3E%3Cpath d='M9 17l6 0'/%3E%3C/svg%3E"); }
+.ti-printer { --ti-svg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17 17h2a2 2 0 0 0 2 -2v-4a2 2 0 0 0 -2 -2h-14a2 2 0 0 0 -2 2v4a2 2 0 0 0 2 2h2'/%3E%3Cpath d='M17 9v-4a2 2 0 0 0 -2 -2h-6a2 2 0 0 0 -2 2v4'/%3E%3Cpath d='M7 15a2 2 0 0 1 2 -2h6a2 2 0 0 1 2 2v4a2 2 0 0 1 -2 2h-6a2 2 0 0 1 -2 -2z'/%3E%3C/svg%3E"); }
+.ti-alert-octagon { --ti-svg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8.7 3h6.6l4.7 4.7v6.6l-4.7 4.7h-6.6l-4.7 -4.7v-6.6z'/%3E%3Cpath d='M12 8v4'/%3E%3Cpath d='M12 16h.01'/%3E%3C/svg%3E"); }
+.ti-trending-up { --ti-svg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 17l6 -6l4 4l8 -8'/%3E%3Cpath d='M14 7l7 0l0 7'/%3E%3C/svg%3E"); }
+.ti-calendar-stats { --ti-svg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2z'/%3E%3Cpath d='M16 3v4'/%3E%3Cpath d='M8 3v4'/%3E%3Cpath d='M4 11h16'/%3E%3Cpath d='M9 17v-2'/%3E%3Cpath d='M12 17v-3'/%3E%3Cpath d='M15 17v-1'/%3E%3C/svg%3E"); }
+.ti-arrow-big-up-lines { --ti-svg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 12h-3.586a1 1 0 0 1 -.707 -1.707l6.586 -6.586a1 1 0 0 1 1.414 0l6.586 6.586a1 1 0 0 1 -.707 1.707h-3.586v3h-6v-3z'/%3E%3Cpath d='M9 21h6'/%3E%3Cpath d='M9 18h6'/%3E%3C/svg%3E"); }
+.ti-droplet-off { --ti-svg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8.454 8.458l-1.653 2.545a6 6 0 0 0 10.32 6.123'/%3E%3Cpath d='M18 14a5.971 5.971 0 0 0 -.803 -3l-5.197 -8l-1.968 3.03'/%3E%3Cpath d='M3 3l18 18'/%3E%3C/svg%3E"); }

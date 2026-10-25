@@ -1,18 +1,24 @@
 {% load static %}<!doctype html>
-<!-- Manual de usuario para la app (se abre dentro de la app, sin el menú de la web). -->
+<!-- Manual dentro de la app (sin el menú de la web): el de usuario o, para el administrador, el suyo. -->
 <html lang="es">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Manual de usuario · SmartDrop</title>
+  <title>{% if es_admin %}Manual del administrador{% else %}Manual de usuario{% endif %} · SmartDrop</title>
   <link rel="stylesheet" href="{% static 'App/css/smartdrop.css' %}">
-  <link rel="stylesheet" href="{% static 'App/css/pages/manual.css' %}?v=20261025-1">
+  <link rel="stylesheet" href="{% static 'App/css/pages/manual.css' %}?v=20261025-2">
 </head>
 <body class="manual-app{% if oscuro %} manual-app--oscuro{% endif %}"{% if oscuro %} data-theme="dark"{% endif %}>
   <main class="manual-app-contenido">
-    <h1 class="page-title">Manual de usuario</h1>
-    <p class="page-lede">Todo lo que puedes hacer en SmartDrop, paso a paso.</p>
-    {% include 'App/_manual_usuario_contenido.html' %}
+    {% if es_admin %}
+      <h1 class="page-title">Manual del administrador</h1>
+      <p class="page-lede">Cómo usar todas las herramientas del administrador, con las electroválvulas paso a paso.</p>
+      {% include 'App/_manual_admin_contenido.html' with en_app=True %}
+    {% else %}
+      <h1 class="page-title">Manual de usuario</h1>
+      <p class="page-lede">Todo lo que puedes hacer en SmartDrop, paso a paso.</p>
+      {% include 'App/_manual_usuario_contenido.html' %}
+    {% endif %}
   </main>
 </body>
 </html>

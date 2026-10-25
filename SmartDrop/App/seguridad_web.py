@@ -11,7 +11,7 @@ from asgiref.sync import iscoroutinefunction, markcoroutinefunction
 POLITICA_CONTENIDO = '; '.join((
     "default-src 'self'",
     "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net/npm/chart.js@4.4.0/ "
-    "https://cdn.jsdelivr.net/npm/html2canvas-pro@1.5.8/",
+    "https://cdn.jsdelivr.net/npm/html2canvas-pro@1.5.8/ https://cdn.jsdelivr.net/npm/mermaid@11.4.1/",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' data: https://fonts.gstatic.com",
     "img-src 'self' data: blob: https:",

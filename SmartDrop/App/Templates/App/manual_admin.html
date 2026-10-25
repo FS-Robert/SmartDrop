@@ -1,0 +1,18 @@
+{% extends 'App/base.html' %}
+{% load static %}
+{% block title %}Manual del administrador{% endblock %}
+{% block nav_manual_admin %}active{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/manual.css' %}?v=20261025-2">{% endblock %}
+
+{% block content %}
+<header class="page-head">
+  <div>
+    <h1 class="page-title">Manual del administrador</h1>
+    <p class="page-lede">Cómo usar todas las herramientas del administrador, con las electroválvulas paso a paso. Sirve para la web y la app.</p>
+  </div>
+  <div class="page-actions no-imprimir">
+    <button type="button" class="btn btn--secondary" onclick="window.print()"><i class="ti ti-printer" aria-hidden="true"></i>Imprimir</button>
+  </div>
+</header>
+{% include 'App/_manual_admin_contenido.html' %}
+{% endblock %}

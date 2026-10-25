@@ -8,6 +8,7 @@
   <meta name="theme-color" content="#E6F4FC"/>
   <link rel="icon" type="image/png" href="{% static 'App/img/LogoSmartDrop.png' %}"/>
   <link rel="stylesheet" href="{% static 'App/fonts/tabler/tabler-icons-subset.css' %}?v=2.47"/>
+  <link rel="stylesheet" href="{% static 'App/fonts/tabler/tabler-icons-extra.css' %}?v=20261025-1"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet"/>
@@ -89,6 +90,12 @@
               <li><a href="{% url 'admin_consumo' %}" class="nav-link {% block nav_admin_consumo %}{% endblock %}"><i class="ti ti-report-analytics" aria-hidden="true"></i><span>Consumo por usuario</span></a></li>
               <li><a href="{% url 'admin_reportes' %}" class="nav-link {% block nav_admin_reportes %}{% endblock %}"><i class="ti ti-list-details" aria-hidden="true"></i><span>Problemas reportados</span></a></li>
               <li><a href="{% url 'alertas_historial' %}" class="nav-link {% block nav_admin_alertas %}{% endblock %}"><i class="ti ti-history" aria-hidden="true"></i><span>Historial de alertas</span></a></li>
+            </ul>
+          </div>
+          <div class="nav-group">
+            <p class="nav-group-title" id="nav-g-ayuda">Ayuda</p>
+            <ul class="nav-list" aria-labelledby="nav-g-ayuda">
+              <li><a href="{% url 'manual_admin' %}" class="nav-link {% block nav_manual_admin %}{% endblock %}"><i class="ti ti-book" aria-hidden="true"></i><span>Manual del administrador</span></a></li>
             </ul>
           </div>
         {% else %}

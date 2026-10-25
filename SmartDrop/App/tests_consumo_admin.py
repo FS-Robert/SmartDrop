@@ -214,6 +214,57 @@ class PantallaConsumoAdminTests(TestCase):
         self.client.force_login(self.vecino)
         self.assertRedirects(self.client.get('/admin-consumo/vivienda/2/'), '/', fetch_redirect_response=False)
 
+    def test_dos_manuales_uno_del_admin_y_otro_del_usuario(self):
+        # El usuario común ve su manual y no el del administrador.
+        self.client.force_login(self.vecino)
+        manual_usuario = self.client.get('/manual/').content.decode()
+        self.assertIn('Manual de usuario', manual_usuario)
+        self.assertNotIn('Electroválvulas', manual_usuario)
+        self.assertRedirects(self.client.get('/manual-admin/'), '/manual/', fetch_redirect_response=False)
+        # El administrador tiene el suyo, con las electroválvulas, en el menú Ayuda.
+        self.client.force_login(self.admin)
+        manual_admin = self.client.get('/manual-admin/').content.decode()
+        self.assertIn('Manual del administrador', manual_admin)
+        self.assertIn('Abrir por un tiempo (temporizador)', manual_admin)
+        self.assertIn('5 a 120 segundos', manual_admin)
+        self.assertIn('href="/manual-admin/"', manual_admin)
+
+    def test_la_app_pide_el_manual_del_admin_con_su_token(self):
+        from rest_framework_simplejwt.tokens import AccessToken
+        sin_token = self.client.get('/manual/?app=1&tipo=admin')
+        self.assertEqual(sin_token.status_code, 403)
+        token_vecino = AccessToken()
+        token_vecino['id_usuario'], token_vecino['id_rol'] = 11, 1
+        self.assertEqual(self.client.get('/manual/?app=1&tipo=admin',
+                                         HTTP_AUTHORIZATION=f'Bearer {token_vecino}').status_code, 403)
+        token_admin = AccessToken()
+        token_admin['id_usuario'], token_admin['id_rol'] = 99, 2
+        respuesta = self.client.get('/manual/?app=1&tipo=admin', HTTP_AUTHORIZATION=f'Bearer {token_admin}')
+        self.assertEqual(respuesta.status_code, 200)
+        html = respuesta.content.decode()
+        self.assertIn('Manual del administrador', html)
+        self.assertNotIn('href="/manual-tecnico/"', html)   # dentro de la app ese enlace pediría la sesión web
+        # El manual de usuario de la app sigue abierto para todos.
+        self.assertIn('Manual de usuario', self.client.get('/manual/?app=1').content.decode())
+
+    def test_manual_tecnico_solo_para_el_admin_con_diagramas_y_postman(self):
+        self.client.force_login(self.vecino)
+        self.assertRedirects(self.client.get('/manual-tecnico/'), '/', fetch_redirect_response=False)
+        self.assertRedirects(self.client.get('/manual-tecnico/postman/'), '/', fetch_redirect_response=False)
+        self.client.force_login(self.admin)
+        respuesta = self.client.get('/manual-tecnico/')
+        # La política de seguridad del sitio debe dejar cargar la librería que dibuja los diagramas.
+        self.assertIn('https://cdn.jsdelivr.net/npm/mermaid@11.4.1/', respuesta['Content-Security-Policy'])
+        html = respuesta.content.decode()
+        self.assertIn('API Documentation', html)
+        self.assertIn('<pre class="mermaid">', html)          # los diagramas se dibujan en el navegador
+        self.assertIn('<table>', html)
+        self.assertIn('/manual-tecnico/postman/', html)
+        self.assertIn('Manual técnico', html)                  # en el menú del admin
+        postman = self.client.get('/manual-tecnico/postman/')
+        self.assertEqual(postman.status_code, 200)
+        self.assertIn('SmartDrop API', b''.join(postman.streaming_content).decode())
+
     def test_descarga_el_excel_con_resumen_usuarios_zonas_y_dias(self):
         self.client.force_login(self.admin)
         respuesta = self.client.get('/admin-consumo/exportar/')

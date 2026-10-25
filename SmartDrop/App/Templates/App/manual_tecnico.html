@@ -1,0 +1,37 @@
+{% extends 'App/base.html' %}
+{% load static %}
+{% block title %}Manual técnico{% endblock %}
+{% block nav_manual_admin %}active{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/manual.css' %}?v=20261025-2">{% endblock %}
+
+{% block content %}
+<!-- Manual técnico (PB013): se muestra docs/MANUAL_TECNICO.md tal cual está en el repositorio. -->
+<header class="page-head">
+  <div>
+    <h1 class="page-title">Manual técnico</h1>
+    <p class="page-lede">Arquitectura, base de datos, API, despliegue y configuración del ESP32. Para quien mantiene o amplía SmartDrop.</p>
+  </div>
+  <div class="page-actions no-imprimir">
+    {% if hay_postman %}<a class="btn btn--secondary" href="{% url 'manual_tecnico_postman' %}"><i class="ti ti-download" aria-hidden="true"></i>Colección de Postman</a>{% endif %}
+    <button type="button" class="btn btn--secondary" onclick="window.print()"><i class="ti ti-printer" aria-hidden="true"></i>Imprimir / PDF</button>
+  </div>
+</header>
+
+<div class="manual-tecnico">
+  {% if indice %}<nav class="manual-indice manual-tecnico-indice no-imprimir" aria-label="Contenido del manual técnico"><p class="manual-indice-titulo">Contenido</p>{{ indice }}</nav>{% endif %}
+  <article class="manual manual-tecnico-texto">{{ contenido }}</article>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js" integrity="sha384-rbtjAdnIQE/aQJGEgXrVUlMibdfTSa4PQju4HDhN3sR2PmaKFzhEafuePsl9H/9I" crossorigin="anonymous"></script>
+<script>
+  // Dibuja los diagramas (arquitectura, flujo de datos y diagrama ER) con los colores del tema.
+  (function () {
+    if (!window.mermaid) return;
+    const oscuro = document.documentElement.dataset.theme === 'dark';
+    window.mermaid.initialize({ startOnLoad: false, theme: oscuro ? 'dark' : 'default', securityLevel: 'strict' });
+    window.mermaid.run({ querySelector: '.manual-tecnico-texto pre.mermaid' });
+  }());
+</script>
+{% endblock %}

@@ -1,0 +1,252 @@
+<!-- Contenido del manual del administrador. Lo usan la web (manual_admin.html) y la app (manual_usuario_app.html con
+     tipo=admin). Solo lo ven los administradores. -->
+<div class="manual">
+  <nav class="manual-indice" aria-label="Contenido del manual del administrador">
+    <p class="manual-indice-titulo">Contenido</p>
+    <ol>
+      <li><a href="#admin-rol">Qué hace el administrador</a></li>
+      <li><a href="#admin-entrar">Entrar como administrador</a></li>
+      <li><a href="#admin-panel">Panel general</a></li>
+      <li><a href="#admin-valvulas">Electroválvulas</a></li>
+      <li><a href="#admin-consumo">Consumo por usuario</a></li>
+      <li><a href="#admin-suministro">Predicción de suministro</a></li>
+      <li><a href="#admin-fugas">Predicción de fugas</a></li>
+      <li><a href="#admin-reportes">Problemas reportados</a></li>
+      <li><a href="#admin-alertas">Historial de alertas</a></li>
+      <li><a href="#admin-app">La app del administrador</a></li>
+      <li><a href="#admin-gotita">Gotita para el administrador</a></li>
+      <li><a href="#admin-seguridad">Seguridad y buenas prácticas</a></li>
+      <li><a href="#admin-problemas">Si algo no funciona</a></li>
+    </ol>
+  </nav>
+
+  <section id="admin-rol" class="manual-seccion">
+    <h2>1. Qué hace el administrador</h2>
+    <p>El administrador cuida la red de agua de toda la comunidad. Desde SmartDrop puede:</p>
+    <ul>
+      <li>Ver el estado de todos los sensores y lecturas en tiempo real.</li>
+      <li><strong>Abrir y cerrar las electroválvulas</strong>, también por un tiempo limitado.</li>
+      <li>Ver cuánta agua gasta cada usuario y cada zona, y quién pasa el límite de la comunidad.</li>
+      <li>Revisar las predicciones de desabasto y de fugas.</li>
+      <li>Atender los problemas que reportan los vecinos.</li>
+    </ul>
+    <p>Los usuarios comunes no ven nada de esto: solo ven el agua de su propia vivienda.</p>
+  </section>
+
+  <section id="admin-entrar" class="manual-seccion">
+    <h2>2. Entrar como administrador</h2>
+    <ul>
+      <li>Se entra con el mismo correo y contraseña en la web y en la app. La cuenta debe tener el <strong>rol de
+        administrador</strong> en la base de datos; si no lo tiene, entra como usuario común.</li>
+      <li>Al entrar, la web te lleva directo al <strong>Panel general</strong> y la app a su panel de administración.</li>
+      <li>Cada 5 minutos el sistema confirma que tu cuenta sigue activa y con el mismo rol. Si se te quita el rol o se
+        desactiva la cuenta, la sesión se cierra sola.</li>
+    </ul>
+  </section>
+
+  <section id="admin-panel" class="manual-seccion">
+    <h2>3. Panel general</h2>
+    <p>Es lo primero que ves. Tiene, de arriba hacia abajo:</p>
+    <ul>
+      <li><strong>Necesita atención:</strong> reportes pendientes y sensores con problemas. Lo que no aparece ahí funciona normal.</li>
+      <li><strong>Indicadores:</strong> viviendas registradas, sensores, lecturas recientes y reportes pendientes.</li>
+      <li><strong>Consumo por usuario del mes:</strong> cada vivienda con sus m³; en rojo las que pasan el límite y en
+        amarillo las que subieron mucho. Toca un nombre para ver su consumo día por día.</li>
+      <li><strong>Sensores de la red</strong> y <strong>Últimas lecturas</strong>, que se actualizan solas cuando llegan datos.</li>
+    </ul>
+    <p>La campana de arriba muestra los <strong>avisos de fuga</strong>; también aparecen como mensajes emergentes.</p>
+  </section>
+
+  <section id="admin-valvulas" class="manual-seccion">
+    <h2>4. Electroválvulas</h2>
+    <p>Una electroválvula es una llave eléctrica que <strong>abre o corta el paso del agua</strong> de un sector. La
+      maneja la placa ESP32 con un relé: cuando das una orden en SmartDrop, el servidor se la envía a la placa por
+      internet (MQTT) y la válvula se abre o se cierra en segundos.</p>
+    <p>Entra desde el menú <strong>Operación → Electroválvulas</strong>.</p>
+
+    <h3>4.1 La tarjeta de cada válvula</h3>
+    <ul>
+      <li><strong>Nombre</strong> de la válvula, el <strong>GPIO</strong> (pin de la placa) y su estado de <strong>operación</strong>.</li>
+      <li><strong>Estado actual:</strong> <em>Abierta</em> (verde) o <em>Cerrada</em> (gris).</li>
+      <li>Si está abierta: <em>“Abierta a las 10:15 · lleva 3 min”</em>. Si ya se cerró: <em>“Estuvo abierta: 5 min (cerrada a las 10:20)”</em>.</li>
+      <li><strong>Detalles técnicos:</strong> el canal (tópico MQTT) por donde se le mandan las órdenes.</li>
+    </ul>
+
+    <h3>4.2 Abrir o cerrar</h3>
+    <ol>
+      <li>Toca <strong>Abrir válvula</strong> o <strong>Cerrar válvula</strong>. El botón que no aplica aparece desactivado
+        (no puedes abrir una válvula que ya está abierta).</li>
+      <li>Aparece una <strong>confirmación</strong>: toda orden física se confirma antes de enviarse, para evitar
+        abrirla o cerrarla por accidente.</li>
+      <li>Al confirmar, la orden va a la placa, el estado se actualiza y el movimiento queda registrado con tu nombre, la
+        hora y desde dónde lo hiciste (web o app).</li>
+    </ol>
+    <p class="manual-nota">Una válvula abierta “sin tiempo” se queda abierta hasta que alguien la cierre. Si solo
+      necesitas abrirla un momento, usa el temporizador.</p>
+
+    <h3>4.3 Abrir por un tiempo (temporizador)</h3>
+    <ol>
+      <li>En <strong>Abrir por un tiempo</strong> elige <strong>10, 30, 60 o 120 segundos</strong>, o escribe los segundos
+        que quieras y toca <strong>Abrir con temporizador</strong>.</li>
+      <li>El tiempo va de <strong>5 a 120 segundos</strong> (2 minutos). Si escribes más de 120, el sistema te pregunta si
+        quieres ajustarlo a 120.</li>
+      <li>Confirma. La válvula se abre y aparece el <strong>contador</strong> con una barra de los segundos que faltan.</li>
+      <li>Al llegar a cero, <strong>se cierra sola</strong> y queda registrado como “Temporizado”.</li>
+      <li>Para cortarla antes, toca <strong>Cancelar temporizador y cerrar</strong>.</li>
+    </ol>
+    <p class="manual-nota">Si el servidor se reinicia mientras una válvula tiene temporizador, al volver a encender
+      revisa los temporizadores pendientes y la cierra a tiempo (o de inmediato, si el tiempo ya pasó).</p>
+
+    <h3>4.4 Movimientos recientes</h3>
+    <p>Debajo de las tarjetas está el historial de todas las aperturas y cierres:</p>
+    <ul>
+      <li><strong>Columnas:</strong> fecha, electroválvula, acción, tipo (<em>Manual</em>, <em>Temporizado</em> o
+        <em>Automático</em>), responsable y el cambio de estado (por ejemplo, Cerrada → Abierta).</li>
+      <li><strong>Filtros:</strong> por fecha, por nombre de usuario o por origen (web, app o automático). Toca
+        <strong>Filtrar</strong>; para volver a ver todo, <strong>Quitar filtros</strong>.</li>
+      <li><strong>Descargar CSV:</strong> baja el historial (con los filtros que tengas) para abrirlo en Excel.</li>
+    </ul>
+
+    <h3>4.5 Estadísticas de uso</h3>
+    <p>Aperturas en el mes, tiempo promedio que pasa abierta, cuántas aperturas fueron manuales y cuántas automáticas, y
+      una gráfica de aperturas por día de la última semana.</p>
+
+    <h3>4.6 Aviso de actividad inusual</h3>
+    <p>Si una válvula cambia de estado <strong>más de 20 veces en una hora</strong>, aparece el aviso
+      <em>“Actividad inusual detectada”</em> y se crea una alerta para revisar el sistema: puede ser una falla de la
+      placa, del relé o alguien dando órdenes repetidas.</p>
+
+    <h3>4.7 Desde la app</h3>
+    <p>En el panel de la app toca la tarjeta <strong>Electroválvula</strong> (“Abrir, cerrar y ver movimientos”). Puedes
+      abrir, cerrar y usar el mismo temporizador de 5 a 120 segundos; la cuenta regresiva se ve igual que en la web.</p>
+
+    <h3>4.8 Reglas de seguridad de las válvulas</h3>
+    <ul>
+      <li>Solo los administradores pueden mover una válvula. Un usuario común ni siquiera ve la pantalla.</li>
+      <li>Hay un límite de órdenes por minuto para que nadie la abra y cierre sin control.</li>
+      <li>Gotita, la asistente, <strong>no puede abrir ni cerrar válvulas</strong>: solo explica la pantalla.</li>
+      <li>Cuando la placa se enciende, la válvula arranca <strong>cerrada</strong> (estado seguro).</li>
+    </ul>
+
+    <h3>4.9 Si la válvula no responde</h3>
+    <ol>
+      <li>Revisa que la placa ESP32 esté encendida y con internet (Wi-Fi).</li>
+      <li>Si sale un error al enviar la orden, el servidor no pudo hablar con el servicio de mensajes (MQTT): espera un
+        momento e inténtalo de nuevo.</li>
+      <li>Si la orden se envía pero el estado no cambia, revisa la conexión del relé y la alimentación de 12 V de la válvula.</li>
+      <li>Antes de cortar el agua de un sector, <strong>avisa a los vecinos</strong>.</li>
+    </ol>
+  </section>
+
+  <section id="admin-consumo" class="manual-seccion">
+    <h2>5. Consumo por usuario</h2>
+    <p>Menú <strong>Comunidad → Consumo por usuario</strong>. Muestra cuánta agua usó cada vivienda, en <strong>metros
+      cúbicos</strong> (1 m³ = 1000 litros).</p>
+    <ul>
+      <li><strong>Periodo:</strong> elige un mes o un rango de fechas y toca <strong>Ver</strong>. También puedes ver una sola zona.</li>
+      <li><strong>Límite de la comunidad:</strong> m³ al mes por vivienda. Lo cambias ahí mismo con <strong>Guardar
+        límite</strong>; para periodos más cortos se ajusta solo (por ejemplo, la mitad en 15 días).</li>
+      <li><strong>Colores:</strong> rojo = pasa el límite; amarillo = subió 40 % o más frente al periodo anterior (puede
+        ser una fuga).</li>
+      <li><strong>Consumo por zona:</strong> tabla y gráfica; las zonas a revisar salen en rojo.</li>
+      <li><strong>Qué dicen los datos:</strong> frases que resumen dónde se concentra el consumo y qué revisar.</li>
+      <li><strong>Detalle de un usuario:</strong> toca su nombre para ver su consumo día por día.</li>
+      <li><strong>Descargar Excel</strong> o <strong>Guardar PDF</strong> para entregar el reporte.</li>
+    </ul>
+  </section>
+
+  <section id="admin-suministro" class="manual-seccion">
+    <h2>6. Predicción de suministro</h2>
+    <p>Menú <strong>Predicción → Suministro</strong>. Muestra los tanques de cada vivienda y su <strong>riesgo de
+      quedarse sin agua</strong> (bajo, medio, alto o crítico); los de más riesgo salen en rojo o ámbar.</p>
+    <ul>
+      <li>Toca un tanque para ver su <strong>nivel proyectado</strong>: la línea es lo esperado y la franja, entre qué
+        valores probablemente estará.</li>
+      <li><strong>Realizar predicciones</strong> recalcula todo con las lecturas más nuevas (tarda unos minutos y puedes
+        seguir usando el sistema).</li>
+    </ul>
+  </section>
+
+  <section id="admin-fugas" class="manual-seccion">
+    <h2>7. Predicción de fugas</h2>
+    <p>Menú <strong>Predicción → Fugas</strong>. El sistema revisa solo las lecturas de cada vivienda cada 10 minutos
+      y avisa cuando detecta una posible fuga (por ejemplo, agua que sigue corriendo cuando no debería).</p>
+    <ul>
+      <li><strong>Avisos de fuga:</strong> cada aviso dice la vivienda, la probabilidad y cuánta agua se estaría
+        perdiendo. Cuando los revises, toca <strong>Marcar todos como leídos</strong>.</li>
+      <li><strong>Estado por vivienda:</strong> cómo va cada una, o por qué no se puede analizar (por ejemplo, “El sensor
+        no está reportando”).</li>
+      <li><strong>Analizar ahora</strong> fuerza una revisión sin esperar los 10 minutos.</li>
+    </ul>
+  </section>
+
+  <section id="admin-reportes" class="manual-seccion">
+    <h2>8. Problemas reportados</h2>
+    <p>Menú <strong>Comunidad → Problemas reportados</strong>. Son los problemas que envían los vecinos (no llega agua,
+      mala calidad, baja presión, fugas…).</p>
+    <ol>
+      <li>Arriba ves cuántos hay <strong>pendientes</strong>, <strong>en proceso</strong> y <strong>resueltos</strong>;
+        toca uno para filtrar. También puedes filtrar por tipo de problema.</li>
+      <li>Toca <strong>Abrir</strong> en un reporte para ver la descripción, las fotos y videos, y el chat.</li>
+      <li>En <strong>Gestión del reporte</strong> cambia el <strong>estado</strong>, la <strong>prioridad</strong> (baja,
+        media o alta) y escribe la <strong>respuesta oficial</strong>. Al guardar, al vecino le llega un aviso.</li>
+      <li>Usa el <strong>chat</strong> para pedirle más datos al vecino.</li>
+    </ol>
+    <p><strong>Descargar CSV</strong> baja la lista de reportes con los filtros aplicados.</p>
+  </section>
+
+  <section id="admin-alertas" class="manual-seccion">
+    <h2>9. Historial de alertas</h2>
+    <p>Menú <strong>Comunidad → Historial de alertas</strong>. Todas las alertas del sistema: fugas, calidad del agua,
+      nivel del tanque y riesgo de desabasto. Puedes filtrarlas por estado (pendiente, confirmada, descartada o resuelta)
+      y <strong>descargarlas en CSV</strong>.</p>
+  </section>
+
+  <section id="admin-app" class="manual-seccion">
+    <h2>10. La app del administrador</h2>
+    <p>Al entrar con una cuenta de administrador, la app abre su propio panel. Desde el menú lateral:</p>
+    <ul>
+      <li><strong>Panel general:</strong> flujo, presión, nivel del tanque y alertas activas en tiempo real; la
+        tarjeta de la electroválvula y la de problemas reportados.</li>
+      <li><strong>Gráficas y monitoreo:</strong> toca una lectura para ver su gráfica.</li>
+      <li><strong>Problemas reportados</strong>, <strong>Suministro</strong> y <strong>Fugas:</strong> lo mismo que en la web.</li>
+      <li><strong>Configuración</strong> y <strong>Manual del administrador</strong> (este manual).</li>
+    </ul>
+  </section>
+
+  <section id="admin-gotita" class="manual-seccion">
+    <h2>11. Gotita para el administrador</h2>
+    <ul>
+      <li>Puedes pedirle resúmenes: <em>“¿Hay posibles fugas?”</em>, <em>“¿Cuántos reportes hay pendientes?”</em> o
+        <em>“Llévame a electroválvulas”</em>.</li>
+      <li>En las pantallas con datos de otras personas (consumo por usuario, reportes, válvulas, fugas) Gotita
+        <strong>no lee la pantalla</strong>, para proteger esos datos.</li>
+      <li>Gotita no abre ni cierra válvulas, no cambia datos y no inicia ni cierra sesión.</li>
+    </ul>
+  </section>
+
+  <section id="admin-seguridad" class="manual-seccion">
+    <h2>12. Seguridad y buenas prácticas</h2>
+    <ul>
+      <li>No compartas tu cuenta de administrador: todo lo que hagas queda registrado con tu nombre.</li>
+      <li>Cierra la sesión en computadoras que no son tuyas.</li>
+      <li>Si un correo falla la contraseña 10 veces, queda bloqueado 15 minutos.</li>
+      <li>Antes de cortar el agua con una válvula, avisa a la comunidad; para pruebas, usa el temporizador.</li>
+      <li>Revisa a diario el Panel general, los avisos de fuga y los reportes pendientes.</li>
+    </ul>
+  </section>
+
+  <section id="admin-problemas" class="manual-seccion">
+    <h2>13. Si algo no funciona</h2>
+    <details><summary>Un sensor dice que no está reportando.</summary>
+      <p>Revisa que la placa ESP32 esté encendida y con Wi-Fi. Las lecturas llegan cada pocos segundos; si un sensor no
+        envía nada, su tarjeta lo indica en el Panel general.</p></details>
+    <details><summary>Dice “Demasiadas solicitudes”.</summary>
+      <p>Se hicieron muchas acciones seguidas. Espera el tiempo que indica el mensaje.</p></details>
+    <details><summary>La primera carga del día va lenta.</summary>
+      <p>Al encender el servidor, el sistema de fugas copia las lecturas nuevas. Es normal los primeros minutos.</p></details>
+    <details><summary>Necesito cambiar algo del sistema o del servidor.</summary>
+      <p>Eso lo hace el equipo técnico con el {% if en_app %}<strong>manual técnico</strong> (en la web, menú Ayuda){% else %}<a href="{% url 'manual_tecnico' %}">manual técnico</a>{% endif %}
+        (instalación, configuración, base de datos y API).</p></details>
+  </section>
+</div>
