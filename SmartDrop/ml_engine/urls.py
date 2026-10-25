@@ -29,4 +29,5 @@ urlpatterns = [
     path('v1/ml/leaks/alerts/', views_ops.LeakAlertsView.as_view(), name='leak_alerts'),
     path('v1/ml/leaks/alerts/read/', views_ops.LeakAlertsReadView.as_view(), name='leak_alerts_read'),
     path('v1/ml/leaks/night-test-mode/', views_ops.LeakNightTestModeView.as_view(), name='leak_night_test_mode'),
+    path('v1/ml/data-quality/', views_ops.DataQualityView.as_view(), name='data_quality'),
 ]

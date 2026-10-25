@@ -12,7 +12,7 @@ from rest_framework.generics import get_object_or_404
 from rest_framework.response import Response
 
 from App import queries, supabase_client
-from ml_engine import jobs
+from ml_engine import jobs, validacion
 from ml_engine.leaks.alerts import ORIGIN, cooldown_hours
 from ml_engine.leaks.detect import alert_threshold
 from ml_engine.leaks import realtime
@@ -246,3 +246,18 @@ def _estado_modo_prueba():
         'umbral_presion_kpa': realtime.umbral_presion(),
         'caida_presion_kpa': realtime.caida_presion(),
     }
+
+
+class DataQualityView(AdminOnlyAPIView):
+    """GET/POST /v1/ml/data-quality — limpieza y validación de datos (PB055).
+
+    GET devuelve el resumen de la última revisión y las últimas lecturas marcadas como inválidas.
+    POST corre la revisión ahora (borra duplicados, marca fuera de rango y avisa de datos insuficientes).
+    """
+
+    def get(self, request):
+        return Response({'resumen': validacion.ultimo_resumen(), 'invalidas': validacion.invalidas_recientes()})
+
+    def post(self, request):
+        resumen = validacion.validar()
+        return Response({'resumen': resumen, 'invalidas': validacion.invalidas_recientes()})

@@ -17,6 +17,7 @@ from django.utils import timezone
 
 from App import queries, supabase_client
 from ml_engine.models import ConsumptionAggregate, Home, SensorReading, SourceType, SyncState, Zone
+from ml_engine.validacion import motivo_invalido, motivo_nivel_crudo
 
 logger = logging.getLogger(__name__)
 
@@ -250,9 +251,12 @@ def _store_home_rows(home, items):
             continue
         existing.add((metric, ts))
         is_level = metric == 'nivel_tanque'
+        # PB055: la lectura imposible para el sensor se guarda marcada como inválida (no entra a los promedios).
+        motivo = motivo_nivel_crudo(value) if is_level else motivo_invalido(metric, value)
         readings.append(SensorReading(
             home=home, zone=zone if is_level else None, metric=metric, ts=ts,
-            value=level_cm_to_liters(zone, value) if is_level else value,
+            value=level_cm_to_liters(zone, value) if is_level and not motivo else value,
+            is_valid=not motivo, motivo_invalido=motivo[:120],
         ))
     if not readings:
         return 0

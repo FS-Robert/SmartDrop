@@ -25,6 +25,7 @@ from ml_engine.realdata import sync
 from ml_engine.shortage.tank_simulation import run_shortage_prediction
 from ml_engine.supabase_out import save_shortage_prediction
 from ml_engine.training import ModelsUnavailable, ensure_models, modeling_homes
+from ml_engine.validacion import validar
 
 logger = logging.getLogger(__name__)
 
@@ -87,13 +88,17 @@ def run_full_prediction(progress=None):
     summary = {}
 
     summary['sync'] = _sync(progress, (0, 40), force_discovery=True)
+    progress(40, 'Limpiando y validando los datos')
+    summary['validacion'] = validar()
 
     progress(40, 'Comprobando modelos de ML')
     try:
         summary['modelos'] = ensure_models(progress=lambda p, t: progress(40 + p * 0.15, t))
     except ModelsUnavailable as exc:
         summary['modelos'] = {'trained': False, 'error': str(exc)}
-        summary['tanques'], summary['fugas'] = [], {'analizados': 0, 'alertas_creadas': 0, 'posibles_fugas': 0, 'excluidos': []}
+        # Sin datos suficientes en ninguna vivienda: igual se dice cuáles y por qué (PB055).
+        summary['tanques'], summary['fugas'] = [], {'analizados': 0, 'alertas_creadas': 0, 'posibles_fugas': 0,
+                                                    'excluidos': modeling_homes()[1]}
         summary['duracion_s'] = round(time.monotonic() - started, 1)
         return summary
 
@@ -158,6 +163,7 @@ def run_monitor_cycle():
     """Ciclo automático: lecturas nuevas -> (reentrena si hace falta) -> análisis de fugas con alertas."""
     prune_old_results()
     summary = {'sync': _sync(lambda p, t: None, (0, 100))}
+    summary['validacion'] = validar()
     try:
         summary['modelos'] = ensure_models()
     except ModelsUnavailable as exc:

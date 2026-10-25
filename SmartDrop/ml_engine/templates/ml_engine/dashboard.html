@@ -26,6 +26,27 @@
     <div class="ml-loading"><span class="skeleton"></span><span class="skeleton"></span><span class="skeleton"></span></div>
   </div>
 </section>
+
+<section class="section" aria-labelledby="calidad-datos-titulo" id="calidad-datos">
+  <div class="section-head">
+    <h2 class="section-title" id="calidad-datos-titulo">Calidad de los datos</h2>
+    <p class="section-lede" id="calidad-datos-fecha">Antes de cada predicción se borran las lecturas repetidas y se apartan las imposibles.</p>
+    <button type="button" class="btn btn--secondary btn--sm" id="validar-btn"><i class="ti ti-filter" aria-hidden="true"></i><span>Validar datos ahora</span></button>
+  </div>
+  <div id="calidad-avisos" aria-live="polite"></div>
+  <div class="grid-3 calidad-tiles">
+    <div class="panel tile"><div class="tile-head"><span class="icon-chip icon-chip--agua"><i class="ti ti-filter" aria-hidden="true"></i></span><span class="tile-label">Duplicados eliminados</span></div><p class="tile-value" id="q-duplicados">—</p><p class="tile-foot muted" id="q-duplicados-det">en la última revisión</p></div>
+    <div class="panel tile"><div class="tile-head"><span class="icon-chip icon-chip--warn"><i class="ti ti-alert-octagon" aria-hidden="true"></i></span><span class="tile-label">Marcadas como inválidas</span></div><p class="tile-value" id="q-invalidas">—</p><p class="tile-foot muted" id="q-invalidas-det">fuera de rango</p></div>
+    <div class="panel tile"><div class="tile-head"><span class="icon-chip icon-chip--none"><i class="ti ti-database" aria-hidden="true"></i></span><span class="tile-label">Viviendas con datos insuficientes</span></div><p class="tile-value" id="q-insuficientes">—</p><p class="tile-foot muted">no se pueden analizar todavía</p></div>
+  </div>
+  <div class="panel panel--flush calidad-invalidas" id="q-lista" hidden>
+    <table class="data-table">
+      <caption>Últimas lecturas marcadas como inválidas</caption>
+      <thead><tr><th scope="col">Vivienda</th><th scope="col">Sensor</th><th scope="col" class="num">Valor</th><th scope="col">Fecha</th><th scope="col">Motivo</th></tr></thead>
+      <tbody id="q-filas"></tbody>
+    </table>
+  </div>
+</section>
 {% endblock %}
 
 {% block extra_js %}
@@ -127,10 +148,71 @@
       <p>${tanques.length} tanques analizados, ${risky.length} con riesgo de desabasto y ${fugas.posibles_fugas || 0} posible(s) fuga(s)${fugas.alertas_creadas ? ` (${fugas.alertas_creadas} aviso(s) nuevo(s) enviado(s))` : ''}.</p>`;
     if (result.modelos && result.modelos.trained) html += `<p>Modelos actualizados: ${esc(result.modelos.models.join(', '))}.</p>`;
     if (result.modelos && result.modelos.error) html += `<p>${esc(result.modelos.error)}</p>`;
-    if (excluded.length) html += `<ul class="ml-excluded">${excluded.map((e) => `<li>${esc(e.nic)}: ${esc(e.detail || e.status)}</li>`).join('')}</ul>`;
-    banner.innerHTML = html + '</div></div>';
+    const others = excluded.filter((e) => e.status !== 'insuficiente');
+    if (others.length) html += `<ul class="ml-excluded">${others.map((e) => `<li>${esc(e.nic)}: ${esc(e.detail || e.status)}</li>`).join('')}</ul>`;
+    html += '</div></div>';
+    // PB055: aviso propio cuando no hay datos históricos suficientes para procesar una vivienda.
+    const insufficient = excluded.filter((e) => e.status === 'insuficiente');
+    if (insufficient.length) html += insufficientNotice(insufficient);
+    banner.innerHTML = html;
+    if (result.validacion) paintQuality({ resumen: result.validacion });
     if (window.SmartDropLeakAlerts) window.SmartDropLeakAlerts.refresh();
   }
+
+  // ── Calidad de los datos (PB055) ──
+  const QUALITY_URL = "{% url 'ml_engine:data_quality' %}";
+  const METRIC_LABEL = { flujo: 'Flujo', presion: 'Presión', calidad: 'Calidad (TDS)', nivel_tanque: 'Nivel del tanque' };
+
+  function csrf() { const m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/); return m ? decodeURIComponent(m[1]) : ''; }
+
+  function insufficientNotice(items) {
+    return `<div class="notice notice--warn ml-banner warn" role="alert"><i class="ti ti-database" aria-hidden="true"></i><div>
+      <p class="notice-title">Datos insuficientes para ${items.length === 1 ? 'una vivienda' : items.length + ' viviendas'}</p>
+      <ul class="ml-excluded">${items.map((e) => `<li>${esc(e.mensaje || `${e.nic}: ${e.detail}`)}</li>`).join('')}</ul>
+      <p>Se analizarán solas cuando sus sensores junten más historial.</p></div></div>`;
+  }
+
+  function byMetric(counts) {
+    return Object.entries(counts || {}).map(([k, v]) => `${METRIC_LABEL[k] || k}: ${v}`).join(' · ');
+  }
+
+  function paintQuality(data) {
+    const r = data.resumen;
+    if (!r) return;
+    document.getElementById('calidad-datos-fecha').textContent =
+      `Última revisión: ${new Date(r.fecha).toLocaleString('es-SV')} — antes de cada predicción se borran las lecturas repetidas y se apartan las imposibles.`;
+    document.getElementById('q-duplicados').textContent = r.duplicados_eliminados;
+    document.getElementById('q-duplicados-det').textContent = byMetric(r.duplicados_por_metrica) || 'en la última revisión';
+    document.getElementById('q-invalidas').textContent = r.invalidas_marcadas;
+    document.getElementById('q-invalidas-det').textContent =
+      (byMetric(r.invalidas_por_metrica) || 'fuera de rango') + ` (en total ${r.invalidas_total} apartadas)`;
+    document.getElementById('q-insuficientes').textContent = (r.datos_insuficientes || []).length;
+    document.getElementById('calidad-avisos').innerHTML =
+      (r.datos_insuficientes || []).length ? insufficientNotice(r.datos_insuficientes) : '';
+    if (data.invalidas) {
+      document.getElementById('q-lista').hidden = !data.invalidas.length;
+      document.getElementById('q-filas').innerHTML = data.invalidas.map((i) => `<tr>
+        <td>${esc(i.nic)}</td><td>${esc(METRIC_LABEL[i.metrica] || i.metrica)}</td>
+        <td class="num">${esc(Number(i.valor).toFixed(2))}</td><td>${esc(new Date(i.fecha).toLocaleString('es-SV'))}</td>
+        <td><span class="status status--bad"><span class="status-dot" aria-hidden="true"></span>${esc(i.motivo)}</span></td></tr>`).join('');
+    }
+  }
+
+  async function loadQuality(method) {
+    const response = await fetch(QUALITY_URL, { method: method || 'GET', credentials: 'same-origin',
+      headers: { Accept: 'application/json', 'X-CSRFToken': csrf() } });
+    if (response.ok) paintQuality(await response.json());
+  }
+
+  const validateButton = document.getElementById('validar-btn');
+  validateButton.addEventListener('click', async () => {
+    validateButton.disabled = true;
+    validateButton.classList.add('is-loading');
+    try { await loadQuality('POST'); } finally {
+      validateButton.disabled = false;
+      validateButton.classList.remove('is-loading');
+    }
+  });
 
   button.addEventListener('click', async () => {
     button.disabled = true;
@@ -151,6 +233,7 @@
 
   loadZones();
   loadStatus();
+  loadQuality();
 }());
 </script>
 {% endblock %}

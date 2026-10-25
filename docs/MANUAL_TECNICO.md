@@ -646,6 +646,7 @@ cd SmartDrop
 python manage.py test               # todas las pruebas del backend
 python manage.py test App.tests_consumo_admin App.tests_asistente
 python manage.py test ml_engine.tests_tiempo_real App.tests_seguridad_pb064   # PB026, PB027 y PB064
+python manage.py test ml_engine.tests_validacion                              # PB055
 ```
 
 App Android: `gradlew.bat assembleDebug` (y `assembleRelease`) desde la carpeta del proyecto.

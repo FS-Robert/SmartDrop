@@ -114,6 +114,8 @@ class SensorReading(models.Model):
     ts = models.DateTimeField(db_index=True)
     value = models.FloatField()
     is_valid = models.BooleanField(default=True)
+    # Por qué se marcó como inválida (fuera de rango, valor no numérico…). Vacío si es válida (PB055).
+    motivo_invalido = models.CharField(max_length=120, blank=True, default='')
 
     class Meta:
         db_table = 'ml_sensor_reading'
