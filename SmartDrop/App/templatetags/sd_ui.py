@@ -19,7 +19,8 @@ _WARN = {
 }
 _BAD = {
     'muy_alta', 'muy alta', 'critico', 'crítico', 'critica', 'crítica', 'mala', 'malo', 'revisar',
-    'confirmada', 'fuga', 'error', 'falla', 'badge-closed', 'bad', 'riesgo_alto', 'alto',
+    'confirmada', 'fuga', 'error', 'falla', 'badge-closed', 'bad', 'riesgo_alto', 'alto', 'posible fuga',
+    'fuga crítica', 'fuga critica',
 }
 _INFO = {'en_proceso', 'en proceso', 'en_revision', 'en revisión', 'info'}
 

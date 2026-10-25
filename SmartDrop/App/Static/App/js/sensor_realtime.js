@@ -22,6 +22,11 @@
           window.dispatchEvent(new CustomEvent('smartdrop:sensor-reading', {
             detail: payload,
           }));
+        } else if (payload.event === 'leak_alert') {
+          // Fuga detectada (PB026/PB027): la campana del admin y "Alertas Activas" del residente se enteran al instante.
+          window.dispatchEvent(new CustomEvent('smartdrop:leak-alert', {
+            detail: payload,
+          }));
         }
       } catch (error) {
         console.error('Mensaje realtime inválido:', error);

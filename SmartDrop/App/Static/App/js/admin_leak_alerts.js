@@ -39,7 +39,7 @@
     toast.innerHTML = `
       <i class="ti ti-alert-triangle leak-toast-icon" aria-hidden="true"></i>
       <div class="leak-toast-body">
-        <strong>Posible fuga en ${escapeHtml(alert.nic || 'una vivienda')}${percent ? ` (${percent})` : ''}</strong>
+        <strong>${escapeHtml(alert.titulo || 'Posible fuga')} en ${escapeHtml(alert.nic || 'una vivienda')}${percent ? ` (${percent})` : ''}</strong>
         <span>${escapeHtml(alert.direccion || '')}${alert.zona ? ' · ' + escapeHtml(alert.zona) : ''}</span>
         <span>${escapeHtml(alert.resumen || loss)}</span>
         <a href="${leaksUrl}#alerta-${alert.id_alerta}">Ver detalles</a>
@@ -71,6 +71,20 @@
       // Sin conexión momentánea: se reintenta en el siguiente ciclo.
     }
   }
+
+  // Aviso por WebSocket (detector en vivo): se consulta al momento en vez de esperar 20 s, y si la página
+  // muestra la tabla de sensores, el estado del sensor cambia sin recargar.
+  window.addEventListener('smartdrop:leak-alert', (event) => {
+    const data = event.detail || {};
+    if (data.para !== 'admin') return;
+    poll();
+    if (data.id_sensor && data.estado_sensor) {
+      document.querySelectorAll(`[data-sensor-estado="${data.id_sensor}"]`).forEach((cell) => {
+        cell.className = 'status status--bad';
+        cell.innerHTML = `<span class="status-dot" aria-hidden="true"></span>${escapeHtml(data.estado_sensor)}`;
+      });
+    }
+  });
 
   window.SmartDropLeakAlerts = { refresh: poll };
   poll();

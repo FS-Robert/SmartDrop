@@ -18,6 +18,19 @@
 <p id="monitor-chip" class="live live--off monitor-chip off" aria-live="polite">Cargando estado del monitor…</p>
 <div id="ml-feedback" aria-live="polite"></div>
 
+<section class="panel night-test" aria-labelledby="modo-prueba-titulo">
+  <div class="leak-top">
+    <div>
+      <h2 class="panel-title" id="modo-prueba-titulo"><i class="ti ti-moon" aria-hidden="true"></i> Detección en vivo · Modo de Prueba Nocturna</h2>
+      <p class="leak-meta" id="night-test-help">Cada lectura de flujo y presión se revisa al llegar. De noche se avisa si el agua corre sin parar.</p>
+    </div>
+    <label class="night-test-switch">
+      <input type="checkbox" id="night-test-toggle" role="switch" aria-describedby="night-test-help">
+      <span id="night-test-label">Apagado</span>
+    </label>
+  </div>
+</section>
+
 <section class="section" aria-labelledby="avisos-titulo">
   <div class="section-head leak-top">
     <h2 class="section-title" id="avisos-titulo">Avisos de fuga</h2>
@@ -170,7 +183,7 @@
       <article class="panel alert-item ${a.leida ? 'leida' : ''}" id="alerta-${a.id_alerta}">
         <div class="leak-top">
           <div class="leak-who">
-            <p class="leak-name">${esc(a.nic)} ${a.leida ? pill('none', 'Leído') : pill('bad', 'Nuevo')}</p>
+            <p class="leak-name">${esc(a.titulo || 'Posible Fuga')} · ${esc(a.nic)} ${a.leida ? pill('none', 'Leído') : pill('bad', 'Nuevo')}${a.tiempo_real ? ' ' + pill('info', 'En vivo') : ''}${a.modo_prueba ? ' ' + pill('warn', 'Modo de prueba') : ''}</p>
             <p class="leak-meta">${place(a)}. ${when(a.fecha)}</p>
           </div>
           ${a.probabilidad != null ? probability(a.probabilidad * 100, a.leida ? 'anil' : 'bad') : ''}
@@ -209,6 +222,36 @@
     }
   });
 
+  // Modo de Prueba Nocturna: el flujo sostenido cuenta como fuga nocturna a cualquier hora (PB026).
+  const NIGHT_URL = "{% url 'ml_engine:leak_night_test_mode' %}";
+  const nightToggle = document.getElementById('night-test-toggle');
+  const nightLabel = document.getElementById('night-test-label');
+  const nightHelp = document.getElementById('night-test-help');
+  function paintNight(data) {
+    nightToggle.checked = !!data.activo;
+    nightLabel.textContent = data.activo ? 'Encendido' : 'Apagado';
+    nightHelp.textContent = data.activo
+      ? `Modo de prueba encendido: si el flujo pasa de ${data.flujo_minimo_lpm} L/min durante ${data.segundos_con_flujo} s, se registra "Posible Fuga" aunque sea de día.`
+      : `Cada lectura se revisa al llegar. De ${data.horario} se avisa si el flujo pasa de ${data.flujo_minimo_lpm} L/min durante ${data.segundos_con_flujo} s; a cualquier hora, si la presión cae de golpe por debajo de ${data.umbral_presion_kpa} kPa con el flujo constante.`;
+  }
+  async function loadNight() {
+    const response = await fetch(NIGHT_URL, { credentials: 'same-origin' });
+    if (response.ok) paintNight(await response.json());
+  }
+  nightToggle.addEventListener('change', async () => {
+    nightToggle.disabled = true;
+    try {
+      const response = await fetch(NIGHT_URL, { method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() }, body: JSON.stringify({ activo: nightToggle.checked }) });
+      if (response.ok) paintNight(await response.json());
+    } finally {
+      nightToggle.disabled = false;
+    }
+  });
+  // Un aviso nuevo llega por WebSocket: se recarga la lista sin esperar.
+  window.addEventListener('smartdrop:leak-alert', () => { loadAlerts(); loadLeaks(); });
+
+  loadNight();
   loadLeaks();
   loadAlerts();
 }());

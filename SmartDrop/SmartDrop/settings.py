@@ -303,6 +303,14 @@ MQTT_BROKER_PORT = os.environ.get('MQTT_BROKER_PORT', '8883')
 MQTT_USERNAME = os.environ.get('MQTT_USERNAME', '')
 MQTT_PASSWORD = os.environ.get('MQTT_PASSWORD', '')
 MQTT_CA_CERT = os.environ.get('MQTT_CA_CERT', '')
+# Detección de fugas al instante (ml_engine/leaks/realtime.py, PB026).
+LEAK_RT_NIGHT_START = int(os.environ.get('LEAK_RT_NIGHT_START', '3'))           # hora en que empieza la revisión nocturna
+LEAK_RT_NIGHT_END = int(os.environ.get('LEAK_RT_NIGHT_END', '6'))               # hora en que termina
+LEAK_RT_FLOW_MIN_LPM = float(os.environ.get('LEAK_RT_FLOW_MIN_LPM', '0.5'))      # flujo que cuenta como "agua corriendo"
+LEAK_RT_FLOW_SECONDS = float(os.environ.get('LEAK_RT_FLOW_SECONDS', '20'))       # segundos seguidos para avisar
+LEAK_RT_PRESSURE_THRESHOLD_KPA = float(os.environ.get('LEAK_RT_PRESSURE_THRESHOLD_KPA', '5'))  # umbral de calibración (BAJA del ESP32)
+LEAK_RT_PRESSURE_DROP_KPA = float(os.environ.get('LEAK_RT_PRESSURE_DROP_KPA', '3'))  # caída en ~10 s que se considera repentina
+LEAK_RT_COOLDOWN_MINUTES = float(os.environ.get('LEAK_RT_COOLDOWN_MINUTES', '10'))  # no repetir el mismo aviso antes de esto
 
 # Clave que el ESP32 (y deploy/simulador_lecturas.py) mandan en la cabecera X-Api-Key al enviar lecturas.
 # Sin ella, /api/lecturas/ solo acepta lecturas con DEBUG=True.

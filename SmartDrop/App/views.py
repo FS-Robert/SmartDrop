@@ -1518,6 +1518,19 @@ def _clave_dispositivo_valida(request):
     return hmac.compare_digest(recibida.encode('utf-8'), esperada.encode('utf-8'))
 
 
+def _revisar_fuga_al_instante(sensor_id, vivienda_id, value):
+    """Las lecturas de flujo y presión pasan por el detector de fugas en vivo (PB026)."""
+    try:
+        sensor = next((s for s in sensors() if s.get('id_sensor') == sensor_id), None)
+        tipo = str((sensor or {}).get('tipo_sensor') or '').lower()
+        tipo = 'flujo' if ('flujo' in tipo or 'flow' in tipo) else 'presion' if ('presion' in tipo or 'pressure' in tipo) else None
+        if tipo:
+            from ml_engine.leaks.realtime import revisar_lectura
+            revisar_lectura(vivienda_id, tipo, value, id_sensor=sensor_id)
+    except Exception:
+        logger.exception('No se pudo revisar la lectura %s en busca de fugas', sensor_id)
+
+
 @csrf_exempt
 @require_http_methods(['POST'])
 @limitar('lecturas')
@@ -1588,6 +1601,7 @@ def api_lectura(request):
             {'ok': False, 'error': 'No se pudo guardar la lectura'},
             status=502,
         )
+    _revisar_fuga_al_instante(sensor_id, vivienda_id, value)
 
     return JsonResponse({'ok': True, 'lectura': row}, status=201)
 
@@ -1661,6 +1675,12 @@ def admin_panel(request):
     except Exception:
         # En caso de fallo con Supabase, devolver listas vacías y permitir que la plantilla lo muestre
         lecturas, viviendas, sensores, reportes_pendientes = [], [], [], []
+
+    # Un sensor con una fuga detectada en vivo muestra ese estado (PB026, "Fuga crítica" / "Posible fuga").
+    from ml_engine.leaks.realtime import estados_sensores
+    en_vivo = estados_sensores()
+    sensores = [{**s, 'estado': en_vivo[s.get('id_sensor')]['estado']} if s.get('id_sensor') in en_vivo else s
+                for s in sensores]
 
     # Lookup de sensores por id para mostrar tipo/unidad/icono en la UI
     sensor_lookup = {}

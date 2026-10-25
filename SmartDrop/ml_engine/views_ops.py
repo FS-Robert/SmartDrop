@@ -15,6 +15,7 @@ from App import queries, supabase_client
 from ml_engine import jobs
 from ml_engine.leaks.alerts import ORIGIN, cooldown_hours
 from ml_engine.leaks.detect import alert_threshold
+from ml_engine.leaks import realtime
 from ml_engine.leaks.explain import ACTION, describe_causes, onset_text, plain_summary
 from ml_engine.models import Home, LeakPrediction, MonitorState, PredictionJob
 from ml_engine.monitor import MONITOR_KEY, interval_seconds
@@ -114,8 +115,15 @@ class LeakOverviewView(AdminOnlyAPIView):
 def _alert_payload(alerta, notificacion):
     extra = alerta.get('datos_adicionales') or {}
     vivienda = extra.get('vivienda') or {}
+    en_vivo = extra.get('metodo') == 'tiempo_real'
+    lineas = (alerta.get('mensaje') or '').split('\n')
     return {
         'id_alerta': alerta['id_alerta'],
+        # Avisos del detector en vivo (PB026): "Posible Fuga" (flujo nocturno) o "Fuga Crítica por Presión".
+        'tipo': extra.get('tipo') or 'prediccion_fuga',
+        'titulo': extra.get('titulo') or 'Posible Fuga',
+        'tiempo_real': en_vivo,
+        'modo_prueba': bool(extra.get('modo_prueba')),
         'id_notificacion': notificacion.get('id_notificacion') if notificacion else None,
         'fecha': alerta.get('fecha_creacion'),
         'prioridad': alerta.get('prioridad'),
@@ -128,8 +136,8 @@ def _alert_payload(alerta, notificacion):
         'probabilidad': extra.get('probabilidad'),
         'nivel_riesgo': extra.get('nivel_riesgo'),
         'metricas': extra.get('metricas') or {},
-        'causas': describe_causes(extra.get('metricas')) or extra.get('causas') or [],
-        'resumen': plain_summary(extra.get('metricas')),
+        'causas': ([] if en_vivo else describe_causes(extra.get('metricas'))) or extra.get('causas') or [],
+        'resumen': lineas[1] if en_vivo and len(lineas) > 1 else plain_summary(extra.get('metricas')),
         'inicio': onset_text(extra.get('metricas')),
         'accion': ACTION,
         'leida': bool(notificacion) and notificacion.get('estado_visualizacion') == 'leida',
@@ -209,3 +217,32 @@ class LeakAlertsReadView(AdminOnlyAPIView):
             logger.exception('No se pudieron marcar como leídas las alertas de fuga')
             return Response({'error': 'No se pudieron marcar como leídas.'}, status=status.HTTP_502_BAD_GATEWAY)
         return Response({'ok': True})
+
+
+class LeakNightTestModeView(AdminOnlyAPIView):
+    """GET/POST /v1/ml/leaks/night-test-mode — "Modo de Prueba Nocturna" del detector en vivo (PB026).
+
+    Encendido, el flujo sostenido cuenta como fuga nocturna a cualquier hora (para probarlo de día).
+    POST body: {"activo": true|false}.
+    """
+
+    def get(self, request):
+        return Response(_estado_modo_prueba())
+
+    def post(self, request):
+        activo = request.data.get('activo')
+        if not isinstance(activo, bool):
+            return Response({'error': 'Indica activo=true o activo=false.'}, status=status.HTTP_400_BAD_REQUEST)
+        realtime.cambiar_modo_prueba(activo, queries.owner_id(request.user))
+        return Response(_estado_modo_prueba())
+
+
+def _estado_modo_prueba():
+    return {
+        'activo': realtime.modo_prueba_activo(),
+        'horario': f'{realtime.hora_inicio():02d}:00 a {realtime.hora_fin():02d}:00',
+        'flujo_minimo_lpm': realtime.flujo_minimo(),
+        'segundos_con_flujo': realtime.segundos_flujo(),
+        'umbral_presion_kpa': realtime.umbral_presion(),
+        'caida_presion_kpa': realtime.caida_presion(),
+    }

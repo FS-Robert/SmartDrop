@@ -136,7 +136,7 @@
           </th>
           <td>{{ s.modelo|default:'Sin modelo' }}</td>
           <td>{{ s.unidad|default:s.unidad_medida|default:'—' }}</td>
-          <td><span class="status status--{{ s.estado|estado_css }}"><span class="status-dot" aria-hidden="true"></span>{{ s.estado|default:'Sin estado'|capfirst }}</span></td>
+          <td><span class="status status--{{ s.estado|estado_css }}" data-sensor-estado="{{ s.id_sensor }}"><span class="status-dot" aria-hidden="true"></span>{{ s.estado|default:'Sin estado'|capfirst }}</span></td>
           <td class="num"><a href="{% url 'sensor_detail' s.id_sensor %}" class="btn btn--ghost btn--sm">Ver historial</a></td>
         </tr>
         {% endfor %}

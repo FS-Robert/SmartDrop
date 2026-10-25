@@ -374,3 +374,9 @@
     transition: none;
   }
 }
+
+/* Detección en vivo · Modo de Prueba Nocturna (PB026) */
+.night-test { margin-bottom: 1.25rem; }
+.night-test .panel-title { display: flex; align-items: center; gap: .4rem; }
+.night-test-switch { display: inline-flex; align-items: center; gap: .5rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.night-test-switch input { width: 2.6rem; height: 1.4rem; accent-color: var(--color-primary, #1f6feb); cursor: pointer; }
