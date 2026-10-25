@@ -35,12 +35,30 @@ asegurar_claves() {
         echo "Se generó LECTURAS_API_KEY. Configura la misma clave en el ESP32 (cabecera X-Api-Key):"
         echo "    grep LECTURAS_API_KEY $ENV_FILE"
     fi
+    if [[ -z "$(valor_env RESPALDO_CLAVE)" ]]; then
+        set_env RESPALDO_CLAVE "$("$VENV/bin/python" -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
+        echo "Se generó RESPALDO_CLAVE para cifrar los respaldos. Guarda una copia FUERA del servidor:"
+        echo "sin ella no se puede restaurar.    grep RESPALDO_CLAVE $ENV_FILE"
+    fi
     chmod 600 "$ENV_FILE"
 }
 
 ajustes_del_servidor() {
     # Solo el servidor vigila los temporizadores de la válvula (ver VALVE_WATCHDOG_ENABLED en settings.py).
     set_env VALVE_WATCHDOG_ENABLED 1
+    # La ingesta MQTT vive en el servidor (DEF-17): ya no hace falta consumer.js en una laptop.
+    set_env MQTT_INGESTA_ENABLED 1
+}
+
+instalar_respaldo_diario() {
+    # Respaldo cifrado cada noche con systemd (PB064). Espera REPO_DIR definido.
+    local usuario
+    usuario="$(id -un)"
+    for unidad in smartdrop-respaldo.service smartdrop-respaldo.timer; do
+        sed -e "s|__USUARIO__|$usuario|g" -e "s|__REPO_DIR__|$REPO_DIR|g" "$REPO_DIR/deploy/$unidad" | sudo tee "/etc/systemd/system/$unidad" >/dev/null
+    done
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now smartdrop-respaldo.timer
 }
 
 apartar_env_duplicado() {

@@ -1,0 +1,11 @@
+[Unit]
+Description=SmartDrop - respaldo de la base cada noche (PB064)
+
+[Timer]
+# Todos los días a las 2:30 (hora del servidor). Si el servidor estaba apagado, corre apenas encienda.
+OnCalendar=*-*-* 02:30:00
+Persistent=true
+RandomizedDelaySec=10min
+
+[Install]
+WantedBy=timers.target

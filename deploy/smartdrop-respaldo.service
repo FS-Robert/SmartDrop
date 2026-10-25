@@ -1,0 +1,16 @@
+[Unit]
+Description=SmartDrop - respaldo cifrado de la base (PB064)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=__USUARIO__
+Group=__USUARIO__
+WorkingDirectory=__REPO_DIR__/SmartDrop
+Environment=PYTHONUNBUFFERED=1
+# Crea el respaldo cifrado, lo sube a Supabase Storage (fuera del servidor) y borra los de más de RESPALDO_DIAS.
+ExecStart=__REPO_DIR__/.venv/bin/python manage.py respaldar_base
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full

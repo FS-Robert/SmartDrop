@@ -33,6 +33,10 @@ staticfiles/
 # Modelos generados por el pipeline ML
 ml_models/
 
+# Respaldos cifrados de la base (PB064)
+respaldos/
+*.tar.gz.enc
+
 # Audios guardados de la voz de Gotita
 gotita_audio/
 

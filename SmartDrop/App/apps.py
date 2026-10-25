@@ -24,6 +24,8 @@ class AppConfig(AppConfig):
             threading.Thread(target=_keep_sensor_series_warm, name='sensor-series-warm', daemon=True).start()
             if settings.VALVE_WATCHDOG_ENABLED:
                 threading.Thread(target=_watch_valve_timers, name='valve-timer-watchdog', daemon=True).start()
+            from .ingesta_mqtt import iniciar as iniciar_ingesta_mqtt
+            iniciar_ingesta_mqtt()
 
     @staticmethod
     def _is_serving_process():

@@ -31,5 +31,6 @@ chmod -R o+rX "$APP_DIR/staticfiles"
 proteger_bases
 
 sudo systemctl restart smartdrop
+instalar_respaldo_diario
 sleep 3
 systemctl --no-pager --lines=5 status smartdrop

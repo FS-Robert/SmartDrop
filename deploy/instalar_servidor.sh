@@ -71,6 +71,7 @@ sed -e "s|__USUARIO__|$USUARIO|g" -e "s|__REPO_DIR__|$REPO_DIR|g" \
 sudo systemctl daemon-reload
 sudo systemctl enable smartdrop
 sudo systemctl restart smartdrop
+instalar_respaldo_diario
 
 paso "Nginx"
 SITIO_NGINX=/etc/nginx/sites-available/smartdrop

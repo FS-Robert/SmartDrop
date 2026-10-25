@@ -615,15 +615,29 @@ Cada carpeta principal tiene su `README.md`, y cada módulo empieza con un comen
 
 ## 10. Seguridad
 
-* **En tránsito:** HTTPS con HSTS en la web; la app en modo release solo acepta HTTPS; MQTT con TLS en el puerto 8883.
+* **En tránsito:** HTTPS con HSTS en la web (certbot con redirección de HTTP a HTTPS); la app en modo release solo
+  acepta HTTPS/WSS; MQTT con TLS en el puerto 8883 **con el certificado del broker verificado**: el servidor usa los
+  certificados del sistema y el ESP32 trae el raíz ISRG Root X1 en `certificados.h` (ya no usa `setInsecure`).
 * **En reposo:** contraseñas con hash bcrypt; Row Level Security en todas las tablas de Supabase (solo la clave del
-  servidor puede leer); evidencias de reportes con enlaces firmados que vencen en 12 horas.
+  servidor puede leer; verificar con `select tablename, rowsecurity from pg_tables where schemaname = 'public';`);
+  evidencias de reportes con enlaces firmados que vencen en 12 horas. Supabase cifra sus discos (AES-256).
+* **Credenciales fuera del código (DEF-11):** el firmware lee WiFi y MQTT de `secrets.h` (no va a Git; plantilla en
+  `secrets.example.h`) y `consumer.js` las lee de su `.env`. En el servidor todo vive en el `.env` (permiso 600).
+* **Ingesta en el servidor (DEF-17):** con `MQTT_INGESTA_ENABLED=1` Django se suscribe a `smartdrop/#`
+  (`App/ingesta_mqtt.py`) y hace lo que hacía `consumer.js`; ya no depende de una laptop encendida.
+* **Respaldos (escenario 3):** `manage.py respaldar_base` crea un archivo cifrado (Fernet, `RESPALDO_CLAVE`) con todas
+  las tablas de Supabase y las bases SQLite, lo sube al bucket privado `respaldos` de Supabase Storage (fuera del
+  servidor) y conserva `RESPALDO_DIAS` días. `deploy/smartdrop-respaldo.timer` lo corre cada noche a las 2:30.
+  Restaurar: `manage.py restaurar_respaldo --ultimo` (revisa sin cambiar nada) y luego
+  `manage.py restaurar_respaldo ARCHIVO --confirmar` (upsert en Supabase); `--sqlite-en CARPETA` saca las bases
+  SQLite. Guarda una copia de `RESPALDO_CLAVE` fuera del servidor: sin ella no se puede restaurar.
 * **Aplicación:** límites de uso (`App/seguridad.py`, `App/ratelimit.py`), cabeceras de seguridad y CSP
   (`App/seguridad_web.py`), validación de filtros hacia Supabase (`App/supabase_client.py`), tokens de la app de 15 min
   con renovación y lista negra al cerrar sesión.
 * **Gotita:** las llaves solo en el servidor; no puede escribir código, dar credenciales, iniciar o cerrar sesión ni
   mover la válvula; filtro de salida y detección de intentos de manipulación (`App/asistente/`).
-* **Pendiente:** respaldos automáticos diarios y cifrado de volumen del servidor (PB064); credenciales del firmware.
+* **Pendiente:** cifrado de volumen del disco del servidor (se activa al crear la VM en Oracle Cloud) y rotar las
+  claves que estuvieron en texto plano (HiveMQ, `sb_secret_` de Supabase y WiFi).
 
 ## 11. Pruebas
 
@@ -631,6 +645,7 @@ Cada carpeta principal tiene su `README.md`, y cada módulo empieza con un comen
 cd SmartDrop
 python manage.py test               # todas las pruebas del backend
 python manage.py test App.tests_consumo_admin App.tests_asistente
+python manage.py test ml_engine.tests_tiempo_real App.tests_seguridad_pb064   # PB026, PB027 y PB064
 ```
 
 App Android: `gradlew.bat assembleDebug` (y `assembleRelease`) desde la carpeta del proyecto.
