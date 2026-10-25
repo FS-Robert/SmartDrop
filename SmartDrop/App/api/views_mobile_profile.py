@@ -201,8 +201,9 @@ def _avisos_guardados(request, prefs):
             'tipo': 'alerta',
             'categoria': preferencias.categoria_alerta(tipo) or tipo,
             'estado': 'nueva',
-            'titulo': 'Reporte semanal de consumo' if tipo == preferencias.WEEKLY_REPORT_ORIGIN
-            else tipo.replace('_', ' ').capitalize() or 'Alerta',
+            # "Fuga detectada en su sector" (PB027) trae su propio título.
+            'titulo': extra.get('titulo') or ('Reporte semanal de consumo' if tipo == preferencias.WEEKLY_REPORT_ORIGIN
+                                              else tipo.replace('_', ' ').capitalize() or 'Alerta'),
             'mensaje': (alerta.get('mensaje') or '').split('\n')[0],
             'fecha': alerta.get('fecha_creacion'),
         })

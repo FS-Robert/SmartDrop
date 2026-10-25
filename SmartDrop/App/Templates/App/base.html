@@ -365,6 +365,8 @@
   {% endif %}
   {% if user.is_authenticated and user.rol_id == 2 %}
     <script src="{% static 'App/js/admin_leak_alerts.js' %}" data-alerts-url="{% url 'ml_engine:leak_alerts' %}" data-leaks-url="{% url 'ml_engine:leaks' %}"></script>
+  {% elif user.is_authenticated %}
+    <script src="{% static 'App/js/alertas_sector.js' %}"></script>
   {% endif %}
   <script src="{% static 'App/js/sd_motion.js' %}?v=20261011-zona2"></script>
   {% include 'App/_cerrar_sesion_form.html' %}

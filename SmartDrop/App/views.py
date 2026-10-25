@@ -353,6 +353,16 @@ def _reporte_semanal_seguro(user, prefs=None):
         return None
 
 
+def _alertas_activas_o_vacio(user):
+    """Fugas detectadas en el sector del residente que siguen pendientes (PB027)."""
+    from ml_engine.leaks.sector import alertas_activas
+    try:
+        return alertas_activas(owner_id(user))
+    except Exception:
+        logger.warning('No se pudieron cargar las alertas activas del usuario %s', user.pk, exc_info=True)
+        return []
+
+
 @login_required(login_url='login')
 def dashboard(request):
     if _admin_only(request):
@@ -362,10 +372,11 @@ def dashboard(request):
     prefs = preferencias.preferencias_de(request.user)
     _reporte_semanal_seguro(request.user, prefs)
     # Válvula, bloque de comunidad y datos de la vivienda son independientes: se piden a la vez.
-    valve_status, comunidad, data = run_parallel(
+    valve_status, comunidad, data, alertas_activas = run_parallel(
         _valve_status_or_unavailable,
         lambda: views_reportes.interrupciones_y_predicciones(request.user, prefs),
         lambda: _owned_data_or_empty(request.user, consumption=True),
+        lambda: _alertas_activas_o_vacio(request.user),
     )
     viviendas, lecturas, consumption_rows = data.viviendas, data.lecturas, data.consumo
     latest = _averaged_readings_by_type(lecturas)
@@ -414,6 +425,7 @@ def dashboard(request):
             'badge_class': _status_badge_class(tank_status),
         },
         'consumo':  {'hoy': consumption},
+        'alertas_activas': alertas_activas,
         'valvula': valve_status,
         'stats': {
             'uptime':        'Disponible' if lecturas else 'Sin datos',

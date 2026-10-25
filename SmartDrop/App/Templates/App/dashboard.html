@@ -180,6 +180,32 @@
   </section>
 </div>
 
+<!-- ── Alertas activas: fugas detectadas en el sector (PB027) ── -->
+<section class="section alertas-activas" aria-labelledby="alertas-activas-titulo" id="alertas-activas">
+  <div class="section-head">
+    <h2 class="section-title" id="alertas-activas-titulo">Alertas Activas</h2>
+    <p class="section-lede">Avisos urgentes de tu sector. Llegan al instante, aunque no recargues la página.</p>
+    <button type="button" class="btn btn--ghost btn--sm" id="activar-avisos-navegador" hidden><i class="ti ti-bell-ringing" aria-hidden="true"></i>Activar avisos del navegador</button>
+  </div>
+  <div class="panel panel--flush">
+    <ul class="list mini-list" id="alertas-activas-lista"{% if not alertas_activas %} hidden{% endif %}>
+      {% for alerta in alertas_activas %}
+      <li class="list-row alerta-activa" data-id-alerta="{{ alerta.id_alerta }}">
+        <span class="icon-chip icon-chip--bad"><i class="ti ti-droplet-off" aria-hidden="true"></i></span>
+        <div class="list-row-main">
+          <p class="list-row-title">{{ alerta.titulo }}</p>
+          <p class="list-row-meta">{{ alerta.mensaje }}</p>
+        </div>
+        <span class="list-row-aside status status--bad"><span class="status-dot" aria-hidden="true"></span>Activa</span>
+      </li>
+      {% endfor %}
+    </ul>
+    <div class="empty dash-empty mini-empty" id="alertas-activas-vacio"{% if alertas_activas %} hidden{% endif %}>
+      <p>No hay alertas activas en tu sector.</p>
+    </div>
+  </div>
+</section>
+
 <!-- ── Comunidad: interrupciones y alertas ── -->
 <section class="section dashboard-interrupciones" aria-labelledby="comunidad-titulo">
   <div class="section-head">

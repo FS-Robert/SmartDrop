@@ -113,5 +113,16 @@ def raise_leak_alert(home, prediction):
     prediction.alerta_id = alerta.get('id_alerta')
     prediction.alert_sent_at = now
     prediction.save(update_fields=['fuga_id', 'alerta_id', 'alert_sent_at'])
+    # Aviso inmediato a la web/app de los admins y a los vecinos del sector (PB027).
+    from ml_engine.leaks.sector import avisar_admins_en_vivo, avisar_sector
+    try:
+        avisar_admins_en_vivo({
+            'id_alerta': alerta.get('id_alerta'), 'tipo': 'prediccion_fuga', 'titulo': 'Posible Fuga',
+            'prioridad': 'critica' if prediction.probabilidad >= 0.85 else 'alta', 'mensaje': build_message(home, prediction),
+            'nic': meta.get('nic'), 'direccion': meta.get('direccion'), 'zona': meta.get('zona'),
+        })
+        avisar_sector(meta.get('zona'), alerta.get('id_alerta'), 'Posible Fuga', now)
+    except Exception:
+        logger.exception('No se pudo avisar al sector de la fuga del hogar %s', home.pk)
     logger.warning('Alerta de fuga creada: home=%s prob=%.2f alerta=%s', home.pk, prediction.probabilidad, prediction.alerta_id)
     return True
