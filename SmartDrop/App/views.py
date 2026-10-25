@@ -21,7 +21,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from .forms import LoginForm, UsuarioProfileForm, UsuarioRegisterForm, VincularViviendaForm
-from . import preferencias, supabase_client, valve_service
+from . import consumo_admin, preferencias, supabase_client, valve_service
 from .models import Usuario
 from .seguridad import fila_csv, limitar
 from . import views_reportes
@@ -1687,12 +1687,21 @@ def admin_panel(request):
             'sensor_icon': icon_map.get(tipo, 'ti ti-devices'),
         })
 
+    # Consumo de cada usuario en lo que va del mes (PB032); si falla, el panel se muestra igual.
+    try:
+        desde, hasta, etiqueta = consumo_admin.periodo_desde_parametros({})
+        consumo_mes = {**consumo_admin.reporte(desde, hasta), 'etiqueta': etiqueta}
+    except Exception:
+        logger.warning('No se pudo calcular el consumo por usuario del panel', exc_info=True)
+        consumo_mes = None
+
     context = {
         'lecturas': enriched,
         'viviendas': viviendas,
         'sensores': sensores,
         'n_reportes_pendientes': len(reportes_pendientes),
         'ultima_actualizacion': 'hace unos segundos',
+        'consumo_mes': consumo_mes,
     }
     return render(request, 'App/admin_panel.html', context)
 

@@ -1,0 +1,109 @@
+/* Manual de usuario (web y app): índice arriba y secciones fáciles de leer. */
+
+.manual {
+  max-width: 72ch;
+  color: var(--c-ink);
+  line-height: 1.65;
+}
+
+.manual-indice {
+  margin-bottom: var(--s-6);
+  padding: var(--s-4) var(--s-5);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-lg);
+  background: var(--c-surface);
+}
+
+.manual-indice-titulo {
+  margin: 0 0 var(--s-2);
+  font-weight: 700;
+}
+
+.manual-indice ol {
+  margin: 0;
+  padding-left: 1.3rem;
+  columns: 2 16rem;
+}
+
+.manual-indice a {
+  color: var(--c-anil);
+}
+
+.manual-seccion {
+  margin-bottom: var(--s-6);
+  scroll-margin-top: var(--s-6);
+}
+
+.manual-seccion h2 {
+  margin: 0 0 var(--s-3);
+  font-family: var(--font-display);
+  font-size: var(--t-xl);
+}
+
+.manual-seccion h3 {
+  margin: var(--s-4) 0 var(--s-2);
+  font-size: var(--t-md);
+}
+
+.manual-seccion ul,
+.manual-seccion ol {
+  padding-left: 1.3rem;
+}
+
+.manual-seccion li + li {
+  margin-top: var(--s-1);
+}
+
+.manual-nota {
+  padding: var(--s-3) var(--s-4);
+  border-left: 4px solid var(--c-agua);
+  border-radius: var(--r-sm);
+  background: var(--c-agua-soft);
+}
+
+.manual-color {
+  display: inline-block;
+  width: 0.8em;
+  height: 0.8em;
+  margin-right: var(--s-2);
+  border-radius: 50%;
+  vertical-align: middle;
+}
+
+.manual-color--ok { background: var(--c-ok-dot); }
+.manual-color--warn { background: var(--c-warn-dot); }
+.manual-color--bad { background: var(--c-bad-dot); }
+
+.manual details {
+  margin-bottom: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  background: var(--c-surface);
+}
+
+.manual summary {
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.manual details p {
+  margin: var(--s-2) 0 0;
+}
+
+/* Versión de la app: sin menú, con márgenes de teléfono */
+.manual-app {
+  margin: 0;
+  background: var(--c-page);
+}
+
+.manual-app-contenido {
+  padding: var(--s-5) var(--s-4) var(--s-8);
+}
+
+@media print {
+  .no-imprimir,
+  .manual-indice {
+    display: none !important;
+  }
+}

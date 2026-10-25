@@ -1,6 +1,6 @@
 from django.urls import path
 from . import views
-from . import i18n, views_reportes
+from . import i18n, views_consumo_admin, views_manual, views_reportes
 from .asistente import vistas as asistente
 
 urlpatterns = [
@@ -30,6 +30,7 @@ urlpatterns = [
     path('usuario/',            views.usuario,            name='usuario'),
     path('usuario/preferencias/', views.usuario_preferencias, name='usuario_preferencias'),
     path('vincular-vivienda/',  views.vincular_vivienda,  name='vincular_vivienda'),
+    path('manual/',             views_manual.manual_usuario, name='manual_usuario'),
 
     # ── Sistema de reportes de usuarios ──
     path('reportar/',           views_reportes.reportes_panel,      name='reportes_panel'),
@@ -43,6 +44,12 @@ urlpatterns = [
     path('admin-reportes/',     views_reportes.admin_reportes,      name='admin_reportes'),
     path('admin-reportes/export/', views_reportes.admin_reportes_export, name='admin_reportes_export'),
     path('admin-reportes/<int:reporte_id>/actualizar/', views_reportes.admin_reporte_update, name='admin_reporte_update'),
+
+    # ── Consumo por usuario y por zona para el admin (PB032) ──
+    path('admin-consumo/',      views_consumo_admin.admin_consumo,          name='admin_consumo'),
+    path('admin-consumo/exportar/', views_consumo_admin.admin_consumo_exportar, name='admin_consumo_exportar'),
+    path('admin-consumo/vivienda/<int:id_vivienda>/', views_consumo_admin.admin_consumo_usuario,
+         name='admin_consumo_usuario'),
 
     # ── Gotita, la asistente ──
     path('asistente/turno/',    asistente.turno_web,              name='asistente_turno'),

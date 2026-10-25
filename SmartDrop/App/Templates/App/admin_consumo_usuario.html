@@ -1,0 +1,129 @@
+{% extends 'App/base.html' %}
+{% load static %}
+{% block title %}Consumo de {{ datos.usuario }}{% endblock %}
+{% block nav_admin_consumo %}active{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/admin.css' %}?v=20261025-consumo1">{% endblock %}
+
+{% block content %}
+<!-- Consumo de un solo usuario día por día (PB032). El cálculo está en App/consumo_admin.py (detalle). -->
+<nav class="breadcrumb no-imprimir" aria-label="Ruta">
+  <a href="{% url 'admin_consumo' %}?{{ consulta }}"><i class="ti ti-arrow-left" aria-hidden="true"></i> Consumo por usuario</a>
+</nav>
+
+<header class="page-head">
+  <div>
+    <h1 class="page-title">{{ datos.usuario }}</h1>
+    <p class="page-lede">
+      {% if datos.correo %}{{ datos.correo }} · {% endif %}NIC {{ datos.nic|default:'—' }} · {{ datos.direccion|default:'Sin dirección' }} · {{ datos.zona }}
+      {% if not datos.vinculada %}<br><small class="muted">Esta vivienda todavía no está vinculada a una cuenta; se muestra el nombre del titular.</small>{% endif %}
+    </p>
+  </div>
+  <div class="page-actions no-imprimir">
+    <button type="button" class="btn btn--secondary" onclick="window.print()"><i class="ti ti-file-type-pdf" aria-hidden="true"></i>Guardar PDF</button>
+  </div>
+</header>
+
+<section class="panel consumo-admin-filtros no-imprimir" aria-label="Elegir periodo">
+  <form method="get" class="filtros-row">
+    <div class="field field--inline">
+      <label class="field-label" for="mes">Mes</label>
+      <input class="field-input" type="month" id="mes" name="mes" value="{{ mes }}">
+    </div>
+    <span class="muted consumo-admin-o">o un rango</span>
+    <div class="field field--inline">
+      <label class="field-label" for="desde">Desde</label>
+      <input class="field-input" type="date" id="desde" name="desde" value="{{ desde_txt }}">
+    </div>
+    <div class="field field--inline">
+      <label class="field-label" for="hasta">Hasta</label>
+      <input class="field-input" type="date" id="hasta" name="hasta" value="{{ hasta_txt }}">
+    </div>
+    <button type="submit" class="btn btn--primary btn--sm"><i class="ti ti-filter" aria-hidden="true"></i>Ver</button>
+  </form>
+</section>
+
+<p class="consumo-admin-periodo">
+  <strong>Periodo de facturación:</strong> {{ datos.etiqueta }}
+  · <strong>Límite de la comunidad:</strong> {{ datos.limite_periodo|floatformat:2 }} m³ en este periodo ({{ datos.limite_dia|floatformat:3 }} m³ al día)
+  {% if datos.ultima_lectura %}· <span class="muted">Datos medidos hasta {{ datos.ultima_lectura|date:'d/m/Y H:i' }}</span>{% endif %}
+</p>
+
+<div class="tiles metric-grid">
+  <div class="tile">
+    <div class="tile-head"><span class="icon-chip {% if datos.excede %}icon-chip--bad{% else %}icon-chip--agua{% endif %}"><i class="ti ti-droplet" aria-hidden="true"></i></span><span class="tile-label">Consumo del periodo</span></div>
+    <p class="tile-value{% if datos.excede %} val-alert{% endif %}">{{ datos.total_m3|floatformat:2 }} <span class="tile-unit">m³</span></p>
+  </div>
+  <div class="tile">
+    <div class="tile-head"><span class="icon-chip icon-chip--anil"><i class="ti ti-calendar-stats" aria-hidden="true"></i></span><span class="tile-label">Promedio al día</span></div>
+    <p class="tile-value">{{ datos.promedio_dia_m3|floatformat:3 }} <span class="tile-unit">m³</span></p>
+  </div>
+  <div class="tile">
+    <div class="tile-head"><span class="icon-chip icon-chip--warn"><i class="ti ti-arrow-big-up-lines" aria-hidden="true"></i></span><span class="tile-label">Día de más consumo</span></div>
+    <p class="tile-value">{% if datos.dia_mayor %}{{ datos.dia_mayor.m3|floatformat:2 }} <span class="tile-unit">m³ el {{ datos.dia_mayor.dia|date:'d/m' }}</span>{% else %}—{% endif %}</p>
+  </div>
+  <div class="tile">
+    <div class="tile-head"><span class="icon-chip {% if datos.dias_sobre_limite %}icon-chip--bad{% else %}icon-chip--ok{% endif %}"><i class="ti ti-alert-octagon" aria-hidden="true"></i></span><span class="tile-label">Días sobre el límite diario</span></div>
+    <p class="tile-value">{{ datos.dias_sobre_limite }}</p>
+  </div>
+</div>
+
+{% if datos.excede %}
+<div class="notice notice--info consumo-admin-aviso" role="status">
+  <i class="ti ti-alert-triangle" aria-hidden="true"></i>
+  <div><p><strong>Este usuario pasa el límite de la comunidad</strong> en este periodo. Revisa si hay una fuga o un uso fuera de lo normal.</p></div>
+</div>
+{% endif %}
+
+<section class="panel" aria-labelledby="grafica-titulo">
+  <h2 class="panel-title" id="grafica-titulo">Consumo día por día (m³)</h2>
+  <div class="consumo-admin-grafica"><canvas id="graficaUsuario" role="img" aria-label="Consumo diario de {{ datos.usuario }}"></canvas></div>
+</section>
+
+<section class="section" aria-labelledby="tabla-titulo">
+  <div class="section-head"><h2 class="section-title" id="tabla-titulo">Detalle por día</h2></div>
+  <div class="table-wrap">
+    <table class="data-table">
+      <caption>Consumo de {{ datos.usuario }} por día</caption>
+      <thead><tr><th scope="col">Día</th><th scope="col" class="num">Consumo (m³)</th><th scope="col" class="num">Litros</th><th scope="col">Estado</th></tr></thead>
+      <tbody>
+        {% for item in datos.dias %}
+        <tr class="{% if item.excede %}fila-alerta{% endif %}">
+          <th scope="row">{{ item.etiqueta }}</th>
+          <td class="num">{{ item.m3|floatformat:3 }}</td>
+          <td class="num">{% widthratio item.m3 1 1000 %}</td>
+          <td>{% if item.excede %}<span class="status status--bad"><span class="status-dot" aria-hidden="true"></span>Sobre el límite diario</span>{% elif item.m3 == 0 %}<span class="status status--none"><span class="status-dot" aria-hidden="true"></span>Sin consumo</span>{% else %}<span class="status status--ok"><span class="status-dot" aria-hidden="true"></span>Normal</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+{{ grafica|json_script:"datos-grafica-usuario" }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js" integrity="sha384-FcQlsUOd0TJjROrBxhJdUhXTUgNJQxTMcxZe6nHbaEfFL1zjQ+bq/uRoBQxb0KMo" crossorigin="anonymous"></script>
+<script src="{% static 'App/js/sd_charts.js' %}?v=20261018-agua1"></script>
+<script>
+  (function () {
+    const datos = JSON.parse(document.getElementById('datos-grafica-usuario').textContent);
+    // Barras rojas los días que pasan el límite diario de la comunidad.
+    const colores = () => datos.m3.map((v) => SDCharts.color(v > datos.limite_dia ? 'bad-dot' : 'agua'));
+    const grafica = new Chart(document.getElementById('graficaUsuario'), {
+      type: 'bar',
+      data: {
+        labels: datos.etiquetas,
+        datasets: [
+          { type: 'bar', label: 'Consumo (m³)', data: datos.m3, backgroundColor: colores(), maxBarThickness: 28 },
+          { type: 'line', label: 'Límite diario', data: datos.m3.map(() => datos.limite_dia), borderColor: SDCharts.color('bad-dot'), borderDash: [6, 4], pointRadius: 0, fill: false },
+        ],
+      },
+      options: { responsive: true, maintainAspectRatio: false, scales: { x: { grid: { display: false } }, y: { beginAtZero: true } } },
+    });
+    grafica.$sdRecolor = () => {
+      grafica.data.datasets[0].backgroundColor = colores();
+      grafica.data.datasets[1].borderColor = SDCharts.color('bad-dot');
+    };
+  }());
+</script>
+{% endblock %}

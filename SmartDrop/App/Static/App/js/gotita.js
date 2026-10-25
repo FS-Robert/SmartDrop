@@ -403,9 +403,9 @@
   // Pantallas con datos personales o de otras personas (perfil, NIC y titular, paneles del admin, fugas con
   // nombres y direcciones, buscador, detalle de un reporte): su texto y su foto nunca se le mandan a Claude.
   const PANTALLAS_PRIVADAS = new Set(['perfil', 'vincular_vivienda', 'panel', 'valvulas', 'prediccion_fugas',
-    'reportes_admin', 'buscar']);
+    'reportes_admin', 'buscar', 'consumo_admin']);
   function pantallaPrivada() {
-    return PANTALLAS_PRIVADAS.has(pantallaId()) || /^\/(reportes|admin-reportes|sensor|usuario)\//.test(window.location.pathname);
+    return PANTALLAS_PRIVADAS.has(pantallaId()) || /^\/(reportes|admin-reportes|admin-consumo|sensor|usuario)\//.test(window.location.pathname);
   }
 
   function textoVisible() {

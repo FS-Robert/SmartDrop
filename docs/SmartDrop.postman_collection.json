@@ -1,0 +1,222 @@
+{
+  "info": {
+    "name": "SmartDrop API",
+    "description": "API de SmartDrop (app móvil, lecturas del ESP32, válvula, reportes, predicción y Gotita). Ver docs/MANUAL_TECNICO.md, sección 5. Primero ejecuta 'Iniciar sesión': guarda access y refresh en las variables.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{access}}", "type": "string" }]
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://127.0.0.1:8000" },
+    { "key": "access", "value": "" },
+    { "key": "refresh", "value": "" },
+    { "key": "lecturas_api_key", "value": "" },
+    { "key": "correo", "value": "usuario@correo.com" },
+    { "key": "contrasena", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Cuenta y sesión",
+      "item": [
+        {
+          "name": "Registrarse",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"nombre\": \"Ana\",\n  \"apellido\": \"López\",\n  \"correo\": \"ana@correo.com\",\n  \"contrasena\": \"una-clave-segura\"\n}" },
+            "url": { "raw": "{{base_url}}/auth/registro/", "host": ["{{base_url}}"], "path": ["auth", "registro", ""] }
+          }
+        },
+        {
+          "name": "Iniciar sesión",
+          "event": [{
+            "listen": "test",
+            "script": { "type": "text/javascript", "exec": [
+              "if (pm.response.code === 200) {",
+              "  const datos = pm.response.json();",
+              "  pm.collectionVariables.set('access', datos.access);",
+              "  pm.collectionVariables.set('refresh', datos.refresh);",
+              "}"
+            ] }
+          }],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"contrasena\": \"{{contrasena}}\"\n}" },
+            "url": { "raw": "{{base_url}}/auth/login/", "host": ["{{base_url}}"], "path": ["auth", "login", ""] }
+          }
+        },
+        {
+          "name": "Renovar token",
+          "event": [{
+            "listen": "test",
+            "script": { "type": "text/javascript", "exec": [
+              "if (pm.response.code === 200) {",
+              "  const datos = pm.response.json();",
+              "  pm.collectionVariables.set('access', datos.access);",
+              "  if (datos.refresh) pm.collectionVariables.set('refresh', datos.refresh);",
+              "}"
+            ] }
+          }],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"refresh\": \"{{refresh}}\"\n}" },
+            "url": { "raw": "{{base_url}}/auth/refresh/", "host": ["{{base_url}}"], "path": ["auth", "refresh", ""] }
+          }
+        },
+        {
+          "name": "Cerrar sesión",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"refresh\": \"{{refresh}}\"\n}" },
+            "url": { "raw": "{{base_url}}/auth/logout/", "host": ["{{base_url}}"], "path": ["auth", "logout", ""] }
+          }
+        },
+        { "name": "Mi cuenta", "request": { "method": "GET", "url": { "raw": "{{base_url}}/auth/me/", "host": ["{{base_url}}"], "path": ["auth", "me", ""] } } },
+        { "name": "Mi perfil", "request": { "method": "GET", "url": { "raw": "{{base_url}}/auth/perfil/", "host": ["{{base_url}}"], "path": ["auth", "perfil", ""] } } },
+        {
+          "name": "Cambiar preferencias",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"modo_oscuro\": true,\n  \"idioma\": \"es\"\n}" },
+            "url": { "raw": "{{base_url}}/auth/preferencias/", "host": ["{{base_url}}"], "path": ["auth", "preferencias", ""] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Agua y consumo",
+      "item": [
+        { "name": "Mis viviendas", "request": { "method": "GET", "url": { "raw": "{{base_url}}/auth/mis-viviendas/", "host": ["{{base_url}}"], "path": ["auth", "mis-viviendas", ""] } } },
+        {
+          "name": "Vincular vivienda",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"numero_cuenta\": \"NIC-0001\",\n  \"nombre_completo_titular\": \"Nombre del titular\"\n}" },
+            "url": { "raw": "{{base_url}}/auth/vincular-vivienda/", "host": ["{{base_url}}"], "path": ["auth", "vincular-vivienda", ""] }
+          }
+        },
+        { "name": "Estado del agua", "request": { "method": "GET", "url": { "raw": "{{base_url}}/auth/estado-agua/", "host": ["{{base_url}}"], "path": ["auth", "estado-agua", ""] } } },
+        { "name": "Consumo", "request": { "method": "GET", "url": { "raw": "{{base_url}}/auth/consumo/?periodo=mes", "host": ["{{base_url}}"], "path": ["auth", "consumo", ""], "query": [{ "key": "periodo", "value": "mes" }] } } },
+        { "name": "Retroalimentación", "request": { "method": "GET", "url": { "raw": "{{base_url}}/auth/retroalimentacion/", "host": ["{{base_url}}"], "path": ["auth", "retroalimentacion", ""] } } },
+        { "name": "Consejos de ahorro", "request": { "method": "GET", "url": { "raw": "{{base_url}}/auth/recomendaciones/", "host": ["{{base_url}}"], "path": ["auth", "recomendaciones", ""] } } },
+        { "name": "Gráficas", "request": { "method": "GET", "url": { "raw": "{{base_url}}/api/graficas/?parametros=flujo,presion", "host": ["{{base_url}}"], "path": ["api", "graficas", ""], "query": [{ "key": "parametros", "value": "flujo,presion" }] } } },
+        { "name": "Notificaciones", "request": { "method": "GET", "url": { "raw": "{{base_url}}/api/notificaciones/", "host": ["{{base_url}}"], "path": ["api", "notificaciones", ""] } } },
+        { "name": "Buscar", "request": { "method": "GET", "url": { "raw": "{{base_url}}/api/buscar/?q=tanque", "host": ["{{base_url}}"], "path": ["api", "buscar", ""], "query": [{ "key": "q", "value": "tanque" }] } } }
+      ]
+    },
+    {
+      "name": "Lecturas del ESP32",
+      "item": [
+        {
+          "name": "Enviar una lectura",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Api-Key", "value": "{{lecturas_api_key}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"id_sensor\": 4,\n  \"valor\": 2.35,\n  \"fecha_registro\": \"2026-10-25T14:32:05Z\"\n}" },
+            "url": { "raw": "{{base_url}}/api/lecturas/", "host": ["{{base_url}}"], "path": ["api", "lecturas", ""] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Electroválvula (admin)",
+      "item": [
+        { "name": "Estado", "request": { "method": "GET", "url": { "raw": "{{base_url}}/api/valvula/1/estado/", "host": ["{{base_url}}"], "path": ["api", "valvula", "1", "estado", ""] } } },
+        { "name": "Historial", "request": { "method": "GET", "url": { "raw": "{{base_url}}/api/valvula/1/logs/", "host": ["{{base_url}}"], "path": ["api", "valvula", "1", "logs", ""] } } },
+        {
+          "name": "Abrir 30 segundos",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"accion\": \"ABRIR\",\n  \"duracion\": 30\n}" },
+            "url": { "raw": "{{base_url}}/api/valvula/1/control/", "host": ["{{base_url}}"], "path": ["api", "valvula", "1", "control", ""] }
+          }
+        },
+        {
+          "name": "Cerrar",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"accion\": \"CERRAR\"\n}" },
+            "url": { "raw": "{{base_url}}/api/valvula/1/control/", "host": ["{{base_url}}"], "path": ["api", "valvula", "1", "control", ""] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reportes",
+      "item": [
+        { "name": "Tipos de problema", "request": { "method": "GET", "url": { "raw": "{{base_url}}/api/reportes/catalogo/", "host": ["{{base_url}}"], "path": ["api", "reportes", "catalogo", ""] } } },
+        { "name": "Mis reportes", "request": { "method": "GET", "url": { "raw": "{{base_url}}/api/reportes/", "host": ["{{base_url}}"], "path": ["api", "reportes", ""] } } },
+        {
+          "name": "Crear reporte",
+          "request": {
+            "method": "POST",
+            "body": { "mode": "formdata", "formdata": [
+              { "key": "tipo_problema", "value": "sin_agua", "type": "text" },
+              { "key": "descripcion", "value": "No ha caído el agua desde ayer.", "type": "text" },
+              { "key": "ubicacion", "value": "Calle Principal #123", "type": "text" },
+              { "key": "adjuntos", "type": "file", "src": [] }
+            ] },
+            "url": { "raw": "{{base_url}}/api/reportes/", "host": ["{{base_url}}"], "path": ["api", "reportes", ""] }
+          }
+        },
+        { "name": "Muro de la comunidad", "request": { "method": "GET", "url": { "raw": "{{base_url}}/api/reportes/comunidad/", "host": ["{{base_url}}"], "path": ["api", "reportes", "comunidad", ""] } } },
+        { "name": "Detalle de un reporte", "request": { "method": "GET", "url": { "raw": "{{base_url}}/api/reportes/1/", "host": ["{{base_url}}"], "path": ["api", "reportes", "1", ""] } } },
+        {
+          "name": "Escribir en el chat del reporte",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"mensaje\": \"¿Hay novedades?\"\n}" },
+            "url": { "raw": "{{base_url}}/api/reportes/1/", "host": ["{{base_url}}"], "path": ["api", "reportes", "1", ""] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Predicción y fugas (admin)",
+      "item": [
+        { "name": "Resumen de zonas", "request": { "method": "GET", "url": { "raw": "{{base_url}}/v1/ml/zones/summary/", "host": ["{{base_url}}"], "path": ["v1", "ml", "zones", "summary", ""] } } },
+        { "name": "Predicción de desabasto de una zona", "request": { "method": "GET", "url": { "raw": "{{base_url}}/v1/ml/zones/4/shortage-prediction/", "host": ["{{base_url}}"], "path": ["v1", "ml", "zones", "4", "shortage-prediction", ""] } } },
+        { "name": "Posibles fugas", "request": { "method": "GET", "url": { "raw": "{{base_url}}/v1/ml/leaks/", "host": ["{{base_url}}"], "path": ["v1", "ml", "leaks", ""] } } },
+        { "name": "Alertas de fuga sin leer", "request": { "method": "GET", "url": { "raw": "{{base_url}}/v1/ml/leaks/alerts/?solo_no_leidas=1", "host": ["{{base_url}}"], "path": ["v1", "ml", "leaks", "alerts", ""], "query": [{ "key": "solo_no_leidas", "value": "1" }] } } },
+        { "name": "Correr el análisis completo", "request": { "method": "POST", "url": { "raw": "{{base_url}}/v1/ml/predictions/run/", "host": ["{{base_url}}"], "path": ["v1", "ml", "predictions", "run", ""] } } },
+        { "name": "Estado del análisis", "request": { "method": "GET", "url": { "raw": "{{base_url}}/v1/ml/predictions/status/", "host": ["{{base_url}}"], "path": ["v1", "ml", "predictions", "status", ""] } } }
+      ]
+    },
+    {
+      "name": "Gotita",
+      "item": [
+        { "name": "Estado de Gotita", "request": { "method": "GET", "url": { "raw": "{{base_url}}/api/asistente/", "host": ["{{base_url}}"], "path": ["api", "asistente", ""] } } },
+        {
+          "name": "Preguntar (respuesta por frases, text/event-stream)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept", "value": "text/event-stream" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"texto\": \"¿Cuánta agua me queda?\",\n  \"modo\": \"sencillo\",\n  \"idioma\": \"es\",\n  \"conversacion\": null,\n  \"pantalla\": { \"id\": \"tanque\", \"titulo\": \"Tanque\", \"texto\": \"Tanque al 74%\" }\n}" },
+            "url": { "raw": "{{base_url}}/api/asistente/turno/", "host": ["{{base_url}}"], "path": ["api", "asistente", "turno", ""] }
+          }
+        },
+        { "name": "Historial de conversaciones", "request": { "method": "GET", "url": { "raw": "{{base_url}}/api/asistente/conversaciones/", "host": ["{{base_url}}"], "path": ["api", "asistente", "conversaciones", ""] } } }
+      ]
+    }
+  ]
+}

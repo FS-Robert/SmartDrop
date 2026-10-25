@@ -2,7 +2,7 @@
 {% load static sd_ui %}
 {% block title %}Panel general{% endblock %}
 {% block nav_admin %}active{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/admin.css' %}?v=20261018-agua1">{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/admin.css' %}?v=20261025-consumo1">{% endblock %}
 
 {% block content %}
 <header class="page-head admin-heading">
@@ -72,6 +72,45 @@
     <p class="tile-value{% if n_reportes_pendientes > 0 %} val-alert{% endif %}" data-countup>{{ n_reportes_pendientes }}</p>
   </a>
 </div>
+
+<!-- ── Consumo por usuario este mes (PB032) ── -->
+<section class="section admin-consumo-usuarios" aria-labelledby="consumo-usuarios-titulo">
+  <div class="section-head">
+    <h2 class="section-title" id="consumo-usuarios-titulo">Consumo por usuario · {{ consumo_mes.etiqueta|default:'este mes' }}</h2>
+    <p class="section-lede">
+      {% if consumo_mes %}Límite de la comunidad: {{ consumo_mes.limite_periodo|floatformat:2 }} m³ por vivienda en lo que va del mes.
+      Toca un nombre para ver su consumo día por día.{% else %}No se pudo calcular el consumo en este momento.{% endif %}
+    </p>
+  </div>
+  {% if consumo_mes and consumo_mes.usuarios %}
+  <div class="table-wrap admin-consumo-tabla">
+    <table class="data-table">
+      <caption>Consumo de cada usuario en el mes</caption>
+      <thead><tr>
+        <th scope="col">Usuario</th><th scope="col">Zona</th><th scope="col" class="num">Consumo (m³)</th>
+        <th scope="col" class="num">Promedio al día (m³)</th><th scope="col">Estado</th>
+      </tr></thead>
+      <tbody>
+        {% for u in consumo_mes.usuarios %}
+        <tr class="{% if u.excede %}fila-alerta{% elif u.anormal %}fila-aviso{% endif %}">
+          <th scope="row"><a href="{% url 'admin_consumo_usuario' u.id_vivienda %}">{{ u.usuario }}</a></th>
+          <td>{{ u.zona }}</td>
+          <td class="num"><strong>{{ u.m3|floatformat:2 }}</strong></td>
+          <td class="num">{{ u.m3_dia|floatformat:3 }}</td>
+          <td>
+            {% if u.excede %}<span class="status status--bad"><span class="status-dot" aria-hidden="true"></span>Pasa el límite</span>
+            {% elif u.anormal %}<span class="status status--warn"><span class="status-dot" aria-hidden="true"></span>Aumento anormal</span>
+            {% elif u.m3 == 0 %}<span class="status status--none"><span class="status-dot" aria-hidden="true"></span>Sin consumo</span>
+            {% else %}<span class="status status--ok"><span class="status-dot" aria-hidden="true"></span>Normal</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="admin-consumo-mas"><a class="btn btn--secondary btn--sm" href="{% url 'admin_consumo' %}"><i class="ti ti-report-analytics" aria-hidden="true"></i>Ver por zona, cambiar el periodo o el límite</a></p>
+  {% endif %}
+</section>
 
 <!-- ── Sensores ── -->
 <section class="section admin-sensors" aria-labelledby="sensores-titulo">

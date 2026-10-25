@@ -143,3 +143,20 @@ class MensajeGotita(models.Model):
     class Meta:
         db_table = 'gotita_mensaje'
         ordering = ['id']
+
+
+class AjusteComunidad(models.Model):
+    """Ajustes que decide el administrador para toda la comunidad (por ejemplo, el límite de consumo al mes)."""
+
+    clave = models.CharField(max_length=60, unique=True)
+    valor = models.FloatField()
+    id_usuario = models.BigIntegerField(null=True, blank=True, help_text='Admin que lo cambió por última vez.')
+    actualizado = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'ajuste_comunidad'
+        verbose_name = 'ajuste de la comunidad'
+        verbose_name_plural = 'ajustes de la comunidad'
+
+    def __str__(self):
+        return f'{self.clave} = {self.valor}'

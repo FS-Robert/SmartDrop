@@ -154,3 +154,98 @@
 .btn-ver .count-badge {
   margin-left: var(--s-1);
 }
+
+/* ── Consumo por usuario (PB032) ─────────────────────────────────────── */
+
+.consumo-admin-filtros {
+  margin-bottom: var(--s-5);
+}
+
+.consumo-admin-filtros .filtros-row {
+  margin-bottom: 0;
+}
+
+.consumo-admin-limite {
+  margin-top: var(--s-4);
+  padding-top: var(--s-4);
+  border-top: 1px solid var(--c-line);
+}
+
+.consumo-admin-o {
+  font-size: var(--t-sm);
+}
+
+.consumo-admin-periodo {
+  margin: 0 0 var(--s-5);
+  color: var(--c-ink-2);
+}
+
+.consumo-admin-hallazgos {
+  margin: var(--s-6) 0;
+}
+
+.consumo-admin-hallazgos ul {
+  margin: var(--s-3) 0 0;
+  padding-left: 1.2rem;
+  line-height: 1.6;
+}
+
+.consumo-admin-graficas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  gap: var(--s-5);
+  margin-bottom: var(--s-5);
+}
+
+.consumo-admin-grafica {
+  position: relative;
+  height: 260px;
+}
+
+/* Filas resaltadas: rojo = pasa el límite, amarillo = aumento anormal */
+.data-table tr.fila-alerta > * {
+  background: var(--c-bad-bg);
+}
+
+.data-table tr.fila-aviso > * {
+  background: var(--c-warn-bg);
+}
+
+.consumo-admin-leyenda {
+  padding: 0 var(--s-2);
+  border-radius: var(--r-xs);
+  font-weight: 600;
+}
+
+.consumo-admin-leyenda--excede {
+  background: var(--c-bad-bg);
+  color: var(--c-bad);
+}
+
+.consumo-admin-leyenda--anormal {
+  background: var(--c-warn-bg);
+  color: var(--c-warn);
+}
+
+.admin-consumo-tabla {
+  max-height: 28rem;
+  overflow-y: auto;
+}
+
+.admin-consumo-mas {
+  margin-top: var(--s-3);
+}
+
+.consumo-admin-aviso {
+  margin-bottom: var(--s-5);
+}
+
+@media print {
+  .no-imprimir {
+    display: none !important;
+  }
+
+  .consumo-admin-grafica {
+    height: 220px;
+  }
+}

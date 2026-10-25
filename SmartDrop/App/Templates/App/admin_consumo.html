@@ -1,0 +1,224 @@
+{% extends 'App/base.html' %}
+{% load static %}
+{% block title %}Consumo por usuario{% endblock %}
+{% block nav_admin_consumo %}active{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/admin.css' %}?v=20261025-consumo1">{% endblock %}
+
+{% block content %}
+<!-- Reporte de consumo por usuario y por zona (PB032). El cálculo está en App/consumo_admin.py. -->
+<header class="page-head consumo-admin-head">
+  <div>
+    <h1 class="page-title">Consumo por usuario</h1>
+    <p class="page-lede">Cuánta agua usó cada vivienda en el periodo, quién pasa el límite de la comunidad y qué zonas revisar.</p>
+  </div>
+  {% if datos %}
+  <div class="page-actions no-imprimir">
+    <a class="btn btn--secondary" href="{% url 'admin_consumo_exportar' %}?{{ consulta }}"><i class="ti ti-file-spreadsheet" aria-hidden="true"></i>Descargar Excel</a>
+    <button type="button" class="btn btn--secondary" onclick="window.print()"><i class="ti ti-file-type-pdf" aria-hidden="true"></i>Guardar PDF</button>
+  </div>
+  {% endif %}
+</header>
+
+{% if messages %}
+  <div class="stack stack--sm admin-messages">
+  {% for message in messages %}
+    <div class="notice {% if message.tags == 'success' %}notice--ok{% else %}notice--info{% endif %}" role="status">
+      <i class="ti ti-{% if message.tags == 'success' %}check{% else %}info-circle{% endif %}" aria-hidden="true"></i>
+      <div><p>{{ message }}</p></div>
+    </div>
+  {% endfor %}
+  </div>
+{% endif %}
+
+<!-- Periodo y límite -->
+<section class="panel consumo-admin-filtros no-imprimir" aria-label="Elegir periodo">
+  <form method="get" class="filtros-row">
+    <div class="field field--inline">
+      <label class="field-label" for="mes">Mes</label>
+      <input class="field-input" type="month" id="mes" name="mes" value="{{ mes }}">
+    </div>
+    <span class="muted consumo-admin-o">o un rango</span>
+    <div class="field field--inline">
+      <label class="field-label" for="desde">Desde</label>
+      <input class="field-input" type="date" id="desde" name="desde" value="{{ desde_txt }}">
+    </div>
+    <div class="field field--inline">
+      <label class="field-label" for="hasta">Hasta</label>
+      <input class="field-input" type="date" id="hasta" name="hasta" value="{{ hasta_txt }}">
+    </div>
+    {% if datos %}
+    <div class="field field--inline">
+      <label class="field-label" for="zona">Zona</label>
+      <select class="field-input" id="zona" name="zona">
+        <option value="">Todas</option>
+        {% for z in datos.zonas %}<option value="{{ z.zona }}" {% if zona_elegida == z.zona %}selected{% endif %}>{{ z.zona }}</option>{% endfor %}
+      </select>
+    </div>
+    {% endif %}
+    <button type="submit" class="btn btn--primary btn--sm"><i class="ti ti-filter" aria-hidden="true"></i>Ver</button>
+  </form>
+  {% if datos %}
+  <form method="post" class="filtros-row consumo-admin-limite" action="?{{ consulta }}">
+    {% csrf_token %}
+    <div class="field field--inline">
+      <label class="field-label" for="limite">Límite de la comunidad (m³ al mes por vivienda)</label>
+      <input class="field-input" type="number" id="limite" name="limite" min="1" max="500" step="0.5" value="{{ datos.limite_mes|floatformat:'-2' }}" required>
+    </div>
+    <button type="submit" class="btn btn--secondary btn--sm">Guardar límite</button>
+  </form>
+  {% endif %}
+</section>
+
+{% if datos %}
+<p class="consumo-admin-periodo">
+  <strong>Periodo de facturación:</strong> {{ datos.etiqueta }} ({{ datos.dias }} día{{ datos.dias|pluralize }})
+  · <strong>Límite para este periodo:</strong> {{ datos.limite_periodo|floatformat:2 }} m³ por vivienda
+  {% if datos.ultima_lectura %}· <span class="muted">Datos medidos hasta {{ datos.ultima_lectura|date:'d/m/Y H:i' }}</span>{% endif %}
+</p>
+
+<!-- Indicadores -->
+<div class="tiles metric-grid">
+  <div class="tile">
+    <div class="tile-head"><span class="icon-chip icon-chip--agua"><i class="ti ti-droplet" aria-hidden="true"></i></span><span class="tile-label">Consumo total</span></div>
+    <p class="tile-value">{{ datos.total_m3|floatformat:2 }} <span class="tile-unit">m³</span></p>
+  </div>
+  <div class="tile">
+    <div class="tile-head"><span class="icon-chip icon-chip--anil"><i class="ti ti-home" aria-hidden="true"></i></span><span class="tile-label">Promedio por vivienda</span></div>
+    <p class="tile-value">{{ datos.promedio_m3|floatformat:2 }} <span class="tile-unit">m³</span></p>
+  </div>
+  <div class="tile">
+    <div class="tile-head"><span class="icon-chip {% if datos.excedidos %}icon-chip--bad{% else %}icon-chip--ok{% endif %}"><i class="ti ti-alert-octagon" aria-hidden="true"></i></span><span class="tile-label">Pasan el límite</span></div>
+    <p class="tile-value{% if datos.excedidos %} val-alert{% endif %}">{{ datos.excedidos }} <span class="tile-unit">de {{ datos.usuarios|length }}</span></p>
+  </div>
+  <div class="tile">
+    <div class="tile-head"><span class="icon-chip {% if datos.anormales %}icon-chip--warn{% else %}icon-chip--ok{% endif %}"><i class="ti ti-trending-up" aria-hidden="true"></i></span><span class="tile-label">Aumento anormal</span></div>
+    <p class="tile-value">{{ datos.anormales }}</p>
+  </div>
+</div>
+
+<!-- Qué dicen los datos (apoyo a decisiones) -->
+<section class="panel consumo-admin-hallazgos" aria-labelledby="hallazgos-titulo">
+  <h2 class="panel-title" id="hallazgos-titulo"><i class="ti ti-bulb" aria-hidden="true"></i> Qué dicen los datos</h2>
+  <ul>
+    {% for frase in datos.hallazgos %}<li>{{ frase }}</li>{% endfor %}
+  </ul>
+</section>
+
+<!-- Por zona -->
+<section class="section" aria-labelledby="zonas-titulo">
+  <div class="section-head">
+    <h2 class="section-title" id="zonas-titulo">Consumo por zona</h2>
+    <p class="section-lede">Las zonas marcadas tienen viviendas que pasan el límite o que subieron mucho su consumo.</p>
+  </div>
+  <div class="consumo-admin-graficas">
+    <div class="panel"><h3 class="panel-title">m³ por zona</h3><div class="consumo-admin-grafica"><canvas id="graficaZonas" role="img" aria-label="Consumo en metros cúbicos por zona"></canvas></div></div>
+    <div class="panel"><h3 class="panel-title">m³ por día (todas las viviendas)</h3><div class="consumo-admin-grafica"><canvas id="graficaDias" role="img" aria-label="Consumo diario de todas las viviendas"></canvas></div></div>
+  </div>
+  <div class="table-wrap">
+    <table class="data-table">
+      <caption>Consumo por zona</caption>
+      <thead><tr>
+        <th scope="col">Zona</th><th scope="col" class="num">Viviendas</th><th scope="col" class="num">Consumo (m³)</th>
+        <th scope="col" class="num">Promedio (m³)</th><th scope="col" class="num">% del total</th><th scope="col" class="num">Cambio</th><th scope="col">Estado</th>
+      </tr></thead>
+      <tbody>
+        {% for z in datos.zonas %}
+        <tr class="{% if z.afectada %}fila-alerta{% endif %}">
+          <th scope="row"><a href="?{{ consulta }}&zona={{ z.zona|urlencode }}">{{ z.zona }}</a></th>
+          <td class="num">{{ z.viviendas }}</td>
+          <td class="num">{{ z.m3|floatformat:2 }}</td>
+          <td class="num">{{ z.promedio_m3|floatformat:2 }}</td>
+          <td class="num">{{ z.porcentaje }}%</td>
+          <td class="num">{% if z.cambio is not None %}{% widthratio z.cambio 1 100 %}%{% else %}—{% endif %}</td>
+          <td>{% if z.afectada %}<span class="status status--bad"><span class="status-dot" aria-hidden="true"></span>Revisar: {{ z.excedidos }} pasan el límite, {{ z.anormales }} con aumento</span>{% else %}<span class="status status--ok"><span class="status-dot" aria-hidden="true"></span>Normal</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- Por usuario -->
+<section class="section" aria-labelledby="usuarios-titulo">
+  <div class="section-head">
+    <h2 class="section-title" id="usuarios-titulo">Reporte de consumo por usuario{% if zona_elegida %} · {{ zona_elegida }}{% endif %}</h2>
+    <p class="section-lede">
+      <span class="consumo-admin-leyenda consumo-admin-leyenda--excede">Rojo</span> pasa el límite de la comunidad ·
+      <span class="consumo-admin-leyenda consumo-admin-leyenda--anormal">Amarillo</span> subió {{ aumento_pct }}% o más frente al periodo anterior ({{ datos.anterior_desde|date:'d/m' }} al {{ datos.anterior_hasta|date:'d/m' }}).
+    </p>
+  </div>
+  {% if usuarios %}
+  <div class="table-wrap">
+    <table class="data-table consumo-admin-tabla">
+      <caption>Consumo individual de cada usuario</caption>
+      <thead><tr>
+        <th scope="col">Usuario</th><th scope="col">Zona</th><th scope="col">NIC</th><th scope="col">Periodo de facturación</th>
+        <th scope="col" class="num">Consumo (m³)</th><th scope="col" class="num">Promedio diario (m³)</th><th scope="col" class="num">Cambio</th><th scope="col">Estado</th>
+      </tr></thead>
+      <tbody>
+        {% for u in usuarios %}
+        <tr class="{% if u.excede %}fila-alerta{% elif u.anormal %}fila-aviso{% endif %}">
+          <th scope="row"><a href="{% url 'admin_consumo_usuario' u.id_vivienda %}?{{ consulta }}" title="Ver su consumo día por día">{{ u.usuario }}</a>{% if not u.vinculada %} <small class="muted">(titular)</small>{% endif %}{% if u.correo %}<br><small class="muted">{{ u.correo }}</small>{% endif %}</th>
+          <td>{{ u.zona }}</td>
+          <td>{{ u.nic }}</td>
+          <td>{{ datos.etiqueta }}</td>
+          <td class="num"><strong>{{ u.m3|floatformat:2 }}</strong></td>
+          <td class="num">{{ u.m3_dia|floatformat:3 }}</td>
+          <td class="num">{% if u.cambio is not None %}{% if u.cambio > 0 %}+{% endif %}{% widthratio u.cambio 1 100 %}%{% else %}—{% endif %}</td>
+          <td>
+            {% if u.excede %}<span class="status status--bad"><span class="status-dot" aria-hidden="true"></span>Pasa el límite por {{ u.exceso_m3|floatformat:2 }} m³</span>
+            {% elif u.anormal %}<span class="status status--warn"><span class="status-dot" aria-hidden="true"></span>Aumento anormal</span>
+            {% elif u.m3 == 0 %}<span class="status status--none"><span class="status-dot" aria-hidden="true"></span>Sin consumo</span>
+            {% else %}<span class="status status--ok"><span class="status-dot" aria-hidden="true"></span>Normal</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="panel"><div class="empty"><span class="icon-chip icon-chip--lg icon-chip--none" aria-hidden="true"><i class="ti ti-droplet-off"></i></span><h3>No hay viviendas en este filtro</h3><p>Prueba con otra zona o con otro periodo.</p></div></div>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% if datos %}
+{{ grafica_zonas|json_script:"datos-grafica-zonas" }}
+{{ grafica_dias|json_script:"datos-grafica-dias" }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js" integrity="sha384-FcQlsUOd0TJjROrBxhJdUhXTUgNJQxTMcxZe6nHbaEfFL1zjQ+bq/uRoBQxb0KMo" crossorigin="anonymous"></script>
+<script src="{% static 'App/js/sd_charts.js' %}?v=20261018-agua1"></script>
+<script>
+  (function () {
+    const zonas = JSON.parse(document.getElementById('datos-grafica-zonas').textContent);
+    const dias = JSON.parse(document.getElementById('datos-grafica-dias').textContent);
+    // Las zonas a revisar salen en rojo.
+    const colorZona = () => zonas.afectadas.map((afectada) => SDCharts.color(afectada ? 'bad-dot' : 'agua'));
+    const graficaZonas = new Chart(document.getElementById('graficaZonas'), {
+      type: 'bar',
+      data: { labels: zonas.etiquetas, datasets: [{ label: 'm³', data: zonas.m3, backgroundColor: colorZona(), maxBarThickness: 48 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false } }, y: { beginAtZero: true } } },
+    });
+    graficaZonas.$sdRecolor = () => { graficaZonas.data.datasets[0].backgroundColor = colorZona(); };
+    // Consumo de cada día, con la línea del límite diario de toda la comunidad.
+    const graficaDias = new Chart(document.getElementById('graficaDias'), {
+      type: 'line',
+      data: {
+        labels: dias.etiquetas,
+        datasets: [
+          { label: 'Consumo (m³)', data: dias.m3, borderColor: SDCharts.color('agua'), backgroundColor: SDCharts.alpha('agua', 0.15), fill: true, tension: 0.3, pointRadius: 2 },
+          { label: 'Límite diario de la comunidad', data: dias.m3.map(() => dias.limite_dia), borderColor: SDCharts.color('bad-dot'), borderDash: [6, 4], pointRadius: 0, fill: false },
+        ],
+      },
+      options: { responsive: true, maintainAspectRatio: false, scales: { x: { grid: { display: false } }, y: { beginAtZero: true } } },
+    });
+    graficaDias.$sdRecolor = () => {
+      graficaDias.data.datasets[0].borderColor = SDCharts.color('agua');
+      graficaDias.data.datasets[0].backgroundColor = SDCharts.alpha('agua', 0.15);
+      graficaDias.data.datasets[1].borderColor = SDCharts.color('bad-dot');
+    };
+  }());
+</script>
+{% endif %}
+{% endblock %}

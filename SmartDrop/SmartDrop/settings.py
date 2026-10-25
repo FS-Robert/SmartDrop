@@ -394,3 +394,7 @@ ASISTENTE_DICTADO_POR_DIA = int(os.environ.get('ASISTENTE_DICTADO_POR_DIA', '300
 # Topes de todo el sistema por día (todas las cuentas juntas), por si alguien crea muchas cuentas.
 ASISTENTE_LIMITE_GLOBAL_DIARIO = int(os.environ.get('ASISTENTE_LIMITE_GLOBAL_DIARIO', '3000') or 3000)
 ASISTENTE_VOZ_GLOBAL_DIARIO = int(os.environ.get('ASISTENTE_VOZ_GLOBAL_DIARIO', '3000') or 3000)
+
+# Reporte de consumo del admin (PB032): límite de consumo de la comunidad, en m³ por vivienda al mes.
+# Es el valor inicial; el administrador lo puede cambiar desde la pantalla del reporte.
+CONSUMO_LIMITE_M3_MES = float(os.environ.get('CONSUMO_LIMITE_M3_MES', '20') or 20)

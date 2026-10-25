@@ -29,6 +29,7 @@ DESTINOS = {
     'alertas': ('Alertas', 'historial de alertas', {USUARIO, ADMIN}, 'alertas_historial', True),
     'perfil': ('Mi perfil', 'datos personales y preferencias', {USUARIO}, 'usuario', True),
     'configuracion': ('Configuración', 'tema, idioma y notificaciones', {USUARIO, ADMIN}, None, True),
+    'manual': ('Manual de usuario', 'cómo usar SmartDrop paso a paso', {USUARIO, ADMIN}, 'manual_usuario', True),
     'buscar': ('Buscar', 'buscador de pantallas, sensores, reportes y alertas', {USUARIO, ADMIN}, 'busqueda_global',
                True),
     'vincular_vivienda': ('Vincular vivienda', 'agregar una vivienda con su NIC', {USUARIO}, 'vincular_vivienda', True),
@@ -39,6 +40,8 @@ DESTINOS = {
                               'ml_engine:dashboard', True),
     'prediccion_fugas': ('Predicción de fugas', 'viviendas con posible fuga', {ADMIN}, 'ml_engine:leaks', True),
     'reportes_admin': ('Problemas reportados', 'reportes de los usuarios para atender', {ADMIN}, 'admin_reportes', True),
+    'consumo_admin': ('Consumo por usuario', 'consumo de cada vivienda y por zona en m³, quién pasa el límite',
+                      {ADMIN}, 'admin_consumo', False),
 }
 
 

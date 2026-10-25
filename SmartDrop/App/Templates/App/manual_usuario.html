@@ -1,0 +1,18 @@
+{% extends 'App/base.html' %}
+{% load static %}
+{% block title %}Manual de usuario{% endblock %}
+{% block nav_manual %}active{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/manual.css' %}?v=20261025-1">{% endblock %}
+
+{% block content %}
+<header class="page-head">
+  <div>
+    <h1 class="page-title">Manual de usuario</h1>
+    <p class="page-lede">Todo lo que puedes hacer en SmartDrop, paso a paso. Sirve igual para la web y para la app.</p>
+  </div>
+  <div class="page-actions no-imprimir">
+    <button type="button" class="btn btn--secondary" onclick="window.print()"><i class="ti ti-printer" aria-hidden="true"></i>Imprimir</button>
+  </div>
+</header>
+{% include 'App/_manual_usuario_contenido.html' %}
+{% endblock %}
