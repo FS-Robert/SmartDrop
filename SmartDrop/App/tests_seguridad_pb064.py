@@ -25,7 +25,7 @@ class IngestaMqttTests(TestCase):
     def setUp(self):
         realtime.reiniciar()
         self.supabase = FakeSupabase(
-            tanque=[{'id_tanque': 1, 'id_sensor_nivel': 2}],
+            tanque=[{'id_tanque': 1, 'id_sensor_nivel': 2, 'altura_total': 30}],
             valvula=[{'id_valvula': 1, 'estado_actual': 'cerrada'}],
         )
         self.enterContext(self.supabase.patch())
@@ -49,7 +49,21 @@ class IngestaMqttTests(TestCase):
             {'id_sensor': 2, 'distancia_cm': 12.5, 'porcentaje': 58}))
         (historial,) = self.supabase.tables['historial_nivel_tanque']
         self.assertEqual((historial['id_tanque'], historial['nivel_cm']), (1, 12.5))
-        self.assertEqual(self.supabase.tables['lectura'][0]['valor'], 12.5)
+        # En la lectura va el agua (58 % de 30 cm), no la distancia del sensor.
+        self.assertEqual(self.supabase.tables['lectura'][0]['valor'], 17.4)
+
+    def test_tambo_lleno_se_ve_lleno_en_la_web(self):
+        """Con el agua a 3 cm del sensor el ESP32 manda 100 %: la web debe mostrar 100 %, no 10 %."""
+        from App import queries
+        ingesta_mqtt.procesar_mensaje('smartdrop/1/nivel', json.dumps(
+            {'id_sensor': 2, 'distancia_cm': 3.0, 'porcentaje': 100.0}))
+        valor = self.supabase.tables['lectura'][0]['valor']
+        tanques = [{'id_sensor_nivel': 2, 'altura_total': 30, 'capacidad_maxima_litros': 15}]
+        self.assertEqual(queries.level_percentage(valor, {'id_sensor': 2}, tanques), 100)
+
+    def test_nivel_sin_porcentaje_no_guarda_un_dato_al_reves(self):
+        ingesta_mqtt.procesar_mensaje('smartdrop/1/nivel', json.dumps({'id_sensor': 2, 'distancia_cm': 3.0}))
+        self.assertEqual(self.supabase.tables.get('lectura', []), [])
 
     def test_tds_malo_abre_un_incidente_una_sola_vez(self):
         self.enterContext(mock.patch.dict('ml_engine.tests.PRIMARY_KEYS', {'incidente_calidad': 'id_incidente'}))

@@ -38,9 +38,21 @@ def _numero(valor):
 
 
 def _tanque_de_sensor(id_sensor):
-    """Tanque al que pertenece un sensor de nivel (antes estaba fijo en consumer.js: sensor 2 -> tanque 1)."""
-    filas = supabase_client.select('tanque', 'id_tanque', {'id_sensor_nivel': f'eq.{int(id_sensor)}', 'limit': '1'})
-    return filas[0]['id_tanque'] if filas else None
+    """Tanque al que pertenece un sensor de nivel y su altura (antes estaba fijo en consumer.js: sensor 2 -> tanque 1)."""
+    filas = supabase_client.select('tanque', 'id_tanque,altura_total', {'id_sensor_nivel': f'eq.{int(id_sensor)}', 'limit': '1'})
+    return filas[0] if filas else None
+
+
+def _agua_cm(porcentaje, altura_total):
+    """Centímetros de agua que se guardan en `lectura` para que la web y la app calculen bien el %.
+
+    El ESP32 manda dos cosas: la distancia del sensor al agua y el % ya calculado con las medidas del tambo.
+    La web y la app leen `lectura` como "cm de agua sobre la altura del tanque", así que se guarda ese % pasado
+    a cm. Si se guardara la distancia, el tambo lleno (agua a 3 cm del sensor) se vería casi vacío.
+    """
+    if porcentaje is None or not altura_total:
+        return None
+    return round(min(max(porcentaje, 0), 100) * altura_total / 100, 2)
 
 
 def _guardar_lectura(id_sensor, id_vivienda, valor):
@@ -122,13 +134,19 @@ def procesar_mensaje(topico, cuerpo):
         distancia = _numero(datos.get('distancia_cm'))
         if distancia is None:
             return
-        id_tanque = _tanque_de_sensor(id_sensor)
-        if id_tanque:
+        porcentaje = _numero(datos.get('porcentaje'))
+        tanque = _tanque_de_sensor(id_sensor)
+        if tanque:
             supabase_client.insert('historial_nivel_tanque', {
-                'id_tanque': id_tanque, 'nivel_cm': distancia, 'porcentaje_llenado': _numero(datos.get('porcentaje')),
+                'id_tanque': tanque['id_tanque'], 'nivel_cm': distancia, 'porcentaje_llenado': porcentaje,
                 'es_valido': True,
             }, return_representation=False)
-        _guardar_lectura(id_sensor, id_vivienda, distancia)
+        agua = _agua_cm(porcentaje, _numero((tanque or {}).get('altura_total')))
+        if agua is None:
+            # Sin % o sin altura del tanque no se puede saber cuánta agua hay: mejor no guardar un dato al revés.
+            logger.warning('Lectura de nivel sin porcentaje o sin altura del tanque (sensor %s)', id_sensor)
+            return
+        _guardar_lectura(id_sensor, id_vivienda, agua)
         return
 
     valor = _numero(datos.get('valor'))
