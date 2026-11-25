@@ -1048,6 +1048,15 @@ class MobileNivelTanqueTests(TestCase):
 		self.assertEqual((nivel['porcentaje'], nivel['litros_disponibles'], nivel['capacidad_maxima_litros']), (75, 15, 20))
 		self.assertEqual(nivel['estado'], 'Normal')
 
+	def test_presion_en_la_app_usa_los_mismos_rangos_que_la_web(self):
+		# 14 kPa es lo normal de la maqueta: aunque el sensor tenga guardado "bajo = 100 kPa", la app dice Estable.
+		self.sensores.append({'id_sensor': 1, 'tipo_sensor': 'presion', 'unidad_medida': 'kPa', 'rango_min': 0,
+							  'rango_max': 700, 'umbral_critico_bajo': 100, 'umbral_critico_alto': 500})
+		self.lecturas.append({'id_sensor': 1, 'id_vivienda': 4, 'valor': 14.1, 'fecha_registro': timezone.now().isoformat()})
+		with self._como_usuario(), patch('App.api.views_mobile_data.MobileEstadoAguaView._liters_today', return_value=0):
+			presion = self.client.get(reverse('mobile_estado_agua')).json()['presion']
+		self.assertEqual((presion['estado'], presion['color']), ('Estable', 'verde'))
+
 	def test_grafica_y_resumen_del_usuario_salen_en_porcentaje(self):
 		with self._como_usuario():
 			grafica = self.client.get(reverse('mobile_graficas'), {'parametros': 'nivel'}).json()['nivel']

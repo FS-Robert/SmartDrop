@@ -225,6 +225,16 @@ class MobileEstadoAguaView(APIView):
                 'color': 'rojo' if outside else 'verde',
                 'fecha': reading.get('fecha_registro'),
             }
+            if any(name in _sensor_type(sensor) for name in ('presion', 'pressure')):
+                # La presión usa los mismos rangos en kPa que la web y el ESP32 (normal de 5 a 20 kPa),
+                # no los límites guardados del sensor, para que la app diga lo mismo que la web.
+                from ..views import _PRESSURE_LABELS, _friendly_pressure_message
+                mensaje, nivel = _friendly_pressure_message(value)
+                result.update({
+                    'estado': _PRESSURE_LABELS.get(nivel, 'Sin datos'),
+                    'descripcion': mensaje,
+                    'color': {'normal': 'verde', 'baja': 'amarillo'}.get(nivel, 'rojo'),
+                })
             if any(name in _sensor_type(sensor) for name in ('tds', 'calidad', 'ph')):
                 result.update({
                     'valor_ppm': value,
