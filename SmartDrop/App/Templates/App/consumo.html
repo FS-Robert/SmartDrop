@@ -101,6 +101,7 @@
 {{ consumo.valor_semana|json_script:"consumo-valor-semana" }}
 {{ consumo.valor_mes|json_script:"consumo-valor-mes" }}
 {{ consumo.mes_key|json_script:"consumo-mes-key" }}
+{{ consumo.semana_hoy|json_script:"consumo-semana-hoy" }}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js" integrity="sha384-FcQlsUOd0TJjROrBxhJdUhXTUgNJQxTMcxZe6nHbaEfFL1zjQ+bq/uRoBQxb0KMo" crossorigin="anonymous"></script>
 <script src="{% static 'App/js/sd_charts.js' %}?v=20261018-agua1"></script>
 <script>
@@ -119,7 +120,9 @@
   const valorSemana = jsonData('consumo-valor-semana');
   const valorMes = jsonData('consumo-valor-mes');
   let activeHistoryItems = historialSemana;
-  let semanaActual = 0;
+  // Semana en la que abre la vista "Día": la de hoy si se ve el mes actual.
+  const semanaHoy = jsonData('consumo-semana-hoy');
+  let semanaActual = semanaHoy;
   let selectedIndex = -1;
 
   function barColors(count) {
@@ -195,7 +198,7 @@
     };
     const c = configs[tipo];
     if (tipo === 'dia') {
-      semanaActual = 0;
+      semanaActual = semanaHoy;
       renderDiaSemana(semanaActual);
     } else {
       setChartData(c.data, c.labels);

@@ -733,7 +733,10 @@ def consumo(request):
             'label': f'Semana {len(historial_dia_semanas) + 1}',
             'items': items,
         })
-    historial_dia = historial_dia_semanas[0]['items'] if historial_dia_semanas else []
+    # La vista "Día" abre en la semana de hoy (no en la del 1 al 7); en otro mes, abre en su primera semana.
+    semana_hoy = (today.day - 1) // 7 if selected_month == today.replace(day=1) else 0
+    semana_hoy = min(semana_hoy, max(len(historial_dia_semanas) - 1, 0))
+    historial_dia = historial_dia_semanas[semana_hoy]['items'] if historial_dia_semanas else []
     month_week_values = [0, 0, 0, 0]
     for row_date, value in parsed_rows:
         if row_date.year == selected_month.year and row_date.month == selected_month.month:
@@ -802,6 +805,7 @@ def consumo(request):
             'historial': historial_semana,
             'historial_dia': historial_dia,
             'historial_dia_semanas': historial_dia_semanas,
+            'semana_hoy': semana_hoy,
             'historial_semana': historial_semana,
             'historial_mes': historial_mes,
         },

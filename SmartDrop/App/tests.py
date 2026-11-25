@@ -180,6 +180,11 @@ class ConsumoViewTests(TestCase):
 		self.assertEqual(consumo_call.args[2]['id_vivienda'], 'in.(17)')
 		self.assertEqual(response.context['viviendas'][0]['id_vivienda'], 17)
 		self.assertEqual(response.context['consumo']['valor_dia'], 12)
+		# La vista "Día" abre en la semana de hoy y no en la del 1 al 7 del mes.
+		hoy = timezone.localdate()
+		consumo = response.context['consumo']
+		self.assertEqual(consumo['semana_hoy'], (hoy.day - 1) // 7)
+		self.assertIn(hoy.isoformat(), [dia['key'] for dia in consumo['historial_dia']])
 
 	@patch('App.views.supabase_client.select')
 	def test_retroalimentacion_compara_mes_actual_con_mes_anterior(self, select):
