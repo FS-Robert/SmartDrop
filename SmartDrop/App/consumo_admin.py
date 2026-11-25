@@ -95,7 +95,7 @@ def _medianoche(dia):
 
 def _viviendas():
     return supabase_client.select(
-        'vivienda', 'id_vivienda,nic,direccion,id_usuario_propietario,nombre_completo_titular',
+        'vivienda', 'id_vivienda,nic,direccion,id_usuario_propietario,nombre_completo_titular,id_vivienda_lecturas',
         {'order': 'id_vivienda.asc', 'limit': '2000'},
     )
 
@@ -137,16 +137,31 @@ def _medido(desde, hasta):
     return litros, zonas, ultima
 
 
-def _consumo_por_dia(ids_vivienda, desde, hasta):
-    """{id_vivienda: {día: litros}} con la regla: registrado si hay, si no lo medido por el flujo."""
-    registrado = _registrado(ids_vivienda, desde, hasta)
+def _fuentes(viviendas):
+    """{id_vivienda: id de la casa cuyos sensores usa}. Casi siempre es la misma; NIC-0004 usa los de NIC-0001."""
+    fuentes = {}
+    for vivienda in viviendas:
+        if str(vivienda.get('id_vivienda') or '').isdigit():
+            fuentes[int(vivienda['id_vivienda'])] = int(vivienda.get('id_vivienda_lecturas') or vivienda['id_vivienda'])
+    return fuentes
+
+
+def _consumo_por_dia(ids_vivienda, desde, hasta, fuentes=None):
+    """{id_vivienda: {día: litros}} con la regla: registrado si hay, si no lo medido por el flujo.
+
+    Una casa que comparte los sensores de otra (`fuentes`) muestra el consumo de esa otra.
+    """
+    fuentes = fuentes or {}
+    ids_fuente = sorted({fuentes.get(i, i) for i in ids_vivienda})
+    registrado = _registrado(ids_fuente, desde, hasta)
     medido, zonas, ultima = _medido(desde, hasta)
     por_dia = {}
     for id_vivienda in ids_vivienda:
+        fuente = fuentes.get(id_vivienda, id_vivienda)
         dias = {}
         for dia in _dias(desde, hasta):
-            valor = registrado.get((id_vivienda, dia), 0.0)
-            dias[dia] = valor if valor > 0 else medido.get((id_vivienda, dia), 0.0)
+            valor = registrado.get((fuente, dia), 0.0)
+            dias[dia] = valor if valor > 0 else medido.get((fuente, dia), 0.0)
         por_dia[id_vivienda] = dias
     return por_dia, zonas, ultima
 
@@ -171,8 +186,9 @@ def reporte(desde, hasta, limite_mes=None):
     anterior_hasta = desde - timedelta(days=1)
     anterior_desde = anterior_hasta - timedelta(days=dias - 1)
 
-    actual, zonas, ultima = _consumo_por_dia(ids, desde, hasta)
-    anterior, _, _ = _consumo_por_dia(ids, anterior_desde, anterior_hasta)
+    fuentes = _fuentes(viviendas)
+    actual, zonas, ultima = _consumo_por_dia(ids, desde, hasta, fuentes)
+    anterior, _, _ = _consumo_por_dia(ids, anterior_desde, anterior_hasta, fuentes)
     duenos = users_by_id((v.get('id_usuario_propietario') for v in viviendas), 'id_usuario,nombre,apellido,correo')
 
     limite_periodo = round(limite_mes * dias / DIAS_DEL_MES, 3)
@@ -283,7 +299,8 @@ def detalle(id_vivienda, desde, hasta, limite_mes=None):
     """
     limite_mes = limite_mensual() if limite_mes is None else limite_mes
     filas = supabase_client.select(
-        'vivienda', 'id_vivienda,nic,direccion,id_usuario_propietario,nombre_completo_titular,tipo_establecimiento',
+        'vivienda', 'id_vivienda,nic,direccion,id_usuario_propietario,nombre_completo_titular,tipo_establecimiento,'
+        'id_vivienda_lecturas',
         {'id_vivienda': f'eq.{int(id_vivienda)}', 'limit': '1'},
     )
     if not filas:
@@ -291,7 +308,7 @@ def detalle(id_vivienda, desde, hasta, limite_mes=None):
     vivienda = filas[0]
     dueno = users_by_id([vivienda.get('id_usuario_propietario')], 'id_usuario,nombre,apellido,correo').get(
         vivienda.get('id_usuario_propietario')) or {}
-    por_dia, zonas, ultima = _consumo_por_dia([int(id_vivienda)], desde, hasta)
+    por_dia, zonas, ultima = _consumo_por_dia([int(id_vivienda)], desde, hasta, _fuentes([vivienda]))
     dias = _dias(desde, hasta)
     limite_dia = round(limite_mes / DIAS_DEL_MES, 3)
     lista = [{'dia': dia, 'etiqueta': f'{_DIAS_SEMANA[dia.weekday()]} {dia:%d/%m/%Y}',

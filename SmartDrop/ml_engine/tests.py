@@ -17,7 +17,7 @@ from App import supabase_client
 from App.models import Rol, Usuario
 from ml_engine import jobs, pipeline
 from ml_engine.leaks.alerts import ORIGIN
-from ml_engine.management.commands.ml_seed_demo_readings import STEP_MINUTES, simulate_home
+from ml_engine.tests_simulacion import STEP_MINUTES, simulate_home
 from ml_engine.models import Home, LeakPrediction, PredictionJob, SensorReading, ShortagePrediction, Zone
 from ml_engine.realdata import sync
 

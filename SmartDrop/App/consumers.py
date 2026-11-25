@@ -15,18 +15,22 @@ logger = logging.getLogger(__name__)
 
 @sync_to_async
 def _owned_vivienda_ids(user):
-    """Viviendas del usuario. Los sensores se comparten entre viviendas, así que se escucha por vivienda."""
+    """Viviendas del usuario. Los sensores se comparten entre viviendas, así que se escucha por vivienda.
+
+    Si la casa toma las lecturas de otra, se escucha también la otra para recibir sus datos en vivo.
+    """
     propietario_id = getattr(user, 'supabase_id', None) or user.id_usuario
     viviendas = supabase_client.select(
         'vivienda',
-        'id_vivienda',
+        'id_vivienda,id_vivienda_lecturas',
         {'id_usuario_propietario': f'eq.{propietario_id}', 'limit': '1000'},
     )
-    return [
-        str(row['id_vivienda'])
-        for row in viviendas
-        if row.get('id_vivienda') is not None
-    ]
+    ids = []
+    for row in viviendas:
+        for vivienda_id in (row.get('id_vivienda'), row.get('id_vivienda_lecturas')):
+            if vivienda_id is not None and str(vivienda_id) not in ids:
+                ids.append(str(vivienda_id))
+    return ids
 
 
 class SensorRealtimeConsumer(AsyncJsonWebsocketConsumer):

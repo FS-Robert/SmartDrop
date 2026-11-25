@@ -165,10 +165,6 @@
         <dd>{{ stats.uptime }}</dd>
       </div>
       <div>
-        <dt><i class="ti ti-temperature" aria-hidden="true"></i>Temperatura del agua</dt>
-        <dd id="dashboard-temperature" class="num">{{ stats.temperatura }}</dd>
-      </div>
-      <div>
         <dt><i class="ti ti-gauge" aria-hidden="true"></i>Presión</dt>
         <dd><span class="friendly-view">{{ presion.badge }}</span><span class="exact-view num" style="display: none;">{{ stats.presion_exacta }}</span></dd>
       </div>
@@ -277,6 +273,7 @@
 
 {% endblock %}
 {% block extra_js %}
+{{ presion_rangos|json_script:"presion-rangos" }}
 <script>
   // Saludo según la hora del navegador (el servidor deja "Hola, <nombre>" como respaldo).
   (function () {
@@ -371,6 +368,8 @@
   window.setInterval(refreshValveStatus, 10000);
 
   const RECENT_WINDOW = {{ recent_window }};
+  // Rangos de presión en kPa, los mismos que usa el servidor.
+  const RANGOS_PRESION = JSON.parse(document.getElementById('presion-rangos').textContent);
   const realtimeSensors = {};
   const recentValues = {};
   document.querySelectorAll('#dashboard-realtime-sensors [data-sensor-id]').forEach((element) => {
@@ -386,6 +385,10 @@
     const latest = Number(reading.valor);
     if (!Number.isFinite(latest)) return;
 
+    // Acaba de llegar una lectura del sensor: se actualiza la hora de la última lectura.
+    const lastReading = document.querySelector('.update-overview');
+    if (lastReading) lastReading.textContent = 'hace unos segundos';
+
     // Promedio de las lecturas recientes en lugar de la última lectura.
     const recent = [latest, ...(recentValues[sensorId] || [])].slice(0, RECENT_WINDOW);
     recentValues[sensorId] = recent;
@@ -393,15 +396,18 @@
 
     if (type.includes('presion') || type.includes('pressure')) {
       document.getElementById('dashboard-pressure-exact').textContent = `${value} kPa`;
-      document.getElementById('dash-presion-aguja').style.setProperty('--pct', Math.min(Math.max(value / 5 * 100, 0), 100));
+      document.getElementById('dash-presion-aguja').style.setProperty('--pct', Math.min(Math.max(value / RANGOS_PRESION.max * 100, 0), 100));
+      // Mismos mensajes que el servidor; el número exacto sigue subiendo aunque pase de la escala.
       document.getElementById('dashboard-pressure-friendly').textContent =
-        value >= 2 && value <= 3.5 ? 'Presión normal. Sistema funcionando correctamente.' : 'Presión fuera del rango normal.';
+        (value < 0 || value > RANGOS_PRESION.sensor_max) ? 'Lectura fuera de rango. Revisa el sensor de presión.'
+        : value < 1 ? 'Sin presión. No está llegando agua.'
+        : value < RANGOS_PRESION.baja ? 'Presión baja. El flujo puede ser lento.'
+        : value <= RANGOS_PRESION.normal_max ? 'Presión normal. Sistema funcionando correctamente.'
+        : 'Presión muy alta. Riesgo para el sistema.';
     } else if (type.includes('tds') || type.includes('calidad') || type.includes('ph')) {
       document.getElementById('dashboard-quality-exact').textContent = `${value} ppm TDS`;
       document.getElementById('dashboard-quality-friendly').textContent =
         value <= 300 ? 'El agua es segura para beber. Excelente calidad.' : 'El agua requiere revisión.';
-    } else if (type.includes('temper')) {
-      document.getElementById('dashboard-temperature').textContent = `${value}°C`;
     }
   });
 </script>

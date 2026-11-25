@@ -29,6 +29,27 @@ CALIDADES_CRITICAS = ('Pobre', 'Inaceptable')
 _hilo = None
 
 
+# Lo que cada sensor puede medir de verdad. Una lectura fuera de estos límites es ruido o un cable flojo
+# (por ejemplo 3000 L/min en el sensor de flujo) y no se guarda, para que no aparezca en la web ni en la app.
+LIMITES_LECTURA = {
+    'flujo': (0.0, 30.0),       # YF-S201: hasta 30 L/min
+    'presion': (0.0, 700.0),    # MPX5700AP: 0 a 700 kPa
+    'tds': (0.0, 2000.0),       # sensor TDS en ppm (desde 1200 ya es "Inaceptable", pero se guarda para avisar)
+    'nivel': (0.0, 450.0),      # centímetros
+}
+# Nombre del sensor en Supabase -> nombre corto de arriba.
+TIPOS_SENSOR = {'flujo': 'flujo', 'flow': 'flujo', 'presion': 'presion', 'presión': 'presion',
+                'calidad': 'tds', 'tds': 'tds', 'nivel': 'nivel', 'level': 'nivel'}
+
+
+def lectura_imposible(tipo, valor):
+    """True si el valor no puede venir de un sensor que funciona bien."""
+    limites = LIMITES_LECTURA.get(TIPOS_SENSOR.get(str(tipo or '').lower(), str(tipo or '').lower()))
+    if not limites or valor is None:
+        return False
+    return not limites[0] <= valor <= limites[1]
+
+
 def _numero(valor):
     try:
         numero = float(valor)
@@ -39,7 +60,7 @@ def _numero(valor):
 
 def _tanque_de_sensor(id_sensor):
     """Tanque al que pertenece un sensor de nivel y su altura (antes estaba fijo en consumer.js: sensor 2 -> tanque 1)."""
-    filas = supabase_client.select('tanque', 'id_tanque,altura_total', {'id_sensor_nivel': f'eq.{int(id_sensor)}', 'limit': '1'})
+    filas = supabase_client.select('tanque', 'id_tanque,altura_total', {'id_sensor_nivel': f'eq.{int(id_sensor)}', 'order': 'id_tanque', 'limit': '1'})
     return filas[0] if filas else None
 
 
@@ -135,6 +156,9 @@ def procesar_mensaje(topico, cuerpo):
         if distancia is None:
             return
         porcentaje = _numero(datos.get('porcentaje'))
+        if lectura_imposible('nivel', distancia) or (porcentaje is not None and not 0 <= porcentaje <= 100):
+            logger.warning('Lectura de nivel imposible descartada (sensor %s): %s cm, %s %%', id_sensor, distancia, porcentaje)
+            return
         tanque = _tanque_de_sensor(id_sensor)
         if tanque:
             supabase_client.insert('historial_nivel_tanque', {
@@ -151,6 +175,9 @@ def procesar_mensaje(topico, cuerpo):
 
     valor = _numero(datos.get('valor'))
     if valor is None:
+        return
+    if lectura_imposible(tipo, valor):
+        logger.warning('Lectura imposible descartada (%s, sensor %s): %s', tipo, id_sensor, valor)
         return
     datos['valor'] = valor
     _guardar_lectura(id_sensor, id_vivienda, valor)

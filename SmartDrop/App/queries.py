@@ -83,7 +83,7 @@ def user_viviendas(user):
         VIVIENDAS_CACHE_SECONDS,
         lambda: supabase_client.select(
             'vivienda',
-            'id_vivienda,nic,direccion,telefono_titular',
+            'id_vivienda,nic,direccion,telefono_titular,id_vivienda_lecturas',
             {'id_usuario_propietario': f'eq.{owner}', 'limit': '1000'},
         ),
     )
@@ -217,8 +217,18 @@ def tank_summary(level, sensores, tanques):
     return round(display_capacity * percentage / 100, 2), percentage, display_capacity
 
 
+def reading_source_id(vivienda):
+    """Casa de la que se toman las lecturas: la misma o, si comparte sensores con otra, esa otra.
+
+    Así dos casas distintas (por ejemplo NIC-0004 y NIC-0001) ven lo mismo que mide un solo ESP32.
+    """
+    return vivienda.get('id_vivienda_lecturas') or vivienda.get('id_vivienda')
+
+
 def _in_filter(viviendas):
-    ids = [str(row['id_vivienda']) for row in viviendas if str(row.get('id_vivienda') or '').isdigit()]
+    ids = list(dict.fromkeys(
+        str(reading_source_id(row)) for row in viviendas if str(reading_source_id(row) or '').isdigit()
+    ))
     return supabase_client.ids_in(ids) if ids else None
 
 

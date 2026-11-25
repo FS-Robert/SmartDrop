@@ -55,6 +55,18 @@ def avisar_sector(zona, id_alerta_origen=None, motivo='Posible Fuga', momento=No
     viviendas = supabase_client.select('vivienda', 'id_vivienda,id_usuario_propietario', {
         'zona': f'eq.{zona}', 'limit': '1000',
     })
+    # Las casas que muestran los sensores de una casa de esta zona también reciben el aviso.
+    ids_zona = [v['id_vivienda'] for v in viviendas if v.get('id_vivienda') is not None]
+    if ids_zona:
+        try:
+            ya = {v['id_vivienda'] for v in viviendas}
+            viviendas = viviendas + [
+                v for v in supabase_client.select('vivienda', 'id_vivienda,id_usuario_propietario', {
+                    'id_vivienda_lecturas': supabase_client.ids_in(ids_zona), 'limit': '1000',
+                }) if v.get('id_vivienda') not in ya
+            ]
+        except supabase_client.SupabaseError:
+            logger.warning('No se pudieron revisar las casas que comparten lecturas en la zona %s', zona)
     duenos = sorted({v['id_usuario_propietario'] for v in viviendas if v.get('id_usuario_propietario')})
     mensaje = mensaje_sector(zona)
     alerta = {}

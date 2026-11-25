@@ -322,7 +322,7 @@ RESPALDO_DIR = os.environ.get('RESPALDO_DIR', '').strip() or str(BASE_DIR / 'res
 RESPALDO_BUCKET = os.environ.get('RESPALDO_BUCKET', 'respaldos').strip() or 'respaldos'
 RESPALDO_DIAS = int(os.environ.get('RESPALDO_DIAS', '14'))
 
-# Clave que el ESP32 (y deploy/simulador_lecturas.py) mandan en la cabecera X-Api-Key al enviar lecturas.
+# Clave que el ESP32 manda en la cabecera X-Api-Key al enviar lecturas.
 # Sin ella, /api/lecturas/ solo acepta lecturas con DEBUG=True.
 LECTURAS_API_KEY = os.environ.get('LECTURAS_API_KEY', '').strip()
 

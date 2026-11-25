@@ -33,23 +33,23 @@
 
     <div class="range-scale" aria-hidden="true">
       <div class="range-track range-track--presion">
-        <span class="range-zone range-zone--warn" style="flex-basis: 40%;"></span>
-        <span class="range-zone range-zone--ok" style="flex-basis: 30%;"></span>
-        <span class="range-zone range-zone--warn" style="flex-basis: 30%;"></span>
-        <span id="pressure-range-needle" class="range-needle" style="left: {% if presion.valor > 5 %}100{% else %}{% widthratio presion.valor 5 100 %}{% endif %}%;"></span>
+        <span class="range-zone range-zone--warn" style="flex-basis: 16.7%;"></span>
+        <span class="range-zone range-zone--ok" style="flex-basis: 50%;"></span>
+        <span class="range-zone range-zone--warn" style="flex-basis: 33.3%;"></span>
+        <span id="pressure-range-needle" class="range-needle" style="left: {{ presion.needle_pos }}%;"></span>
       </div>
       <div class="range-labels">
-        <span style="flex-basis: 40%;">Baja</span>
-        <span style="flex-basis: 30%;">Normal</span>
-        <span style="flex-basis: 30%;">Alta</span>
+        <span style="flex-basis: 16.7%;">Baja</span>
+        <span style="flex-basis: 50%;">Normal</span>
+        <span style="flex-basis: 33.3%;">Muy alta</span>
       </div>
-      <div class="range-ticks num"><span>0</span><span style="left: 40%;">2</span><span style="left: 70%;">3.5</span><span style="left: 100%;">5 kPa</span></div>
+      <div class="range-ticks num"><span>0</span><span style="left: 16.7%;">5</span><span style="left: 66.7%;">20</span><span style="left: 100%;">30 kPa</span></div>
     </div>
-    <p class="sr-only">Rango normal: de 2 a 3.5 kPa. Por debajo de 2 kPa la presión es baja y por encima de 3.5 kPa es alta.</p>
+    <p class="sr-only">Rango normal: de 5 a 20 kPa. Por debajo de 5 kPa la presión es baja y por encima de 20 kPa es muy alta.</p>
     </div>
     <div class="sensor-escena-dibujo agua-cristal agua-flota">
       {% include 'App/_medidor_presion.html' with pct=presion.needle_pos uid='presion' %}
-      <p class="sensor-escena-pie" aria-hidden="true"><span class="num">0</span><span>Normal: 2 – 3.5 kPa</span><span class="num">5</span></p>
+      <p class="sensor-escena-pie" aria-hidden="true"><span class="num">0</span><span>Normal: 5 – 20 kPa</span><span class="num">30</span></p>
     </div>
     </div>
   </section>
@@ -79,13 +79,14 @@
 <section class="panel panel--tint sensor-help" aria-labelledby="presion-ayuda">
   <h2 class="panel-title" id="presion-ayuda">Qué significa</h2>
   <div class="prose">
-    <p>La presión se mide en kilopascales (kPa). Entre 2 y 3.5 kPa el agua llega con fuerza normal. Si baja de 2 kPa notarás un chorro débil; si pasa de 3.5 kPa conviene revisar las tuberías y las llaves.</p>
+    <p>La presión se mide en kilopascales (kPa). El agua baja por gravedad desde el tanque. Entre 5 y 20 kPa llega con fuerza normal. Si baja de 5 kPa notarás un chorro débil. Por gravedad no debería pasar de 20 kPa; si pasa, conviene revisar el sensor.</p>
     <p class="muted">{{ presion.nota }}</p>
   </div>
 </section>
 {% endblock %}
 
 {% block extra_js %}
+{{ presion_rangos|json_script:"presion-rangos" }}
 <script>
   // Estado de la válvula en vivo: se consulta cada 15 s mientras la página está abierta.
   (function () {
@@ -115,7 +116,8 @@
 </script>
 
 <script>
-  // Lecturas en vivo del sensor de presión (mismos umbrales que el servidor: normal de 2 a 3.5 kPa).
+  // Lecturas en vivo del sensor de presión (mismos rangos en kPa que el servidor).
+  const RANGOS_PRESION = JSON.parse(document.getElementById('presion-rangos').textContent);
   window.addEventListener('smartdrop:sensor-reading', function (event) {
     const reading = event.detail || {};
     const sensorType = String(reading.tipo_sensor || '').toLowerCase();
@@ -124,9 +126,12 @@
     const value = Number(reading.valor);
     if (!Number.isFinite(value)) return;
 
-    const percentage = Math.min(Math.max((value / 5) * 100, 0), 100);
-    const status = value < 2 ? 'Baja' : value <= 3.5 ? 'Estable' : value <= 5 ? 'Alta' : 'Muy alta';
-    const mod = status === 'Estable' ? 'ok' : status === 'Muy alta' ? 'bad' : 'warn';
+    const percentage = Math.min(Math.max((value / RANGOS_PRESION.max) * 100, 0), 100);
+    // Una lectura negativa o mayor de lo que mide el sensor es un error: "Fuera de rango".
+    const status = (value < 0 || value > RANGOS_PRESION.sensor_max) ? 'Fuera de rango'
+      : value < RANGOS_PRESION.baja ? 'Baja'
+      : value <= RANGOS_PRESION.normal_max ? 'Estable' : 'Muy alta';
+    const mod = status === 'Estable' ? 'ok' : status === 'Baja' ? 'warn' : 'bad';
 
     document.getElementById('pressure-range-needle').style.left = `${percentage}%`;
     document.getElementById('presion-aguja').style.setProperty('--pct', percentage);

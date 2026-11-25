@@ -81,22 +81,17 @@
       <li class="list-row">
         <span class="icon-chip icon-chip--agua"><i class="ti ti-flask" aria-hidden="true"></i></span>
         <div class="list-row-main"><p class="list-row-title">Cloro residual</p><p class="list-row-meta">Desinfectante que queda en el agua tratada.</p></div>
-        <div class="list-row-aside param-value num">{{ calidad.cloro }} <span class="param-unit">mg/L</span></div>
+        <div class="list-row-aside param-value num">{% if calidad.cloro %}{{ calidad.cloro }} <span class="param-unit">mg/L</span>{% else %}<span class="muted">Sin lectura</span>{% endif %}</div>
       </li>
       <li class="list-row">
         <span class="icon-chip icon-chip--agua"><i class="ti ti-droplets" aria-hidden="true"></i></span>
         <div class="list-row-main"><p class="list-row-title">Turbidez</p><p class="list-row-meta">Qué tan clara se ve el agua.</p></div>
-        <div class="list-row-aside param-value num">{{ calidad.turbidez }} <span class="param-unit">NTU</span></div>
+        <div class="list-row-aside param-value num">{% if calidad.turbidez %}{{ calidad.turbidez }} <span class="param-unit">NTU</span>{% else %}<span class="muted">Sin lectura</span>{% endif %}</div>
       </li>
       <li class="list-row">
         <span class="icon-chip icon-chip--anil"><i class="ti ti-bolt" aria-hidden="true"></i></span>
         <div class="list-row-main"><p class="list-row-title">Conductividad</p><p class="list-row-meta">Relacionada con los minerales disueltos.</p></div>
         <div class="list-row-aside param-value num">{% if calidad.conductividad %}{{ calidad.conductividad }} <span class="param-unit">µS/cm</span>{% else %}<span class="muted">Sin lectura</span>{% endif %}</div>
-      </li>
-      <li class="list-row">
-        <span class="icon-chip icon-chip--sol"><i class="ti ti-temperature" aria-hidden="true"></i></span>
-        <div class="list-row-main"><p class="list-row-title">Temperatura</p><p class="list-row-meta">Temperatura del agua en la tubería.</p></div>
-        <div class="list-row-aside param-value num">{% if calidad.temperatura %}{{ calidad.temperatura }} <span class="param-unit">°C</span>{% else %}<span class="muted">Sin lectura</span>{% endif %}</div>
       </li>
     </ul>
   </div>

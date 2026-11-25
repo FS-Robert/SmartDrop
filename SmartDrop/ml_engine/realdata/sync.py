@@ -51,6 +51,16 @@ def _noop(percent, text):
     pass
 
 
+def nombre_tanque(zona, respaldo=''):
+    """Nombre del tanque según la zona de la casa: "Tanque de la Zona Norte" o "Tanque de San Benito"."""
+    lugar = str(zona or '').split(',')[0].strip()
+    if not lugar:
+        return respaldo
+    if lugar.lower().startswith('zona '):
+        return f'Tanque de la {lugar}'
+    return f'Tanque de {lugar}'
+
+
 def level_cm_to_liters(zone, value_cm):
     height = zone.altura_total_cm or 0
     if height <= 0:

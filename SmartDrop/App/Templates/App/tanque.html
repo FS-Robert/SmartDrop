@@ -42,7 +42,6 @@
       <h2 class="panel-title" id="tanque-detalles">Detalles</h2>
       <dl class="kv kv--inline tanque-facts">
         <div><dt>Autonomía estimada</dt><dd>{{ autonomia }}</dd></div>
-        <div><dt>Bomba</dt><dd><span class="status {% if estado_bomba == 'Enciende automáticamente' %}status--ok{% else %}status--none{% endif %} status-badge"><span class="status-dot" aria-hidden="true"></span>{{ estado_bomba }}</span></dd></div>
         <div><dt>Capacidad total</dt><dd class="num">{{ tanque.capacidad }} L</dd></div>
       </dl>
       <p class="muted tanque-note">La autonomía se calcula con tu consumo actual.</p>

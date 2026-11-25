@@ -1,18 +1,18 @@
 {% extends 'App/base.html' %}
 {% load static %}
-{% block title %}{{ zone.name }} — Predicción{% endblock %}
+{% block title %}{{ nombre_tanque }} — Predicción{% endblock %}
 {% block nav_ml %}active{% endblock %}
 {% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/prediccion.css' %}?v=20261018-agua1">{% endblock %}
 
 {% block content %}
 <nav class="breadcrumb" aria-label="Ruta">
   <a href="{% url 'ml_engine:dashboard' %}">Predicción de suministro</a>
-  <span aria-current="page">{{ zone.name }}</span>
+  <span aria-current="page">{{ nombre_tanque }}</span>
 </nav>
 
 <header class="page-head">
   <div>
-    <h1 class="page-title">{{ zone.name }}</h1>
+    <h1 class="page-title">{{ nombre_tanque }}</h1>
     <p class="page-lede">Cuánta agua le queda a este tanque y cuándo podría llegar al nivel crítico.</p>
   </div>
   <div class="page-actions">
@@ -33,7 +33,6 @@
       <div><dt>Dirección</dt><dd>{{ home.meta.direccion }} ({{ home.meta.zona }})</dd></div>
       <div><dt>Consumo estimado (próxima hora)</dt><dd><span id="forecast-{{ home.id }}" data-home-id="{{ home.id }}">Calculando…</span></dd></div>
     {% endfor %}
-    <div id="pump-info" style="display:none;"><dt>Bomba</dt><dd><span></span></dd></div>
   </dl>
 </section>
 
@@ -109,14 +108,6 @@ const zoneId = {{ zone.id }};
     paint(mod, label, `Llegaría al nivel crítico en unas ${Math.round(pred.median_hours_to_shortage)} h ` +
       `(entre ${Math.round(pred.p10_hours_to_shortage)} y ${Math.round(pred.p90_hours_to_shortage)} h). ` +
       `Probabilidad dentro de las próximas ${pred.horizonte_horas} h: ${pct} %.`);
-  }
-  const d = pred.details || {};
-  if (d.bomba_sin_recargar_ahora != null) {
-    const box = document.getElementById('pump-info');
-    box.style.display = '';
-    box.querySelector('span').textContent = d.bomba_sin_recargar_ahora
-      ? 'No está recargando aunque el nivel ya bajó del umbral de arranque'
-      : `Operando normal (arranca con ≈ ${Number(d.umbral_arranque_bomba_l).toFixed(1)} L y se detiene con ≈ ${Number(d.umbral_paro_bomba_l).toFixed(1)} L)`;
   }
 })();
 

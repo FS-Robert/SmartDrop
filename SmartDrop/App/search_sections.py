@@ -5,7 +5,7 @@ SEARCH_SECTIONS = (
     {
         'titulo': 'Inicio / Estado de Agua',
         'url': 'dashboard',
-        'contenido': 'estado de agua, presión actual, calidad del agua, TDS, nivel de tanque, litros disponibles, consumo de agua, uptime del sistema, temperatura, pH, vivienda, lecturas y sensores',
+        'contenido': 'estado de agua, presión actual, calidad del agua, TDS, nivel de tanque, litros disponibles, consumo de agua, uptime del sistema, pH, vivienda, lecturas y sensores',
     },
     {
         'titulo': 'Retroalimentación e Indicadores de Consumo',
@@ -20,12 +20,12 @@ SEARCH_SECTIONS = (
     {
         'titulo': 'Calidad del Agua - TDS',
         'url': 'calidad',
-        'contenido': 'calidad del agua, TDS, ppm, pH, cloro, turbidez, conductividad, temperatura, buena, media, mala, óptima, aceptable y anomalías',
+        'contenido': 'calidad del agua, TDS, ppm, pH, cloro, turbidez, conductividad, buena, media, mala, óptima, aceptable y anomalías',
     },
     {
         'titulo': 'Nivel de Tanque',
         'url': 'tanque',
-        'contenido': 'nivel de tanque, tanque, porcentaje, litros, capacidad, autonomía, horas restantes, bomba, suministro y última lectura',
+        'contenido': 'nivel de tanque, tanque, porcentaje, litros, capacidad, autonomía, horas restantes, suministro y última lectura',
     },
     {
         'titulo': 'Consumo Diario',

@@ -868,6 +868,8 @@
   "Presión fuera del rango normal.": "Pressure outside the normal range.",
   "Presión muy alta. Riesgo para el sistema.": "Very high pressure. Risk to the system.",
   "Presión muy baja. Poco flujo de agua.": "Very low pressure. Little water flow.",
+  "Sin presión. No está llegando agua.": "No pressure. Water is not arriving.",
+  "Lectura fuera de rango. Revisa el sensor de presión.": "Reading out of range. Check the pressure sensor.",
   "Presión normal. Sistema funcionando correctamente.": "Normal pressure. System working correctly.",
   "Presión y flujo fuera de rango": "Pressure and flow out of range",
   "Presión:": "Pressure:",

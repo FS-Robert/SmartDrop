@@ -4,6 +4,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.csrf import ensure_csrf_cookie
 
 from ml_engine.models import Zone
+from ml_engine.realdata.sync import nombre_tanque
 
 
 def _require_admin(request):
@@ -26,7 +27,9 @@ def ml_zone_detail(request, zone_id: int):
 
     zone = get_object_or_404(Zone, id=zone_id)
     homes = zone.homes.filter(activo=True).order_by('etiqueta')
-    return render(request, 'ml_engine/zone_detail.html', {'zone': zone, 'homes': homes})
+    primera = homes.first()
+    nombre = nombre_tanque(((primera.meta if primera else {}) or {}).get('zona'), zone.name)
+    return render(request, 'ml_engine/zone_detail.html', {'zone': zone, 'homes': homes, 'nombre_tanque': nombre})
 
 
 @login_required(login_url='login')

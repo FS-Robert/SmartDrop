@@ -245,7 +245,6 @@ class MobileEstadoAguaView(APIView):
                     'capacidad_maxima_litros': capacity,
                     'barriles_disponibles': round(liters / 158.987, 2),
                     'capacidad_maxima_barriles': round(capacity / 158.987, 2),
-                    'bomba_estado': None,
                     'autonomia_estimada_texto': None,
                 })
             return result

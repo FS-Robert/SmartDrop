@@ -27,7 +27,7 @@ from ml_engine.models import (
     TankTrajectory,
     Zone,
 )
-from ml_engine.realdata.sync import data_quality
+from ml_engine.realdata.sync import data_quality, nombre_tanque
 from ml_engine.serializers import (
     AnomalyEventSerializer,
     ConsumptionForecastSerializer,
@@ -213,7 +213,7 @@ class ZoneSummaryListView(AdminOnlyAPIView):
             prediction = status_data['ultima_prediccion_desabasto']
             data.append({
                 'zone_id': zone.id,
-                'zone_name': zone.name,
+                'zone_name': nombre_tanque(meta.get('zona'), zone.name),
                 'n_homes': zone.homes.filter(activo=True).count(),
                 'nivel_actual_litros': status_data['nivel_actual_litros'],
                 'porcentaje_llenado': status_data['porcentaje_llenado'],

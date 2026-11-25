@@ -184,6 +184,35 @@ def busqueda_global_view(request):
     })
 
 
+def _hace_cuanto(fecha):
+    """Cuándo llegó una lectura, en palabras: "hace 3 min", "hace 2 h" o el día y la hora.
+
+    Antes la página decía siempre "hace unos segundos", aunque el sensor llevara días sin mandar nada.
+    """
+    if not fecha:
+        return None
+    try:
+        momento = datetime.fromisoformat(str(fecha).replace('Z', '+00:00'))
+    except (TypeError, ValueError):
+        return None
+    if timezone.is_naive(momento):
+        momento = timezone.make_aware(momento, dt_timezone.utc)
+    segundos = max((timezone.now() - momento).total_seconds(), 0)
+    if segundos < 60:
+        return 'hace unos segundos'
+    if segundos < 3600:
+        return f'hace {int(segundos // 60)} min'
+    if segundos < 24 * 3600:
+        return f'hace {int(segundos // 3600)} h'
+    local = timezone.localtime(momento)
+    return f"el {local:%d/%m} a las {local:%H:%M}"
+
+
+def _lectura_mas_reciente(lecturas):
+    """Fecha de la lectura más nueva (la lista viene de la más reciente a la más antigua)."""
+    return next((lectura.get('fecha_registro') for lectura in lecturas if lectura.get('fecha_registro')), None)
+
+
 def _latest_readings_by_type(lecturas):
     latest = {}
     for lectura in lecturas:
@@ -241,7 +270,20 @@ def _friendly_quality_message(tds_value):
     return _QUALITY_MESSAGES.get(state, 'Sin datos de calidad disponibles'), stars
 
 
-_PRESSURE_LABELS = {'normal': 'Estable', 'baja': 'Baja', 'alta': 'Alta', 'muy_alta': 'Muy alta'}
+_PRESSURE_LABELS = {'normal': 'Estable', 'baja': 'Baja', 'alta': 'Alta', 'muy_alta': 'Muy alta', 'fuera_rango': 'Fuera de rango'}
+
+# Rangos de presión en kPa, los mismos del ESP32 (el agua baja por gravedad, máximo ~17 kPa):
+# menos de 1 sin presión, menos de 5 baja, de 5 a 20 normal y más de 20 muy alta.
+# 'max' es el final de la escala del medidor; si la presión sigue subiendo, el número real se sigue mostrando.
+# 'sensor_max' es lo más que puede medir el MPX5700AP: una lectura negativa o arriba de eso es un error del sensor.
+PRESION_RANGOS = {'baja': 5.0, 'normal_max': 20.0, 'max': 30.0, 'sensor_max': 700.0}
+
+
+def _pressure_pct(pressure_value):
+    """Posición de la aguja del medidor (0 a 100) en la escala de 0 a 30 kPa."""
+    if pressure_value is None:
+        return 0
+    return round(min(max(safe_float(pressure_value) / PRESION_RANGOS['max'] * 100, 0), 100))
 
 
 def _friendly_pressure_message(pressure_value):
@@ -249,15 +291,16 @@ def _friendly_pressure_message(pressure_value):
     if pressure_value is None:
         return 'Sin datos de presión', 'desconocido'
     pressure = safe_float(pressure_value)
+    if pressure < 0 or pressure > PRESION_RANGOS['sensor_max']:
+        return 'Lectura fuera de rango. Revisa el sensor de presión.', 'fuera_rango'
     if pressure < 1:
-        return 'Presión muy baja. Poco flujo de agua.', 'baja'
-    elif pressure < 2:
+        return 'Sin presión. No está llegando agua.', 'baja'
+    elif pressure < PRESION_RANGOS['baja']:
         return 'Presión baja. El flujo puede ser lento.', 'baja'
-    elif pressure <= 3.5:
+    elif pressure <= PRESION_RANGOS['normal_max']:
         return 'Presión normal. Sistema funcionando correctamente.', 'normal'
-    elif pressure <= 5:
-        return 'Presión alta. Dentro de rango aceptable.', 'alta'
     else:
+        # Arriba de 20 kPa: por gravedad no debería pasar, conviene revisar.
         return 'Presión muy alta. Riesgo para el sistema.', 'muy_alta'
 
 
@@ -384,7 +427,6 @@ def dashboard(request):
     quality = _find_reading(latest, 'tds', 'calidad', 'ph')
     level = _find_reading(latest, 'nivel', 'level')
     ph = _find_reading(latest, 'ph')
-    temperature = _find_reading(latest, 'temper')
     tds_value = safe_float(quality.get('valor')) if quality else None
     quality_state, quality_badge, _ = _quality_status(tds_value)
     tank_liters, level_percentage, _ = _tank_summary(level, data.sensores, data.tanques)
@@ -408,9 +450,10 @@ def dashboard(request):
             'valor_exacto': f"{pressure_value} kPa" if pressure_value is not None else 'Sin lectura',
             'mensaje_amigable': pressure_msg,
             'estado_amigable': pressure_status,
-            # Posición de la aguja del medidor (escala de 0 a 5 kPa, igual que la página de presión).
-            'pct': round(min(max(pressure_value / 5 * 100, 0), 100)) if pressure_value is not None else 0,
+            # Posición de la aguja del medidor (escala de 0 a 30 kPa, igual que la página de presión).
+            'pct': _pressure_pct(pressure_value),
         },
+        'presion_rangos': PRESION_RANGOS,
         'calidad': {
             'estado': quality_state,
             'badge': quality_badge,
@@ -430,14 +473,14 @@ def dashboard(request):
         'stats': {
             'uptime':        'Disponible' if lecturas else 'Sin datos',
             'presion_exacta':f"{pressure_value} kPa" if pressure_value is not None else 'Sin lectura',
-            'ph':            f"{safe_float(ph.get('valor')) if ph else 0} pH",
-            'temperatura':   f"{safe_float(temperature.get('valor')) if temperature else 0}°C",
+            # Sin sensor de pH no se inventa un 0: se dice que no hay lectura.
+            'ph':            f"{safe_float(ph.get('valor'))} pH" if ph else 'Sin sensor',
         },
         'viviendas': viviendas,
         'realtime_readings': list(latest.values()),
         'recent_window': RECENT_READINGS_WINDOW,
         'comunidad': comunidad,
-        'ultima_actualizacion': 'hace unos segundos',
+        'ultima_actualizacion': _hace_cuanto(_lectura_mas_reciente(lecturas)),
     }
     return render(request, 'App/dashboard.html', context)
 
@@ -487,24 +530,6 @@ def _tank_autonomy(vivienda_id):
     return 'Sin estimación'
 
 
-def _pump_status(vivienda_id):
-    try:
-        bombas = supabase_client.select(
-            'bomba',
-            '*',
-            {'id_vivienda': f'eq.{vivienda_id}', 'limit': '1'},
-        )
-        bomba = bombas[0] if bombas else {}
-        estado = str(bomba.get('estado_actual') or bomba.get('estado') or '').lower()
-        if estado in {'encendida', 'encendido', 'activa', 'automatico', 'automatica'}:
-            return 'Enciende automáticamente'
-        if bomba:
-            return 'Apagada (Standby)'
-    except Exception:
-        pass
-    return 'Sin bomba registrada'
-
-
 @login_required(login_url='login')
 def tanque(request):
     try:
@@ -518,13 +543,12 @@ def tanque(request):
         vivienda_id = viviendas[0].get('id_vivienda') if viviendas else None
 
     if vivienda_id:
-        data, autonomia, estado_bomba = run_parallel(
+        data, autonomia = run_parallel(
             lambda: _owned_data_or_empty(request.user),
             lambda: _tank_autonomy(vivienda_id),
-            lambda: _pump_status(vivienda_id),
         )
     else:
-        data, autonomia, estado_bomba = _owned_data_or_empty(request.user), 'Sin estimación', 'Sin bomba registrada'
+        data, autonomia = _owned_data_or_empty(request.user), 'Sin estimación'
 
     level = _find_reading(_latest_readings_by_type(data.lecturas), 'nivel', 'level')
     litros, porcentaje, capacidad = _tank_summary(level, data.sensores, data.tanques)
@@ -547,7 +571,6 @@ def tanque(request):
             'nota': tank_note,
         },
         'autonomia': autonomia,
-        'estado_bomba': estado_bomba,
         'viviendas': viviendas,
         'ultima_actualizacion': 'hace unos segundos',
     }
@@ -564,7 +587,6 @@ def calidad(request):
     chlorine = _find_reading(latest, 'cloro', 'chlorine')
     turbidity = _find_reading(latest, 'turbidez', 'turbidity')
     conductivity = _find_reading(latest, 'conductividad', 'conductivity')
-    temperature = _find_reading(latest, 'temper')
     tds_value = safe_float(tds.get('valor')) if tds else None
     quality_state, quality_badge, quality_stars = _quality_status(tds_value)
     context = {
@@ -583,7 +605,6 @@ def calidad(request):
             'cloro':          safe_float(chlorine.get('valor')) if chlorine else 0,
             'turbidez':       safe_float(turbidity.get('valor')) if turbidity else 0,
             'conductividad':  safe_float(conductivity.get('valor')) if conductivity else 0,
-            'temperatura':    safe_float(temperature.get('valor')) if temperature else 0,
         },
         'viviendas': viviendas,
         'ultima_actualizacion': 'hace unos segundos',
@@ -594,7 +615,7 @@ def calidad(request):
 @login_required(login_url='login')
 def presion(request):
     data, valvula = run_parallel(lambda: _owned_data_or_empty(request.user), _valve_status_or_unavailable)
-    viviendas, sensores, lecturas = data.viviendas, data.sensores, data.lecturas
+    viviendas, lecturas = data.viviendas, data.lecturas
     pressure_rows = [row for row in lecturas if 'presion' in row.get('tipo_sensor', '') or 'pressure' in row.get('tipo_sensor', '')]
     latest_pressure = max(
         pressure_rows,
@@ -602,16 +623,8 @@ def presion(request):
         default=None,
     )
     valor = safe_float(latest_pressure.get('valor')) if latest_pressure else 0
-    pressure_sensor = next(
-        (sensor for sensor in sensores if 'presion' in str(sensor.get('tipo_sensor', '')).lower()
-         or 'pressure' in str(sensor.get('tipo_sensor', '')).lower()),
-        {},
-    )
-    configured_max = safe_float(pressure_sensor.get('rango_max'))
-    max_bar = configured_max if configured_max > 0 else 5.0
-    pct       = min(max((valor / max_bar) * 100, 0), 100)
-    # Arco SVG: longitud total del arco ≈ 251px
-    gauge_dash = int((pct / 100) * 251)
+    # La aguja usa la misma escala de 0 a 30 kPa que Inicio (no los 700 kPa que aguanta el sensor).
+    pct = _pressure_pct(valor)
     pressure_value = valor if pressure_rows else None
     pressure_message, pressure_status = _friendly_pressure_message(pressure_value)
 
@@ -622,15 +635,16 @@ def presion(request):
             'valvula':    valvula['estado'],
             'valvula_actualizada': valvula.get('ultima_actualizacion'),
             'valor':       valor,
-            'gauge_dash':  gauge_dash,
-            'needle_pos':  int(pct),
+            'needle_pos':  pct,
             'nota':       'Valor recibido desde el sensor de presión de tu vivienda.' if pressure_rows else 'No hay lecturas de presión para tu vivienda.',
             'mensaje':    pressure_message,
-            'actualizado':'Actualizado ahora' if pressure_rows else 'Sin lectura',
+            'actualizado':(f"Última lectura {_hace_cuanto(latest_pressure.get('fecha_registro')) or ''}".strip()
+                           if latest_pressure else 'Sin lectura'),
             'min_dia':    min((safe_float(row.get('valor')) for row in pressure_rows), default=0),
             'max_dia':    max((safe_float(row.get('valor')) for row in pressure_rows), default=0),
             'prom_dia':   round(sum(safe_float(row.get('valor')) for row in pressure_rows) / len(pressure_rows), 2) if pressure_rows else 0,
         },
+        'presion_rangos': PRESION_RANGOS,
         'viviendas': viviendas,
         'ultima_actualizacion': 'hace unos segundos',
     }
@@ -1596,6 +1610,18 @@ def api_lectura(request):
             {'ok': False, 'error': 'fecha_registro debe estar en formato ISO 8601'},
             status=400,
         )
+
+    # Una lectura imposible para ese sensor (ruido o cable flojo) no se guarda.
+    from .ingesta_mqtt import lectura_imposible
+    try:
+        tipo_sensor = next(
+            (s.get('tipo_sensor') for s in sensors() if str(s.get('id_sensor')) == str(sensor_id)), None,
+        )
+    except Exception:
+        tipo_sensor = None
+    if lectura_imposible(tipo_sensor, value):
+        logger.warning('Lectura IoT imposible descartada: sensor %s (%s) = %s', sensor_id, tipo_sensor, value)
+        return JsonResponse({'ok': False, 'error': 'Valor fuera de lo que el sensor puede medir'}, status=422)
 
     payload = {
         'id_sensor': sensor_id,

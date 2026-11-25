@@ -74,7 +74,6 @@ pg_partman, ejecuta `python manage.py ml_setup_partitioning`.
 | `ml_predict_consumption` | Pronóstico de la próxima hora por vivienda |
 | `ml_run_shortage_prediction` | Predicción de desabasto. Flags: `--zone-id --horizon-hours --n-paths` |
 | `ml_run_anomaly_detection` | Registra `AnomalyEvent` con el Isolation Forest |
-| `ml_seed_demo_readings` | Escribe en Supabase lecturas demo realistas para las viviendas de `--viviendas 9,10,...` (`--dry-run` para ver antes) |
 
 ## API REST (JWT de la app o sesión web, solo admin)
 
