@@ -21,6 +21,70 @@ ESP32 / dispositivos --> MQTT           +--> WebSockets
 
 El sitio web y Android deben usar el mismo backend Django. Android no debe conectarse directamente a Supabase.
 
+## Guía rápida para el equipo
+
+Pasos para que el proyecto funcione en tu laptop. **Las llaves nunca van en este repositorio**: Eliseo las pasa por
+mensaje privado y cada quien las pega en su propio `.env`, que Git ignora.
+
+### Ya lo tenía instalado (solo ponerse al día)
+
+En la carpeta raíz del repositorio (donde está `requirements.txt`):
+
+```powershell
+git checkout main
+git pull
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+cd SmartDrop
+python manage.py migrate
+python manage.py migrate --database=timeseries
+python manage.py runserver
+```
+
+Abre `http://localhost:8000` y recarga con `Ctrl + F5`. Los dos `migrate` se pueden repetir sin problema; si
+falta el segundo, la página *Predicción de suministro* falla con `no such column`.
+
+### Primera vez
+
+1. Clona el repositorio y crea el entorno virtual (ver [Instalación del backend](#instalación-del-backend)).
+2. Copia la plantilla de variables **dentro de la carpeta `SmartDrop`** (donde está `manage.py`):
+
+   ```powershell
+   cd SmartDrop
+   Copy-Item .env.example .env
+   ```
+
+3. Completa el `.env` (ver [Variables de entorno](#variables-de-entorno) y [Gotita](#gotita-la-asistente-con-ia)).
+4. Crea las tablas y levanta la página:
+
+   ```powershell
+   python manage.py migrate
+   python manage.py migrate --database=timeseries
+   python manage.py runserver
+   ```
+
+5. Entra a `http://localhost:8000` con tu cuenta de Supabase. La primera vez puede tardar 1 o 2 minutos mientras
+   copia las lecturas.
+
+### Qué NO encender en tu laptop
+
+| Variable | En tu `.env` | Por qué |
+|---|---|---|
+| `MQTT_INGESTA_ENABLED` | vacío o `0` | Solo una computadora recibe las lecturas del ESP32; si dos la encienden, cada lectura se guarda dos veces. |
+| `VALVE_WATCHDOG_ENABLED` | `0` | Con el Supabase y el MQTT reales, cerraría válvulas de verdad. Solo el servidor lo enciende. |
+| `DEBUG` | `True` solo en tu laptop | En el servidor siempre `False`. |
+
+### Llaves: dónde va cada una
+
+| Llave | Dónde va | Nunca en |
+|---|---|---|
+| Supabase, MQTT, Django, Anthropic (Gotita), ElevenLabs (voz de Gotita) | `SmartDrop/.env` de tu laptop o del servidor | Git, la app Android, capturas, chats de grupo |
+| WiFi y MQTT del ESP32 | El firmware (`.ino`) que se sube a la placa | Este repositorio |
+| Firma del APK release | `keystore.properties` del proyecto Android | Git |
+
+La app Android **no lleva ninguna llave**: solo la dirección del servidor (ver el README del repositorio de la app).
+Si una llave se comparte por error, avisa a Eliseo para cambiarla.
+
 ## Requisitos
 
 ### Backend
@@ -80,7 +144,7 @@ pip install -r requirements.txt
 
 ## Variables de entorno
 
-Copia la plantilla:
+El `.env` va en la carpeta `SmartDrop`, junto a `manage.py` y `.env.example`. Copia la plantilla desde esa carpeta:
 
 ```powershell
 Copy-Item .env.example .env
@@ -119,6 +183,34 @@ Genera una clave Django nueva con:
 ```bash
 python -c "import secrets; print(secrets.token_urlsafe(50))"
 ```
+
+## Gotita, la asistente con IA
+
+Gotita es opcional: sin estas líneas la página funciona igual, solo que sin la gotita de la esquina. Para
+activarla, agrega al final de `SmartDrop/.env` (los valores entre `< >` los pasa Eliseo en privado):
+
+```env
+ANTHROPIC_API_KEY=<llave de Anthropic>
+ANTHROPIC_MODEL=claude-sonnet-5-5
+ASISTENTE_ACTIVO=1
+
+ELEVENLABS_API_KEY=<llave de ElevenLabs>
+ELEVENLABS_VOICE_ID=<id de la voz>
+ELEVENLABS_MODEL=eleven_flash_v2_5
+ELEVENLABS_STT_MODEL=scribe_v2
+```
+
+- Las llaves de Anthropic y ElevenLabs viven **solo en el `.env` del backend**: nunca en la web, la app, Git ni capturas.
+- Sin las líneas de ElevenLabs, Gotita responde igual pero con la voz y el dictado del navegador.
+- Abre la página con `http://localhost:8000`, no con la IP: con la IP el navegador bloquea el micrófono.
+- Los límites por usuario al día (`ASISTENTE_LIMITE_DIARIO`, `ASISTENTE_VOZ_POR_DIA`, `ASISTENTE_DICTADO_POR_DIA`)
+  son opcionales y cuidan el saldo de las cuentas.
+
+## Firmware del ESP32
+
+El firmware (`.ino`) no está en este repositorio porque lleva el WiFi y las claves de MQTT. Quien lo suba a la
+placa lo pide a Eliseo en privado y solo cambia el nombre y la clave del WiFi si la maqueta se usa en otra red.
+El ESP32 se conecta al broker MQTT por internet, así que funciona desde cualquier red con WiFi.
 
 ## Verificación del backend
 
@@ -209,12 +301,14 @@ El cliente Android utiliza Retrofit para HTTP y OkHttp para WebSockets.
 
 ### Emulador Android Studio
 
-Usa:
+En `gradle.properties` del proyecto Android:
 
-```text
-http://<HOST_DEL_EMULADOR>:8000/
-ws://<HOST_DEL_EMULADOR>:8000/ws/sensors/
+```properties
+smartdropApiHost=10.0.2.2
 ```
+
+`10.0.2.2` es la forma en que el emulador llega a tu computadora. La app arma sola
+`http://10.0.2.2:8000/` y `ws://10.0.2.2:8000/ws/sensors/`.
 
 ### Teléfono físico por Wi-Fi
 
@@ -238,18 +332,15 @@ macOS:
 ifconfig
 ```
 
-Configura Android con la IP encontrada:
+Configura Android con la IP encontrada en `gradle.properties` del proyecto Android (sin `http://` ni puerto; la
+app agrega `:8000` en debug):
 
-```java
-private static final String BASE_URL =
-        "http://<IP_DE_LA_PC>:8000/";
-
-public static String getRealtimeUrl() {
-    return "ws://<IP_DE_LA_PC>:8000/ws/sensors/";
-}
+```properties
+smartdropApiHost=<IP_DE_LA_PC>
 ```
 
-La IP puede cambiar según la red. No la guardes como valor universal dentro de la aplicación.
+Agrega también esa IP a `ALLOWED_HOSTS` del `.env` del backend. La IP puede cambiar según la red; no subas tu IP
+a Git.
 
 Permite el puerto 8000 en el firewall si es necesario:
 
@@ -277,11 +368,10 @@ adb devices
 adb reverse tcp:8000 tcp:8000
 ```
 
-En Android usa:
+En `gradle.properties` del proyecto Android usa:
 
-```text
-http://127.0.0.1:8000/
-ws://127.0.0.1:8000/ws/sensors/
+```properties
+smartdropApiHost=127.0.0.1
 ```
 
 El túnel USB debe recrearse después de desconectar el dispositivo.
