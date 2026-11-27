@@ -1,6 +1,6 @@
 from django.urls import path
 from . import views
-from . import i18n, views_consumo_admin, views_manual, views_reportes
+from . import i18n, views_consumo_admin, views_manual, views_registro_manual, views_reportes
 from .asistente import vistas as asistente
 
 urlpatterns = [
@@ -43,7 +43,9 @@ urlpatterns = [
     path('adjuntos/<int:reporte_id>/<str:nombre>', views_reportes.adjunto_archivo, name='reporte_adjunto_archivo'),
     path('comunidad/',          views_reportes.reportes_comunidad,  name='reportes_comunidad'),
     path('alertas/',            views_reportes.alertas_historial,   name='alertas_historial'),
+    path('registro-manual/',    views_registro_manual.registro_manual, name='registro_manual'),
     path('alertas/export/',     views_reportes.alertas_export,      name='alertas_export'),
+    path('alertas/<int:alerta_id>/estado/', views_reportes.alerta_cambiar_estado, name='alerta_cambiar_estado'),
     path('admin-reportes/',     views_reportes.admin_reportes,      name='admin_reportes'),
     path('admin-reportes/export/', views_reportes.admin_reportes_export, name='admin_reportes_export'),
     path('admin-reportes/<int:reporte_id>/actualizar/', views_reportes.admin_reporte_update, name='admin_reporte_update'),

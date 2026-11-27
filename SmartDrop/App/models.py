@@ -160,3 +160,50 @@ class AjusteComunidad(models.Model):
 
     def __str__(self):
         return f'{self.clave} = {self.valor}'
+
+
+class RegistroManual(models.Model):
+    """Lectura escrita a mano por un operador cuando un sensor no está disponible (PB054).
+
+    Se guarda aparte de las lecturas de los sensores: no se mezcla con las gráficas, las alertas ni la IA,
+    así nunca cambia lo que miden los sensores.
+    """
+
+    ubicacion = models.CharField(max_length=120, blank=True, help_text='Vivienda, tanque o zona donde se midió.')
+    consumo_litros = models.DecimalField(max_digits=10, decimal_places=2)
+    nivel_pct = models.DecimalField(max_digits=5, decimal_places=2)
+    fecha_medicion = models.DateTimeField()
+    observacion = models.CharField(max_length=300, blank=True)
+    id_usuario = models.BigIntegerField(null=True, blank=True, help_text='Operador (id de Supabase) que lo registró.')
+    operador = models.CharField(max_length=255, blank=True)
+    creado = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'registro_manual'
+        ordering = ('-fecha_medicion', '-id')
+        verbose_name = 'registro manual'
+        verbose_name_plural = 'registros manuales'
+
+    def __str__(self):
+        return f'{self.fecha_medicion:%d/%m/%Y %H:%M} · {self.consumo_litros} L · {self.nivel_pct} %'
+
+
+class InterrupcionServicio(models.Model):
+    """Hora en que volvió el agua para un reporte de "No llega agua" (PB042).
+
+    Se guarda en la base local porque la tabla `reporte` de Supabase no tiene ese dato.
+    Con esta hora y la del reporte se sabe cuánto duró el corte.
+    """
+
+    id_reporte = models.BigIntegerField(unique=True)
+    restablecido = models.DateTimeField(help_text='Hora en que el servicio volvió.')
+    id_usuario = models.BigIntegerField(null=True, blank=True, help_text='Administrador (id de Supabase) que lo anotó.')
+    actualizado = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'interrupcion_servicio'
+        verbose_name = 'interrupción del servicio'
+        verbose_name_plural = 'interrupciones del servicio'
+
+    def __str__(self):
+        return f'Reporte #{self.id_reporte} · restablecido {self.restablecido:%d/%m/%Y %H:%M}'

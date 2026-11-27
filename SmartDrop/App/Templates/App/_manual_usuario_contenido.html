@@ -1,4 +1,4 @@
-<!-- Contenido del manual de usuario. Lo usan la página de la web (manual_usuario.html) y la pantalla de la app
+{% load static %}<!-- Contenido del manual de usuario. Lo usan la página de la web (manual_usuario.html) y la pantalla de la app
      (manual_usuario_app.html), así solo hay que actualizarlo aquí. -->
 <div class="manual">
   <nav class="manual-indice" aria-label="Contenido del manual">
@@ -58,6 +58,10 @@
 
   <section id="inicio" class="manual-seccion">
     <h2>4. La pantalla de inicio</h2>
+    <figure class="manual-captura">
+      <img src="{% static 'App/img/manual/inicio.jpg' %}" alt="La pantalla de inicio con el estado del agua de tu casa." loading="lazy" width="1280" height="800">
+      <figcaption>La pantalla de inicio con el estado del agua de tu casa.</figcaption>
+    </figure>
     <p>Es el resumen de tu agua: el nivel del tanque, la presión, la calidad y tu consumo de hoy, con un color para cada
       estado:</p>
     <ul>
@@ -66,6 +70,12 @@
       <li><span class="manual-color manual-color--bad"></span><strong>Rojo:</strong> hay un problema; revisa el detalle o reporta.</li>
     </ul>
     <p>Toca cualquier tarjeta para ver su detalle y su historial.</p>
+    <p class="manual-nota">La primera vez que entras a Inicio aparece un <strong>tutorial corto</strong> con lo principal.
+      Puedes saltarlo y volver a verlo cuando quieras en el menú <strong>Cuenta → Ver tutorial</strong>.
+      Y si buscas algo, escribe en el <strong>buscador</strong> de arriba (por ejemplo "manual", "tanque" o "no llega agua").</p>
+    <p class="manual-nota">Dentro de este manual también hay un <strong>buscador</strong>: escribe tu duda (por ejemplo
+      "cómo reportar fuga") y te muestra las secciones que la responden, resaltadas. Con <strong>Descargar manual para uso
+      sin internet (PDF)</strong> lo guardas en tu teléfono o computadora para leerlo sin conexión.</p>
   </section>
 
   <section id="agua" class="manual-seccion">
@@ -88,6 +98,10 @@
 
   <section id="consumo" class="manual-seccion">
     <h2>6. Tu consumo y cómo ahorrar</h2>
+    <figure class="manual-captura">
+      <img src="{% static 'App/img/manual/consumo.jpg' %}" alt="Consumo de agua: litros del periodo, gráfica e historial por semana." loading="lazy" width="1280" height="800">
+      <figcaption>Consumo de agua: litros del periodo, gráfica e historial por semana.</figcaption>
+    </figure>
     <ul>
       <li><strong>Consumo:</strong> cuántos litros gastaste por día, por semana y por mes. Puedes elegir el mes que quieras ver.</li>
       <li><strong>Retroalimentación:</strong> compara tu consumo con el de otros hogares y con tus meses anteriores.</li>
@@ -99,17 +113,28 @@
 
   <section id="alertas" class="manual-seccion">
     <h2>7. Alertas y notificaciones</h2>
+    <figure class="manual-captura">
+      <img src="{% static 'App/img/manual/alertas.jpg' %}" alt="Historial de alertas, con filtros por tipo y por fechas." loading="lazy" width="1280" height="800">
+      <figcaption>Historial de alertas, con filtros por tipo y por fechas.</figcaption>
+    </figure>
     <p>Cuando un sensor detecta algo fuera de lo normal (tanque bajo, presión baja, mala calidad o un consumo elevado),
       SmartDrop te avisa:</p>
     <ul>
       <li><strong>En la web:</strong> en la campana de arriba y en la página <strong>Alertas</strong>, donde está el historial.</li>
       <li><strong>En la app:</strong> con una notificación en el teléfono.</li>
     </ul>
+    <p>En <strong>Comunidad → Alertas</strong> ves todas tus alertas. Puedes filtrarlas por estado o por fechas
+      (<strong>Desde</strong> y <strong>Hasta</strong>). Si la fecha de inicio queda después de la de fin, aparece un aviso
+      en rojo para que la corrijas.</p>
     <p>En <strong>Mi perfil → Preferencias</strong> eliges qué avisos quieres recibir.</p>
   </section>
 
   <section id="reportes" class="manual-seccion">
     <h2>8. Reportar un problema</h2>
+    <figure class="manual-captura">
+      <img src="{% static 'App/img/manual/reportar.jpg' %}" alt="Reportar un problema: eliges el tipo y ves tus reportes a la derecha." loading="lazy" width="1280" height="800">
+      <figcaption>Reportar un problema: eliges el tipo y ves tus reportes a la derecha.</figcaption>
+    </figure>
     <ol>
       <li>Ve a <strong>Reportar un problema</strong>.</li>
       <li>Elige el tipo de problema (por ejemplo: no hay agua, fuga o mala calidad) y descríbelo.</li>
@@ -117,7 +142,7 @@
       <li>Envíalo. Podrás ver si está <em>pendiente</em>, <em>en proceso</em> o <em>resuelto</em>, y chatear con el equipo dentro del
         reporte.</li>
     </ol>
-    <p>En <strong>Reportes de la comunidad</strong> ves los problemas que tus vecinos publicaron en el muro. Los reportes que haces
+    <p>En <strong>Reportes de la comunidad</strong> ves los problemas que otros usuarios publicaron en el muro. Los reportes que haces
       desde “Reportar un problema” son privados: solo los ves tú y el equipo.</p>
   </section>
 
@@ -141,6 +166,10 @@
 
   <section id="perfil" class="manual-seccion">
     <h2>10. Tu perfil y tus preferencias</h2>
+    <figure class="manual-captura">
+      <img src="{% static 'App/img/manual/notificaciones.jpg' %}" alt="Mi perfil: aquí activas o apagas cada tipo de notificación." loading="lazy" width="1280" height="800">
+      <figcaption>Mi perfil: aquí activas o apagas cada tipo de notificación.</figcaption>
+    </figure>
     <ul>
       <li><strong>Mi perfil:</strong> tus datos y tus viviendas vinculadas.</li>
       <li><strong>Tema:</strong> claro u oscuro.</li>

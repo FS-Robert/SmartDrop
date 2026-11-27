@@ -3,7 +3,7 @@
 {% block title %}Historial de alertas{% endblock %}
 {% block nav_alertas %}active{% endblock %}
 {% block nav_admin_alertas %}active{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/comunidad.css' %}?v=20261018-agua1">{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/comunidad.css' %}?v=20261127-pb041">{% endblock %}
 
 {% block content %}
 <header class="page-head reportes-heading">
@@ -13,21 +13,12 @@
   </div>
   {% if es_admin %}
   <div class="page-actions">
-    <a class="btn btn--secondary reportes-link" href="{% url 'alertas_export' %}?estado={{ filtro_estado }}"><i class="ti ti-download" aria-hidden="true"></i>Descargar CSV</a>
+    <a class="btn btn--secondary reportes-link" href="{% url 'alertas_export' %}?estado={{ filtro_estado }}&desde={{ desde_txt }}&hasta={{ hasta_txt }}"><i class="ti ti-download" aria-hidden="true"></i>Descargar CSV</a>
   </div>
   {% endif %}
 </header>
 
-{% if messages %}
-  <div class="page-messages">
-  {% for message in messages %}
-    <div class="notice notice--info msg-{{ message.tags }}" role="status">
-      <i class="ti ti-info-circle" aria-hidden="true"></i>
-      <div><p>{{ message }}</p></div>
-    </div>
-  {% endfor %}
-  </div>
-{% endif %}
+{% include 'App/_avisos.html' %}
 
 <form method="get" class="filtros-row" aria-label="Filtrar alertas">
   <div class="field field--inline">
@@ -40,8 +31,16 @@
       <option value="resuelta" {% if filtro_estado == 'resuelta' %}selected{% endif %}>Resuelta</option>
     </select>
   </div>
+  <div class="field field--inline">
+    <label class="field-label" for="filtro-desde">Desde</label>
+    <input class="field-input" type="date" id="filtro-desde" name="desde" value="{{ desde_txt }}">
+  </div>
+  <div class="field field--inline">
+    <label class="field-label" for="filtro-hasta">Hasta</label>
+    <input class="field-input" type="date" id="filtro-hasta" name="hasta" value="{{ hasta_txt }}">
+  </div>
   <button type="submit" class="btn btn--secondary btn-filtrar"><i class="ti ti-filter" aria-hidden="true"></i>Filtrar</button>
-  {% if filtro_estado %}<a class="btn btn--ghost" href="{% url 'alertas_historial' %}">Quitar filtro</a>{% endif %}
+  {% if filtro_estado or desde_txt or hasta_txt %}<a class="btn btn--ghost" href="{% url 'alertas_historial' %}">Quitar filtros</a>{% endif %}
 </form>
 
 {% if alertas %}
@@ -64,6 +63,21 @@
       <div class="list-row-aside alerta-badges">
         <span class="status {% if alerta.prioridad == 'critica' or alerta.prioridad == 'alta' %}status--bad{% elif alerta.prioridad == 'baja' %}status--none{% else %}status--warn{% endif %} badge-prio-{{ alerta.prioridad|default:'media' }}"><span class="status-dot" aria-hidden="true"></span>Prioridad {{ alerta.prioridad|default:'media'|lower }}</span>
         <span class="status status--{{ alerta.estado_confirmacion|estado_css }} badge-estado-{{ alerta.estado_confirmacion }}"><span class="status-dot" aria-hidden="true"></span>{{ alerta.estado_texto }}</span>
+        {% if es_admin and alerta.id_alerta %}
+        {# PB041: el administrador cambia el estado; se guarda y se ve aquí mismo en el historial. #}
+        <form method="post" action="{% url 'alerta_cambiar_estado' alerta.id_alerta %}" class="alerta-estado-form">
+          {% csrf_token %}
+          <input type="hidden" name="volver" value="{{ request.GET.urlencode }}">
+          <label class="sr-only" for="estado-{{ alerta.id_alerta }}">Cambiar estado de la alerta {{ alerta.id_alerta }}</label>
+          <select name="estado" id="estado-{{ alerta.id_alerta }}" class="field-input">
+            <option value="pendiente" {% if alerta.estado_confirmacion == 'pendiente' or alerta.estado_confirmacion == 'no_confirmada' %}selected{% endif %}>Pendiente</option>
+            <option value="confirmada" {% if alerta.estado_confirmacion == 'confirmada' %}selected{% endif %}>Confirmada</option>
+            <option value="descartada" {% if alerta.estado_confirmacion == 'descartada' %}selected{% endif %}>Descartada</option>
+            <option value="resuelta" {% if alerta.estado_confirmacion == 'resuelta' %}selected{% endif %}>Resuelta</option>
+          </select>
+          <button type="submit" class="btn btn--secondary btn--sm"><i class="ti ti-check" aria-hidden="true"></i>Guardar</button>
+        </form>
+        {% endif %}
       </div>
     </li>
     {% endfor %}
@@ -73,7 +87,7 @@
 <div class="panel">
   <div class="empty">
     {% include 'App/_ilustracion.html' with tipo='alertas' %}
-    <h3>No hay alertas con estos filtros</h3>
+    {% if rango_error %}<h3>Corrige el rango de fechas</h3>{% else %}<h3>No hay alertas con estos filtros</h3>{% endif %}
     <p class="reportes-empty">Cuando el sistema detecte algo en tu agua, aparecerá aquí.</p>
   </div>
 </div>

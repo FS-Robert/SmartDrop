@@ -249,3 +249,37 @@
     height: 220px;
   }
 }
+
+/* ── Registro manual (PB054) ────────────────────────────────────────────── */
+.registro-manual-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: var(--s-5);
+  align-items: start;
+}
+.registro-manual-campos {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-4);
+}
+.registro-manual-form .req { color: var(--c-bad); }
+.registro-manual-grid .panel-title { display: flex; align-items: center; gap: var(--s-2); margin-bottom: var(--s-4); }
+.registro-manual-lista-titulo { padding: var(--s-4) var(--s-5) 0; }
+@media (max-width: 900px) {
+  .registro-manual-grid,
+  .registro-manual-campos { grid-template-columns: 1fr; }
+}
+
+/* ── Cortes de agua en Problemas reportados (PB042) ─────────────────────── */
+.cortes-resumen { margin-bottom: var(--s-5); }
+.cortes-resumen .panel-title { display: flex; align-items: center; gap: var(--s-2); margin-bottom: var(--s-4); }
+.cortes-datos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--s-4);
+  margin: 0;
+}
+.cortes-datos dt { font-size: .85em; color: var(--c-ink-2); }
+.cortes-datos dd { margin: var(--s-1) 0 0; font-size: 1.25em; font-weight: 600; }
+.cortes-nota { margin-top: var(--s-4); font-size: .85em; }
+.reporte-zona { font-size: .85em; margin-top: var(--s-1); }

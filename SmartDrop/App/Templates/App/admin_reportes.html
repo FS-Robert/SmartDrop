@@ -2,7 +2,7 @@
 {% load static sd_ui %}
 {% block title %}Problemas reportados{% endblock %}
 {% block nav_admin_reportes %}active{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/admin.css' %}?v=20261018-agua1">{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/admin.css' %}?v=20261127-pb042">{% endblock %}
 
 {% block content %}
 <header class="page-head reportes-heading">
@@ -11,20 +11,11 @@
     <p class="page-lede">Responde a los residentes, asigna prioridad y cambia el estado de cada reporte.</p>
   </div>
   <div class="page-actions">
-    <a class="btn btn--secondary reportes-link" href="{% url 'admin_reportes_export' %}?estado={{ filtro_estado }}&tipo={{ filtro_tipo }}"><i class="ti ti-download" aria-hidden="true"></i>Descargar CSV</a>
+    <a class="btn btn--secondary reportes-link" href="{% url 'admin_reportes_export' %}?estado={{ filtro_estado }}&tipo={{ filtro_tipo }}&zona={{ filtro_zona|urlencode }}&desde={{ desde_txt }}&hasta={{ hasta_txt }}"><i class="ti ti-download" aria-hidden="true"></i>Descargar CSV</a>
   </div>
 </header>
 
-{% if messages %}
-  <div class="stack stack--sm admin-messages">
-  {% for message in messages %}
-    <div class="notice {% if message.tags == 'success' %}notice--ok{% else %}notice--info{% endif %} msg-{{ message.tags }}" role="status">
-      <i class="ti ti-{% if message.tags == 'success' %}check{% else %}info-circle{% endif %}" aria-hidden="true"></i>
-      <div><p>{{ message }}</p></div>
-    </div>
-  {% endfor %}
-  </div>
-{% endif %}
+{% include 'App/_avisos.html' %}
 
 <div class="tiles conteos-row">
   <a class="tile{% if filtro_estado == 'pendiente' %} is-current{% endif %}" href="?estado=pendiente{% if filtro_tipo %}&tipo={{ filtro_tipo }}{% endif %}">
@@ -60,9 +51,41 @@
       {% endfor %}
     </select>
   </div>
+  <div class="field field--inline">
+    <label class="field-label" for="filtro-zona">Zona</label>
+    <select name="zona" id="filtro-zona" class="field-input">
+      <option value="">Todas</option>
+      {% for zona in zonas %}
+      <option value="{{ zona }}" {% if filtro_zona == zona %}selected{% endif %}>{{ zona }}</option>
+      {% endfor %}
+      {% if filtro_zona and filtro_zona not in zonas %}<option value="{{ filtro_zona }}" selected>{{ filtro_zona }}</option>{% endif %}
+    </select>
+  </div>
+  <div class="field field--inline">
+    <label class="field-label" for="filtro-desde">Desde</label>
+    <input class="field-input" type="date" id="filtro-desde" name="desde" value="{{ desde_txt }}">
+  </div>
+  <div class="field field--inline">
+    <label class="field-label" for="filtro-hasta">Hasta</label>
+    <input class="field-input" type="date" id="filtro-hasta" name="hasta" value="{{ hasta_txt }}">
+  </div>
   <button type="submit" class="btn btn--secondary btn-filtrar"><i class="ti ti-filter" aria-hidden="true"></i>Filtrar</button>
-  {% if filtro_estado or filtro_tipo %}<a class="btn btn--ghost" href="{% url 'admin_reportes' %}">Quitar filtros</a>{% endif %}
+  {% if filtro_estado or filtro_tipo or filtro_zona or desde_txt or hasta_txt %}<a class="btn btn--ghost" href="{% url 'admin_reportes' %}">Quitar filtros</a>{% endif %}
 </form>
+
+{% if resumen_cortes.total %}
+<section class="panel cortes-resumen" aria-labelledby="cortes-titulo">
+  <h2 class="panel-title" id="cortes-titulo"><i class="ti ti-droplet-off" aria-hidden="true"></i> Cortes de agua (reportes de "No llega agua")</h2>
+  <dl class="cortes-datos">
+    <div><dt>Cortes reportados</dt><dd>{{ resumen_cortes.total }}</dd></div>
+    <div><dt>Duración promedio</dt><dd>{% if resumen_cortes.promedio_seg is not None %}{{ resumen_cortes.promedio_seg|duracion_texto }}{% else %}Sin datos{% endif %}</dd></div>
+    <div><dt>Corte más largo</dt><dd>{% if resumen_cortes.mas_largo_seg is not None %}{{ resumen_cortes.mas_largo_seg|duracion_texto }}{% else %}Sin datos{% endif %}</dd></div>
+    <div><dt>Zona más afectada</dt><dd>{% if resumen_cortes.zona_mas_afectada %}{{ resumen_cortes.zona_mas_afectada }} ({{ resumen_cortes.cortes_zona_mas_afectada }}){% else %}Sin datos{% endif %}</dd></div>
+    <div><dt>Sin agua todavía</dt><dd>{{ resumen_cortes.en_curso }}</dd></div>
+  </dl>
+  <p class="muted cortes-nota">La duración va desde que el usuario reportó hasta que se anotó que volvió el agua (en el detalle del reporte). Si solo se marcó como resuelto, se usa la hora de atención y se indica "aprox.".</p>
+</section>
+{% endif %}
 
 {% if reportes %}
 <div class="table-wrap tabla-reportes-wrap">
@@ -85,6 +108,7 @@
         <td class="desc-cell">
           <p class="reporte-tipo">{{ reporte.tipo_label }}</p>
           <p class="reporte-desc">{{ reporte.descripcion|truncatewords:10 }}</p>
+          <p class="reporte-zona muted"><i class="ti ti-map-pin" aria-hidden="true"></i> {{ reporte.zona }}{% if reporte.es_corte %} · {% if reporte.duracion_seg is not None %}duró {{ reporte.duracion_seg|duracion_texto }}{% if reporte.duracion_aprox %} (aprox.){% endif %}{% elif reporte.estado == 'resuelto' %}resuelto sin hora de regreso{% else %}sin agua todavía{% endif %}{% endif %}</p>
         </td>
         <td class="nowrap"><time datetime="{{ reporte.fecha_reporte }}">{{ reporte.fecha_reporte|fecha_corta }}</time></td>
         <td><span class="status status--{{ reporte.estado|estado_css }} badge-estado-{{ reporte.estado }}"><span class="status-dot" aria-hidden="true"></span>{{ reporte.estado_label }}</span></td>
@@ -104,7 +128,7 @@
 <div class="panel">
   <div class="empty">
     {% include 'App/_ilustracion.html' with tipo='ok' %}
-    <h3>No hay reportes con estos filtros</h3>
+    {% if rango_error %}<h3>Corrige el rango de fechas</h3>{% else %}<h3>No hay reportes con estos filtros</h3>{% endif %}
     <p class="reportes-empty">Prueba con otro estado o tipo de problema.</p>
   </div>
 </div>

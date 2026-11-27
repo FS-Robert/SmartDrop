@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet"/>
-  <link rel="stylesheet" href="{% static 'App/css/smartdrop.css' %}?v=20261018-agua1"/>
+  <link rel="stylesheet" href="{% static 'App/css/smartdrop.css' %}?v=20261127-pb045"/>
   {% if gotita %}<link rel="stylesheet" href="{% static 'App/css/gotita.css' %}?v=20261023-6"/>{% endif %}
   {% block extra_css %}{% endblock %}
   <script>
@@ -75,6 +75,7 @@
             <ul class="nav-list" aria-labelledby="nav-g-operacion">
               <li><a href="{% url 'admin_panel' %}" class="nav-link {% block nav_admin %}{% endblock %}"><i class="ti ti-layout-grid" aria-hidden="true"></i><span>Panel general</span></a></li>
               <li><a href="{% url 'valvulas' %}" class="nav-link {% block nav_valvulas %}{% endblock %}"><i class="ti ti-toggle-left" aria-hidden="true"></i><span>Electroválvulas</span></a></li>
+              <li><a href="{% url 'registro_manual' %}" class="nav-link {% block nav_registro_manual %}{% endblock %}"><i class="ti ti-plus" aria-hidden="true"></i><span>Registro manual</span></a></li>
             </ul>
           </div>
           <div class="nav-group">
@@ -96,6 +97,7 @@
             <p class="nav-group-title" id="nav-g-ayuda">Ayuda</p>
             <ul class="nav-list" aria-labelledby="nav-g-ayuda">
               <li><a href="{% url 'manual_admin' %}" class="nav-link {% block nav_manual_admin %}{% endblock %}"><i class="ti ti-book" aria-hidden="true"></i><span>Manual del administrador</span></a></li>
+              <li><a href="{% url 'manual_tecnico' %}" class="nav-link {% block nav_manual_tecnico %}{% endblock %}"><i class="ti ti-code" aria-hidden="true"></i><span>Manual técnico</span></a></li>
             </ul>
           </div>
         {% else %}
@@ -135,6 +137,7 @@
             <ul class="nav-list" aria-labelledby="nav-g-cuenta">
               <li><a href="{% url 'usuario' %}" class="nav-link {% block nav_usuario %}{% endblock %}"><i class="ti ti-user" aria-hidden="true"></i><span>Mi perfil</span></a></li>
               <li><a href="{% url 'manual_usuario' %}" class="nav-link {% block nav_manual %}{% endblock %}"><i class="ti ti-book" aria-hidden="true"></i><span>Manual de usuario</span></a></li>
+              <li><a href="{% url 'dashboard' %}?tutorial=1" class="nav-link" data-abrir-tutorial><i class="ti ti-info-circle" aria-hidden="true"></i><span>Ver tutorial</span></a></li>
             </ul>
           </div>
         {% endif %}
@@ -367,8 +370,10 @@
     <script src="{% static 'App/js/admin_leak_alerts.js' %}" data-alerts-url="{% url 'ml_engine:leak_alerts' %}" data-leaks-url="{% url 'ml_engine:leaks' %}"></script>
   {% elif user.is_authenticated %}
     <script src="{% static 'App/js/alertas_sector.js' %}"></script>
+    <script src="{% static 'App/js/tutorial.js' %}?v=20261127-pb045b" data-inicio="{% url 'dashboard' %}"></script>
   {% endif %}
   <script src="{% static 'App/js/sd_motion.js' %}?v=20261011-zona2"></script>
+  <script src="{% static 'App/js/rango_fechas.js' %}?v=20261127-pb038"></script>
   {% include 'App/_cerrar_sesion_form.html' %}
   {% if gotita %}
     {% include 'App/_gotita.html' %}

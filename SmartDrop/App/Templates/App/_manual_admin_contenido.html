@@ -13,6 +13,7 @@
       <li><a href="#admin-fugas">Predicción de fugas</a></li>
       <li><a href="#admin-reportes">Problemas reportados</a></li>
       <li><a href="#admin-alertas">Historial de alertas</a></li>
+      <li><a href="#admin-registro-manual">Registro manual</a></li>
       <li><a href="#admin-app">La app del administrador</a></li>
       <li><a href="#admin-gotita">Gotita para el administrador</a></li>
       <li><a href="#admin-seguridad">Seguridad y buenas prácticas</a></li>
@@ -28,7 +29,7 @@
       <li><strong>Abrir y cerrar las electroválvulas</strong>, también por un tiempo limitado.</li>
       <li>Ver cuánta agua gasta cada usuario y cada zona, y quién pasa el límite de la comunidad.</li>
       <li>Revisar las predicciones de desabasto y de fugas.</li>
-      <li>Atender los problemas que reportan los vecinos.</li>
+      <li>Atender los problemas que reportan los usuarios.</li>
     </ul>
     <p>Los usuarios comunes no ven nada de esto: solo ven el agua de su propia vivienda.</p>
   </section>
@@ -134,7 +135,7 @@
       <li>Si sale un error al enviar la orden, el servidor no pudo hablar con el servicio de mensajes (MQTT): espera un
         momento e inténtalo de nuevo.</li>
       <li>Si la orden se envía pero el estado no cambia, revisa la conexión del relé y la alimentación de 12 V de la válvula.</li>
-      <li>Antes de cortar el agua de un sector, <strong>avisa a los vecinos</strong>.</li>
+      <li>Antes de cortar el agua de un sector, <strong>avisa a los usuarios del sector</strong>.</li>
     </ol>
   </section>
 
@@ -182,28 +183,65 @@
 
   <section id="admin-reportes" class="manual-seccion">
     <h2>8. Problemas reportados</h2>
-    <p>Menú <strong>Comunidad → Problemas reportados</strong>. Son los problemas que envían los vecinos (no llega agua,
+    <p>Menú <strong>Comunidad → Problemas reportados</strong>. Son los problemas que envían los usuarios (no llega agua,
       mala calidad, baja presión, fugas…).</p>
     <ol>
       <li>Arriba ves cuántos hay <strong>pendientes</strong>, <strong>en proceso</strong> y <strong>resueltos</strong>;
         toca uno para filtrar. También puedes filtrar por tipo de problema.</li>
       <li>Toca <strong>Abrir</strong> en un reporte para ver la descripción, las fotos y videos, y el chat.</li>
       <li>En <strong>Gestión del reporte</strong> cambia el <strong>estado</strong>, la <strong>prioridad</strong> (baja,
-        media o alta) y escribe la <strong>respuesta oficial</strong>. Al guardar, al vecino le llega un aviso.</li>
-      <li>Usa el <strong>chat</strong> para pedirle más datos al vecino.</li>
+        media o alta) y escribe la <strong>respuesta oficial</strong>. Al guardar, al usuario le llega un aviso.</li>
+      <li>Usa el <strong>chat</strong> para pedirle más datos al usuario.</li>
     </ol>
-    <p><strong>Descargar CSV</strong> baja la lista de reportes con los filtros aplicados.</p>
+    <p>Para ver solo los de unas fechas, usa <strong>Desde</strong> y <strong>Hasta</strong> y toca <strong>Filtrar</strong>.
+      Si la fecha de inicio queda después de la de fin, aparece un aviso en rojo y no se muestra la lista hasta que la corrijas.</p>
+    <p>Con <strong>Zona</strong> ves solo los reportes de una zona. La zona es la que escribió el usuario o, si no puso ninguna, la de su vivienda.</p>
+    <h3>Cortes de agua</h3>
+    <p>Los reportes de <strong>No llega agua</strong> cuentan como cortes. Arriba de la lista sale un resumen: cuántos cortes hay,
+      la duración promedio, el corte más largo, la zona más afectada y cuántos siguen sin agua.</p>
+    <ol>
+      <li>Abre el reporte del corte.</li>
+      <li>En <strong>Gestión del reporte</strong>, escribe la <strong>Hora en que volvió el agua</strong> y toca <strong>Guardar y notificar</strong>.</li>
+      <li>Si lo marcas como <strong>Resuelto</strong> sin escribir la hora, se guarda la hora de ese momento.</li>
+    </ol>
+    <p class="manual-nota">La duración va desde que el usuario reportó hasta que volvió el agua. En cortes viejos sin esa hora se usa
+      la hora en que se atendió el reporte y se marca como "aprox.". No se acepta una hora futura ni anterior al reporte.</p>
+    <p><strong>Descargar CSV</strong> baja la lista de reportes con los filtros aplicados, incluida la zona, la hora en que volvió el agua y la duración del corte.</p>
   </section>
 
   <section id="admin-alertas" class="manual-seccion">
     <h2>9. Historial de alertas</h2>
     <p>Menú <strong>Comunidad → Historial de alertas</strong>. Todas las alertas del sistema: fugas, calidad del agua,
       nivel del tanque y riesgo de desabasto. Puedes filtrarlas por estado (pendiente, confirmada, descartada o resuelta)
-      y <strong>descargarlas en CSV</strong>.</p>
+      o por fechas (<strong>Desde</strong> y <strong>Hasta</strong>) y <strong>descargarlas en CSV</strong>.</p>
+    <h3>Cambiar el estado de una alerta</h3>
+    <ol>
+      <li>Busca la alerta en la lista.</li>
+      <li>A la derecha, elige el estado nuevo: <strong>Pendiente</strong>, <strong>Confirmada</strong>,
+        <strong>Descartada</strong> o <strong>Resuelta</strong>.</li>
+      <li>Toca <strong>Guardar</strong>. Sale un mensaje en verde y la alerta ya aparece con su estado nuevo.</li>
+    </ol>
+    <p class="manual-nota">Cambiar el estado solo ordena el historial: no abre ni cierra válvulas ni cambia lo que miden los sensores.</p>
+  </section>
+
+  <section id="admin-registro-manual" class="manual-seccion">
+    <h2>10. Registro manual</h2>
+    <p>Menú <strong>Operación → Registro manual</strong>. Sirve para anotar a mano una lectura cuando un sensor no está
+      disponible (por mantenimiento o porque se desconectó).</p>
+    <ol>
+      <li>Escribe el <strong>consumo en litros</strong> y el <strong>nivel del tanque en %</strong> (los dos son obligatorios).</li>
+      <li>Si la medición fue antes, cambia la <strong>fecha y hora</strong>; si no, se usa la hora actual.</li>
+      <li>Opcional: el <strong>lugar</strong> y una <strong>observación</strong>.</li>
+      <li>Toca <strong>Guardar registro</strong>. Sale un mensaje de confirmación y el registro aparece en
+        <strong>Últimos registros</strong>.</li>
+    </ol>
+    <p>Si falta un dato obligatorio o el número no tiene sentido (nivel mayor a 100 %, consumo negativo), el campo se marca en
+      rojo y no se guarda.</p>
+    <p class="manual-nota">Estos registros se guardan aparte: no se mezclan con las lecturas de los sensores, las gráficas ni las predicciones.</p>
   </section>
 
   <section id="admin-app" class="manual-seccion">
-    <h2>10. La app del administrador</h2>
+    <h2>11. La app del administrador</h2>
     <p>Al entrar con una cuenta de administrador, la app abre su propio panel. Desde el menú lateral:</p>
     <ul>
       <li><strong>Panel general:</strong> flujo, presión, nivel del tanque y alertas activas en tiempo real; la
@@ -215,7 +253,7 @@
   </section>
 
   <section id="admin-gotita" class="manual-seccion">
-    <h2>11. Gotita para el administrador</h2>
+    <h2>12. Gotita para el administrador</h2>
     <ul>
       <li>Puedes pedirle resúmenes: <em>“¿Hay posibles fugas?”</em>, <em>“¿Cuántos reportes hay pendientes?”</em> o
         <em>“Llévame a electroválvulas”</em>.</li>
@@ -226,7 +264,7 @@
   </section>
 
   <section id="admin-seguridad" class="manual-seccion">
-    <h2>12. Seguridad y buenas prácticas</h2>
+    <h2>13. Seguridad y buenas prácticas</h2>
     <ul>
       <li>No compartas tu cuenta de administrador: todo lo que hagas queda registrado con tu nombre.</li>
       <li>Cierra la sesión en computadoras que no son tuyas.</li>
@@ -237,7 +275,7 @@
   </section>
 
   <section id="admin-problemas" class="manual-seccion">
-    <h2>13. Si algo no funciona</h2>
+    <h2>14. Si algo no funciona</h2>
     <details><summary>Un sensor dice que no está reportando.</summary>
       <p>Revisa que la placa ESP32 esté encendida y con Wi-Fi. Las lecturas llegan cada pocos segundos; si un sensor no
         envía nada, su tarjeta lo indica en el Panel general.</p></details>

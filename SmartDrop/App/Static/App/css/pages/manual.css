@@ -108,6 +108,350 @@
   }
 }
 
+/* ── Vista mejorada de los manuales de usuario y administrador ─────────── */
+
+/* Portada del manual: franja de agua con el ícono y los accesos rápidos */
+.manual-portada {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-4) var(--s-6);
+  margin-bottom: var(--s-6);
+  padding: var(--s-6);
+  overflow: hidden;
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-lg);
+  background:
+    radial-gradient(circle at 92% 10%, var(--c-agua-soft) 0, transparent 55%),
+    linear-gradient(135deg, var(--c-surface) 0%, var(--c-surface-tint) 100%);
+  box-shadow: var(--shadow-soft);
+}
+
+.manual-portada-icono {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 4rem;
+  height: 4rem;
+  border-radius: 1.25rem;
+  background: var(--c-anil);
+  color: #fff;
+  font-size: 2rem;
+  box-shadow: var(--shadow-raise);
+}
+
+.manual-portada-texto {
+  flex: 1 1 20rem;
+  min-width: 0;
+}
+
+.manual-portada-texto .page-title {
+  margin: 0;
+}
+
+.manual-portada-texto .page-lede {
+  margin: var(--s-2) 0 0;
+}
+
+.manual-portada-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+/* Tarjeta para saltar a otro manual (por ejemplo, al técnico) */
+.manual-enlaces {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: var(--s-3);
+  margin-bottom: var(--s-6);
+}
+
+.manual-enlace {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-4);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  background: var(--c-surface);
+  color: var(--c-ink);
+  text-decoration: none;
+  box-shadow: var(--shadow-soft);
+  transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+}
+
+.manual-enlace:hover,
+.manual-enlace:focus-visible {
+  border-color: var(--c-agua);
+  box-shadow: var(--shadow-raise);
+  transform: translateY(-2px);
+}
+
+.manual-enlace > .ti {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2.6rem;
+  height: 2.6rem;
+  border-radius: var(--r-md);
+  background: var(--c-anil-soft);
+  color: var(--c-anil);
+  font-size: 1.35rem;
+}
+
+.manual-enlace strong {
+  display: block;
+}
+
+.manual-enlace small {
+  color: var(--c-ink-3);
+}
+
+/* El manual ocupa un poco más de ancho para que respire */
+.manual {
+  max-width: 80ch;
+}
+
+/* Índice como tarjetas numeradas */
+.manual-indice {
+  padding: var(--s-5);
+  box-shadow: var(--shadow-soft);
+}
+
+.manual-indice-titulo {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin-bottom: var(--s-3);
+  color: var(--c-anil);
+  font-size: var(--t-sm);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.manual > .manual-indice ol {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: var(--s-2);
+  padding: 0;
+  columns: auto;
+  list-style: none;
+  counter-reset: indice;
+}
+
+.manual > .manual-indice li {
+  margin: 0;
+  counter-increment: indice;
+}
+
+.manual > .manual-indice li + li {
+  margin-top: 0;
+}
+
+.manual > .manual-indice a {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-sm);
+  text-decoration: none;
+  font-weight: 500;
+  transition: background .15s ease;
+}
+
+.manual > .manual-indice a::before {
+  content: counter(indice);
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  border-radius: 50%;
+  background: var(--c-anil-soft);
+  color: var(--c-anil);
+  font-size: .8rem;
+  font-weight: 700;
+}
+
+.manual > .manual-indice a:hover,
+.manual > .manual-indice a:focus-visible {
+  background: var(--c-surface-2);
+}
+
+/* Cada sección es una tarjeta con una línea de agua a la izquierda */
+.manual > .manual-seccion {
+  position: relative;
+  padding: var(--s-5) var(--s-6);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-lg);
+  background: var(--c-surface);
+  box-shadow: var(--shadow-soft);
+}
+
+.manual > .manual-seccion::before {
+  content: "";
+  position: absolute;
+  top: var(--s-5);
+  bottom: var(--s-5);
+  left: 0;
+  width: 4px;
+  border-radius: 0 4px 4px 0;
+  background: linear-gradient(var(--c-agua), var(--c-anil));
+}
+
+.manual-seccion h2 {
+  color: var(--c-anil-strong);
+}
+
+.manual-seccion h3 {
+  color: var(--c-anil);
+}
+
+/* Viñetas con forma de gota */
+.manual-seccion ul {
+  padding-left: 0;
+  list-style: none;
+}
+
+.manual-seccion ul > li {
+  position: relative;
+  padding-left: 1.6rem;
+}
+
+.manual-seccion ul > li::before {
+  content: "";
+  position: absolute;
+  top: .55em;
+  left: .35rem;
+  width: .55rem;
+  height: .55rem;
+  border-radius: 50% 0 50% 50%;
+  background: var(--c-agua);
+  transform: rotate(-45deg);
+}
+
+/* Las viñetas de colores (verde, amarillo, rojo) ya tienen su punto */
+.manual-seccion ul > li:has(> .manual-color) {
+  padding-left: 0;
+}
+
+.manual-seccion ul > li:has(> .manual-color)::before {
+  display: none;
+}
+
+/* Pasos numerados en círculos */
+.manual-seccion ol {
+  margin: var(--s-3) 0;
+  padding-left: 0;
+  list-style: none;
+  counter-reset: paso;
+}
+
+.manual-seccion ol > li {
+  position: relative;
+  min-height: 1.9rem;
+  padding-left: 2.6rem;
+  counter-increment: paso;
+}
+
+.manual-seccion ol > li + li {
+  margin-top: var(--s-2);
+}
+
+.manual-seccion ol > li::before {
+  content: counter(paso);
+  position: absolute;
+  top: .1rem;
+  left: 0;
+  display: grid;
+  place-items: center;
+  width: 1.8rem;
+  height: 1.8rem;
+  border-radius: 50%;
+  background: var(--c-anil);
+  color: #fff;
+  font-size: .85rem;
+  font-weight: 700;
+}
+
+/* Notas con ícono */
+.manual-nota {
+  position: relative;
+  padding: var(--s-3) var(--s-4) var(--s-3) 2.9rem;
+}
+
+.manual-nota::before {
+  content: "\eac5";
+  position: absolute;
+  top: var(--s-3);
+  left: var(--s-4);
+  color: var(--c-agua);
+  font-family: "tabler-icons";
+  font-size: 1.15rem;
+  line-height: 1.5;
+}
+
+/* Preguntas frecuentes como acordeón */
+.manual details {
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+.manual details[open] {
+  border-color: var(--c-agua);
+  box-shadow: var(--shadow-soft);
+}
+
+.manual summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  list-style: none;
+}
+
+.manual summary::-webkit-details-marker {
+  display: none;
+}
+
+.manual summary::after {
+  content: "\eb0b";
+  flex: none;
+  color: var(--c-anil);
+  font-family: "tabler-icons";
+  font-weight: normal;
+  transition: transform .2s ease;
+}
+
+.manual details[open] summary::after {
+  transform: rotate(45deg);
+}
+
+@media (max-width: 600px) {
+  .manual-portada,
+  .manual > .manual-seccion {
+    padding: var(--s-4);
+  }
+
+  .manual-portada-icono {
+    width: 3rem;
+    height: 3rem;
+    font-size: 1.5rem;
+  }
+}
+
+@media print {
+  .manual-portada,
+  .manual > .manual-seccion {
+    box-shadow: none;
+  }
+
+  .manual-enlaces {
+    display: none !important;
+  }
+}
+
 /* ── Manual técnico (Markdown convertido) ─────────────────────────────── */
 
 .manual-tecnico {
@@ -219,4 +563,38 @@
 
 .manual-tecnico-texto blockquote p {
   margin: 0;
+}
+
+/* ── Capturas de pantalla (PB045) ───────────────────────────────────────── */
+.manual-captura { margin: var(--s-4, 16px) 0; }
+.manual-captura img {
+  display: block; width: 100%; height: auto;
+  border: 1px solid var(--c-line, #d6e2ee); border-radius: 12px;
+  box-shadow: 0 6px 18px rgba(10, 40, 80, .08);
+}
+.manual-captura figcaption { margin-top: 6px; font-size: .85em; color: var(--c-ink-2, #5b6b7c); text-align: center; }
+@media print { .manual-captura { break-inside: avoid; } .manual-captura img { box-shadow: none; } }
+
+/* ── Buscador del manual y descarga (PB045) ─────────────────────────────── */
+.manual-herramientas {
+  display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 16px;
+  margin: 0 0 var(--s-5, 20px);
+}
+.manual-buscador { flex: 1 1 320px; }
+.manual-buscador-label { display: block; font-weight: 600; margin-bottom: 6px; }
+.manual-buscador-fila { display: flex; gap: 8px; }
+.manual-buscador-fila .field-input { flex: 1; min-width: 0; }
+.manual-resultados {
+  margin: 0 0 var(--s-5, 20px); padding: 16px 20px;
+  border: 1px solid var(--c-line, #d6e2ee); border-radius: 14px;
+  background: var(--c-surface, #fff);
+}
+.manual-resultados-titulo { font-size: 1.05rem; margin: 0 0 10px; }
+.manual-resultados ol { margin: 0 0 10px; padding-left: 1.2em; }
+.manual-resultados li { margin-bottom: 8px; }
+.manual-resultados li span { display: block; color: var(--c-ink-2, #5b6b7c); font-size: .9em; }
+.manual-resultados-quitar { font-size: .9em; }
+@media (max-width: 600px) {
+  .manual-buscador-fila { flex-direction: column; }
+  .manual-descargar { width: 100%; justify-content: center; }
 }

@@ -1,0 +1,87 @@
+{% extends 'App/base.html' %}
+{% load static %}
+{% block title %}Registro manual{% endblock %}
+{% block nav_registro_manual %}active{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/admin.css' %}?v=20261127-pb054b">{% endblock %}
+
+{% block content %}
+<!-- PB054: el operador escribe a mano el consumo y el nivel cuando un sensor no está disponible.
+     Se guarda en la tabla registro_manual, aparte de las lecturas de los sensores. -->
+<header class="page-head">
+  <div>
+    <h1 class="page-title">Registro manual</h1>
+    <p class="page-lede">Anota a mano el consumo y el nivel del tanque cuando un sensor no esté disponible. Estos datos se guardan aparte y no cambian lo que miden los sensores.</p>
+  </div>
+</header>
+
+{% include 'App/_avisos.html' %}
+
+<div class="registro-manual-grid">
+  <section class="panel" aria-labelledby="rm-form-titulo">
+    <h2 class="panel-title" id="rm-form-titulo"><i class="ti ti-plus" aria-hidden="true"></i> Nueva lectura</h2>
+    <form method="post" class="stack registro-manual-form" novalidate>
+      {% csrf_token %}
+      <div class="registro-manual-campos">
+        <div class="field">
+          <label class="field-label" for="consumo_litros">Consumo (litros) <span class="req" aria-hidden="true">*</span></label>
+          <input class="field-input" type="number" inputmode="decimal" step="0.01" min="0" max="100000" id="consumo_litros" name="consumo_litros"
+                 value="{{ valores.consumo_litros|default:'' }}" required {% if errores.consumo_litros %}aria-invalid="true" aria-describedby="consumo-error"{% endif %}>
+          {% if errores.consumo_litros %}<p class="field-error" id="consumo-error">{{ errores.consumo_litros }}</p>{% endif %}
+        </div>
+        <div class="field">
+          <label class="field-label" for="nivel_pct">Nivel del tanque (%) <span class="req" aria-hidden="true">*</span></label>
+          <input class="field-input" type="number" inputmode="decimal" step="0.01" min="0" max="100" id="nivel_pct" name="nivel_pct"
+                 value="{{ valores.nivel_pct|default:'' }}" required {% if errores.nivel_pct %}aria-invalid="true" aria-describedby="nivel-error"{% endif %}>
+          {% if errores.nivel_pct %}<p class="field-error" id="nivel-error">{{ errores.nivel_pct }}</p>{% endif %}
+        </div>
+        <div class="field">
+          <label class="field-label" for="fecha_medicion">Fecha y hora de la medición</label>
+          <input class="field-input" type="datetime-local" id="fecha_medicion" name="fecha_medicion" max="{{ ahora }}"
+                 value="{{ valores.fecha_medicion|default:ahora }}" {% if errores.fecha_medicion %}aria-invalid="true" aria-describedby="fecha-error"{% endif %}>
+          {% if errores.fecha_medicion %}<p class="field-error" id="fecha-error">{{ errores.fecha_medicion }}</p>{% else %}<p class="field-hint">Si la dejas así, se usa la hora actual.</p>{% endif %}
+        </div>
+        <div class="field">
+          <label class="field-label" for="ubicacion">Lugar <span class="field-label-optional">(opcional)</span></label>
+          <input class="field-input" type="text" id="ubicacion" name="ubicacion" maxlength="120" placeholder="Ej.: Tanque principal, Zona Norte" value="{{ valores.ubicacion|default:'' }}">
+        </div>
+      </div>
+      <div class="field">
+        <label class="field-label" for="observacion">Observación <span class="field-label-optional">(opcional)</span></label>
+        <textarea class="field-input" id="observacion" name="observacion" rows="2" maxlength="300" placeholder="Ej.: sensor de nivel desconectado por mantenimiento">{{ valores.observacion|default:'' }}</textarea>
+      </div>
+      <p class="field-hint"><span class="req" aria-hidden="true">*</span> Campos obligatorios.</p>
+      <div class="form-actions">
+        <button type="submit" class="btn btn--primary"><i class="ti ti-check" aria-hidden="true"></i>Guardar registro</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel panel--flush" aria-labelledby="rm-lista-titulo">
+    <h2 class="panel-title registro-manual-lista-titulo" id="rm-lista-titulo"><i class="ti ti-list-details" aria-hidden="true"></i> Últimos registros</h2>
+    {% if registros %}
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr><th scope="col">Fecha</th><th scope="col" class="num">Consumo</th><th scope="col" class="num">Nivel</th><th scope="col">Lugar</th><th scope="col">Operador</th></tr>
+        </thead>
+        <tbody>
+          {% for r in registros %}
+          <tr>
+            <td class="nowrap">{{ r.fecha_medicion|date:'d/m/Y H:i' }}</td>
+            <td class="num">{{ r.consumo_litros|floatformat:2 }} L</td>
+            <td class="num">{{ r.nivel_pct|floatformat:0 }} %</td>
+            <td>{{ r.ubicacion|default:'—' }}{% if r.observacion %}<br><small class="muted">{{ r.observacion }}</small>{% endif %}</td>
+            <td>{{ r.operador|default:'—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty">
+      <p class="muted">Todavía no hay registros manuales.</p>
+    </div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

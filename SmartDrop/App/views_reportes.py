@@ -16,20 +16,21 @@ import logging
 import os
 import re
 import uuid
+from urllib.parse import urlencode
 from datetime import datetime
 
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core import signing
-from django.http import FileResponse, Http404, HttpResponse, JsonResponse
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse, QueryDict
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 from PIL import Image, ImageOps, UnidentifiedImageError
 
-from . import preferencias, supabase_client
+from . import consumo_admin, interrupciones, preferencias, supabase_client
 from .ratelimit import rate_limit
 from .queries import is_admin, owner_id, run_parallel, users_by_id as _usuarios_por_id
 from .seguridad import fila_csv, limitar
@@ -42,7 +43,7 @@ TIPOS_PROBLEMA = [
     ('sin_agua', 'No llega agua', 'Interrupción total del suministro en tu vivienda o zona.', 'ti-droplet'),
     ('mala_calidad', 'Agua de mala calidad', 'Color, olor o sabor extraño; sedimentos o turbidez.', 'ti-test-pipe'),
     ('baja_presion', 'Baja presión', 'El agua llega con muy poca fuerza o de forma intermitente.', 'ti-gauge'),
-    ('fuga', 'Fuga visibles', 'Fugas en la red pública, medidor o tuberías exteriores.', 'ti-alert-triangle'),
+    ('fuga', 'Fuga visible', 'Fugas en la red pública, medidor o tuberías exteriores.', 'ti-alert-triangle'),
     ('tanque', 'Problema con el tanque', 'Nivel incorrecto, sensor sin datos o desbordamiento.', 'ti-building-warehouse'),
     ('facturacion', 'Facturación / pagos', 'Cobros incorrectos o dudas sobre tu estado de pago.', 'ti-file-invoice'),
     ('otro', 'Otro problema', 'Cualquier otro inconveniente relacionado con el servicio.', 'ti-dots'),
@@ -101,6 +102,21 @@ def _alertas_visibles(alertas, es_admin, user=None, prefs=None):
             prefs or preferencias.preferencias_de(user),
         )
     return alertas
+
+
+def _filtrar_por_fechas(request, params, columna):
+    """Agrega a `params` el filtro ?desde=&hasta= sobre `columna` (PB038).
+
+    Devuelve (desde_txt, hasta_txt, error). Si las fechas vienen al revés, error trae el aviso y no se filtra.
+    """
+    desde, hasta, error = consumo_admin.leer_rango(request.GET)
+    if error:
+        # Se dejan las fechas tal como las escribió para que vea cuál corregir.
+        return request.GET.get('desde', '')[:10], request.GET.get('hasta', '')[:10], error
+    filtro = consumo_admin.filtro_rango(columna, desde, hasta)
+    if filtro:
+        params['and'] = filtro
+    return (desde.isoformat() if desde else '', hasta.isoformat() if hasta else '', error)
 
 
 def _supabase_id(request):
@@ -509,6 +525,8 @@ def reporte_detalle(request, reporte_id):
     reporte['tipo_label'] = _tipo_label(reporte.get('tipo_problema'))
     reporte['estado_label'] = ESTADO_LABEL.get(reporte.get('estado'), reporte.get('estado'))
     reporte['autor_nombre'] = f"{autor.get('nombre', '')} {autor.get('apellido', '')}".strip() or 'Usuario'
+    if reporte.get('tipo_problema') == interrupciones.TIPO_CORTE:
+        interrupciones.completar([reporte])
 
     return render(request, 'App/reporte_detalle.html', {
         'reporte': reporte,
@@ -622,12 +640,17 @@ def admin_reportes(request):
         params['estado'] = f'eq.{filtro_estado}'
     if filtro_tipo in _tipo_meta():
         params['tipo_problema'] = f'eq.{filtro_tipo}'
+    desde_txt, hasta_txt, rango_error = _filtrar_por_fechas(request, params, 'fecha_reporte')
 
-    try:
-        reportes = supabase_client.select('reporte', '*', params)
-    except supabase_client.SupabaseError:
-        reportes = []
-        messages.error(request, 'No se pudieron cargar los reportes.')
+    reportes = []
+    if rango_error:
+        # Fechas al revés: no se muestra la lista hasta que el rango sea válido.
+        messages.error(request, rango_error)
+    else:
+        try:
+            reportes = supabase_client.select('reporte', '*', params)
+        except supabase_client.SupabaseError:
+            messages.error(request, 'No se pudieron cargar los reportes.')
 
     reporte_ids = [r.get('id_reporte') for r in reportes]
     admin_id = _supabase_id(request)
@@ -651,6 +674,14 @@ def admin_reportes(request):
             'sin_leer': sin_leer.get(reporte.get('id_reporte'), 0),
         })
 
+    # PB042: zona y duración de los cortes de agua; el filtro de zona se aplica aquí.
+    interrupciones.completar(lista)
+    zonas_disponibles = sorted({r['zona'] for r in lista})
+    filtro_zona = (request.GET.get('zona') or '').strip()[:60]
+    if filtro_zona:
+        lista = [r for r in lista if r['zona'] == filtro_zona]
+    resumen_cortes = interrupciones.resumen(lista)
+
     conteos = {estado: 0 for estado in ESTADOS_REPORTE}
     for reporte in lista:
         if reporte.get('estado') in conteos:
@@ -661,6 +692,12 @@ def admin_reportes(request):
         'conteos': conteos,
         'filtro_estado': filtro_estado,
         'filtro_tipo': filtro_tipo,
+        'filtro_zona': filtro_zona,
+        'zonas': zonas_disponibles,
+        'resumen_cortes': resumen_cortes,
+        'desde_txt': desde_txt,
+        'hasta_txt': hasta_txt,
+        'rango_error': rango_error,
         'tipos_problema': _tipo_meta(),
         'estados': ESTADOS_REPORTE,
         'prioridades': PRIORIDADES,
@@ -686,8 +723,27 @@ def admin_reporte_update(request, reporte_id):
     if respuesta:
         cambios['respuesta_admin'] = respuesta
         cambios['id_usuario_atiende'] = _supabase_id(request)
-        from django.utils import timezone
         cambios['fecha_atencion'] = timezone.now().isoformat()
+
+    # PB042: hora en que volvió el agua (solo para reportes de "No llega agua").
+    hora_texto = request.POST.get('restablecido')
+    if hora_texto is not None or cambios.get('estado') == 'resuelto':
+        try:
+            reporte_actual = _cargar_reporte_o_404(request, reporte_id, solo_propietario=False) or {}
+        except supabase_client.SupabaseError:
+            reporte_actual = {}
+        if reporte_actual.get('tipo_problema') == interrupciones.TIPO_CORTE:
+            hora, error = interrupciones.leer_hora(hora_texto, reporte_actual)
+            if error:
+                messages.error(request, error)
+                return redirect('reporte_detalle', reporte_id=reporte_id)
+            if hora is None and cambios.get('estado') == 'resuelto'                     and not interrupciones.restablecidos([int(reporte_id)]):
+                # Se marcó resuelto sin anotar la hora: se toma la de ahora.
+                hora = timezone.now()
+            if hora is not None:
+                interrupciones.guardar(reporte_id, hora, _supabase_id(request))
+                if not cambios:
+                    messages.success(request, 'Hora en que volvió el agua guardada.')
 
     if cambios:
         try:
@@ -770,6 +826,10 @@ def admin_reportes_export(request):
         params['estado'] = f"eq.{request.GET['estado']}"
     if request.GET.get('tipo') in _tipo_meta():
         params['tipo_problema'] = f"eq.{request.GET['tipo']}"
+    _, _, rango_error = _filtrar_por_fechas(request, params, 'fecha_reporte')
+    if rango_error:
+        messages.error(request, rango_error)
+        return redirect(f"{reverse('admin_reportes')}?{request.GET.urlencode()}")
 
     try:
         reportes = supabase_client.select('reporte', '*', params)
@@ -783,8 +843,19 @@ def admin_reportes_export(request):
     writer.writerow([
         'ID', 'Fecha', 'Tipo', 'Descripción', 'Ubicación',
         'Estado', 'Prioridad', 'ID usuario', 'Respuesta admin', 'Fecha atención',
+        'Zona', 'Agua restablecida', 'Duración del corte (min)',
     ])
+    interrupciones.completar(reportes)
+    filtro_zona = (request.GET.get('zona') or '').strip()[:60]
+    if filtro_zona:
+        reportes = [r for r in reportes if r['zona'] == filtro_zona]
     for reporte in reportes:
+        minutos = ''
+        if reporte.get('duracion_seg') is not None:
+            minutos = round(reporte['duracion_seg'] / 60)
+            if reporte.get('duracion_aprox'):
+                minutos = f'{minutos} (aprox.)'
+
         writer.writerow(fila_csv([
             reporte.get('id_reporte'),
             reporte.get('fecha_reporte'),
@@ -796,6 +867,9 @@ def admin_reportes_export(request):
             reporte.get('id_usuario') or '',
             (reporte.get('respuesta_admin') or '').replace('\n', ' '),
             reporte.get('fecha_atencion') or '',
+            reporte.get('zona') or '',
+            reporte['restablecido'].isoformat() if reporte.get('restablecido') else '',
+            minutos,
         ]))
     return response
 
@@ -856,12 +930,17 @@ def alertas_historial(request):
     params = {'order': 'fecha_creacion.desc', 'limit': '500'}
     if filtro_estado in _ESTADOS_ALERTA:  # lista blanca: nunca se arma un filtro con texto libre
         params['estado_confirmacion'] = f'eq.{filtro_estado}'
+    desde_txt, hasta_txt, rango_error = _filtrar_por_fechas(request, params, 'fecha_creacion')
 
-    try:
-        alertas = _alertas_de(request.user, '*', params)
-    except supabase_client.SupabaseError:
-        alertas = []
-        messages.error(request, 'No se pudo cargar el historial de alertas.')
+    alertas = []
+    if rango_error:
+        # Fechas al revés: no se muestra el historial hasta que el rango sea válido.
+        messages.error(request, rango_error)
+    else:
+        try:
+            alertas = _alertas_de(request.user, '*', params)
+        except supabase_client.SupabaseError:
+            messages.error(request, 'No se pudo cargar el historial de alertas.')
 
     alertas = _alertas_visibles(alertas, es_admin, request.user)
     for alerta in alertas:
@@ -871,8 +950,49 @@ def alertas_historial(request):
     return render(request, 'App/alertas.html', {
         'alertas': alertas,
         'filtro_estado': filtro_estado,
+        'desde_txt': desde_txt,
+        'hasta_txt': hasta_txt,
+        'rango_error': rango_error,
         'es_admin': es_admin,
     })
+
+
+# Estados que el administrador puede poner a mano en una alerta (PB041).
+ESTADOS_ALERTA_ADMIN = ('pendiente', 'confirmada', 'descartada', 'resuelta')
+
+
+@login_required(login_url='login')
+@require_http_methods(['POST'])
+def alerta_cambiar_estado(request, alerta_id):
+    """El administrador cambia el estado de una alerta (por ejemplo de Pendiente a Resuelta).
+
+    Solo guarda el estado en la tabla alerta; no toca sensores, válvulas ni lecturas.
+    """
+    # Se regresa a la misma lista con los mismos filtros (solo estado y fechas, nada más).
+    filtros = QueryDict(request.POST.get('volver') or '')
+    regreso = urlencode({k: filtros[k][:20] for k in ('estado', 'desde', 'hasta') if filtros.get(k)})
+    destino = f"{reverse('alertas_historial')}?{regreso}" if regreso else reverse('alertas_historial')
+    if not _es_admin(request.user):
+        return redirect('alertas_historial')
+
+    estado = request.POST.get('estado', '')
+    if estado not in ESTADOS_ALERTA_ADMIN:  # lista blanca
+        messages.error(request, 'Elige un estado válido para la alerta.')
+        return redirect(destino)
+    try:
+        actualizada = supabase_client.update(
+            'alerta', {'estado_confirmacion': estado}, {'id_alerta': f'eq.{int(alerta_id)}'},
+            return_representation=True,
+        )
+    except supabase_client.SupabaseError:
+        logger.exception('No se pudo cambiar el estado de la alerta %s', alerta_id)
+        messages.error(request, 'No se pudo guardar el cambio. Inténtalo de nuevo en un momento.')
+        return redirect(destino)
+    if not actualizada:
+        messages.error(request, 'Esa alerta ya no existe.')
+    else:
+        messages.success(request, f'Listo: la alerta #{alerta_id} ahora está como {_ESTADOS_ALERTA[estado]}.')
+    return redirect(destino)
 
 
 @login_required(login_url='login')
@@ -885,6 +1005,10 @@ def alertas_export(request):
     params = {'order': 'fecha_creacion.desc', 'limit': '5000'}
     if request.GET.get('estado') in _ESTADOS_ALERTA:
         params['estado_confirmacion'] = f"eq.{request.GET['estado']}"
+    _, _, rango_error = _filtrar_por_fechas(request, params, 'fecha_creacion')
+    if rango_error:
+        messages.error(request, rango_error)
+        return redirect(f"{reverse('alertas_historial')}?{request.GET.urlencode()}")
     try:
         alertas = supabase_client.select('alerta', '*', params)
     except supabase_client.SupabaseError:

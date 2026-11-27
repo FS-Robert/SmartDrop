@@ -13,4 +13,4 @@ class MobileBusquedaGlobalView(APIView):
     def get(self, request):
         search_term = request.query_params.get('q', '').strip().casefold()
         idioma = preferencias.preferencias_de(request.user).idioma
-        return Response({'ok': True, 'secciones': matching_sections(search_term, is_admin(request.user), idioma)})
+        return Response({'ok': True, 'secciones': matching_sections(search_term, is_admin(request.user), idioma, incluir_solo_web=False)})

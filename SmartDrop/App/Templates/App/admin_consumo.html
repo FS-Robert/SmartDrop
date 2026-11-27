@@ -19,16 +19,7 @@
   {% endif %}
 </header>
 
-{% if messages %}
-  <div class="stack stack--sm admin-messages">
-  {% for message in messages %}
-    <div class="notice {% if message.tags == 'success' %}notice--ok{% else %}notice--info{% endif %}" role="status">
-      <i class="ti ti-{% if message.tags == 'success' %}check{% else %}info-circle{% endif %}" aria-hidden="true"></i>
-      <div><p>{{ message }}</p></div>
-    </div>
-  {% endfor %}
-  </div>
-{% endif %}
+{% include 'App/_avisos.html' %}
 
 <!-- Periodo y límite -->
 <section class="panel consumo-admin-filtros no-imprimir" aria-label="Elegir periodo">

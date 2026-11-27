@@ -612,3 +612,17 @@
   flex: none;
   color: var(--c-ink-3);
 }
+
+/* PB041: cambiar el estado de una alerta desde el historial (solo admin) */
+.alerta-estado-form {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin-top: var(--s-1);
+}
+.alerta-estado-form .field-input {
+  width: auto;
+  min-height: 2.1rem;
+  padding-block: 0.25rem;
+  font-size: 0.85rem;
+}

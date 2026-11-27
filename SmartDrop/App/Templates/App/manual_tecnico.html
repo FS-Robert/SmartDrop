@@ -1,17 +1,18 @@
 {% extends 'App/base.html' %}
 {% load static %}
 {% block title %}Manual técnico{% endblock %}
-{% block nav_manual_admin %}active{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/manual.css' %}?v=20261025-2">{% endblock %}
+{% block nav_manual_tecnico %}active{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'App/css/pages/manual.css' %}?v=20261127-pb045">{% endblock %}
 
 {% block content %}
 <!-- Manual técnico (PB013): se muestra docs/MANUAL_TECNICO.md tal cual está en el repositorio. -->
-<header class="page-head">
-  <div>
+<header class="manual-portada">
+  <span class="manual-portada-icono" aria-hidden="true"><i class="ti ti-code"></i></span>
+  <div class="manual-portada-texto">
     <h1 class="page-title">Manual técnico</h1>
     <p class="page-lede">Arquitectura, base de datos, API, despliegue y configuración del ESP32. Para quien mantiene o amplía SmartDrop.</p>
   </div>
-  <div class="page-actions no-imprimir">
+  <div class="manual-portada-acciones no-imprimir">
     {% if hay_postman %}<a class="btn btn--secondary" href="{% url 'manual_tecnico_postman' %}"><i class="ti ti-download" aria-hidden="true"></i>Colección de Postman</a>{% endif %}
     <button type="button" class="btn btn--secondary" onclick="window.print()"><i class="ti ti-printer" aria-hidden="true"></i>Imprimir / PDF</button>
   </div>

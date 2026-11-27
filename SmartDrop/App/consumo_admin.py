@@ -47,7 +47,8 @@ def guardar_limite(valor, id_usuario=None):
 def periodo_desde_parametros(params, hoy=None):
     """(desde, hasta, etiqueta) a partir de ?mes=AAAA-MM o ?desde=AAAA-MM-DD&hasta=AAAA-MM-DD.
 
-    Sin nada, el mes en curso hasta hoy. Fechas al revés se acomodan; el futuro se recorta a hoy.
+    Sin nada, el mes en curso hasta hoy. El futuro se recorta a hoy. Las pantallas revisan antes con
+    rango_invertido() y, si las fechas vienen al revés, muestran un error en vez del reporte.
     """
     hoy = hoy or timezone.localdate()
     desde_txt, hasta_txt, mes_txt = params.get('desde'), params.get('hasta'), params.get('mes')
@@ -70,6 +71,49 @@ def periodo_desde_parametros(params, hoy=None):
         pass
     inicio = hoy.replace(day=1)
     return inicio, hoy, _nombre_mes(inicio)
+
+
+MENSAJE_RANGO_INVERTIDO = 'La fecha de inicio no puede ser posterior a la fecha de fin. Corrige el rango para ver el reporte.'
+
+
+def rango_invertido(params):
+    """True cuando el usuario puso la fecha "Desde" después de la fecha "Hasta".
+
+    En ese caso no se arma el reporte: se le pide que corrija las fechas (PB038).
+    """
+    try:
+        desde = datetime.strptime(params.get('desde') or '', '%Y-%m-%d').date()
+        hasta = datetime.strptime(params.get('hasta') or '', '%Y-%m-%d').date()
+    except ValueError:
+        return False
+    return hasta < desde
+
+
+def leer_rango(params):
+    """(desde, hasta, error) para filtrar listas por fecha con ?desde=AAAA-MM-DD&hasta=AAAA-MM-DD.
+
+    Cualquiera de las dos puede faltar. Una fecha mal escrita se ignora. Si quedan al revés, error trae el aviso.
+    """
+    def _fecha(texto):
+        try:
+            return datetime.strptime(texto or '', '%Y-%m-%d').date()
+        except ValueError:
+            return None
+
+    desde, hasta = _fecha(params.get('desde')), _fecha(params.get('hasta'))
+    if desde and hasta and hasta < desde:
+        return None, None, MENSAJE_RANGO_INVERTIDO
+    return desde, hasta, None
+
+
+def filtro_rango(columna, desde, hasta):
+    """Filtro de Supabase para quedarse con las filas de `columna` entre desde y hasta (días completos)."""
+    partes = []
+    if desde:
+        partes.append(f'{columna}.gte.{_medianoche(desde).isoformat()}')
+    if hasta:
+        partes.append(f'{columna}.lt.{_medianoche(hasta + timedelta(days=1)).isoformat()}')
+    return f"({','.join(partes)})" if partes else None
 
 
 _MESES = ('enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre',

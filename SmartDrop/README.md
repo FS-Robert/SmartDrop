@@ -21,6 +21,34 @@ ESP32 / dispositivos --> MQTT           +--> WebSockets
 
 El sitio web y Android deben usar el mismo backend Django. Android no debe conectarse directamente a Supabase.
 
+## Manuales
+
+| Manual | Para quién | Dónde verlo |
+|---|---|---|
+| **Manual técnico** | Quien mantiene o amplía SmartDrop (equipo de desarrollo) | [`docs/MANUAL_TECNICO.md`](../docs/MANUAL_TECNICO.md) o en la web: menú **Ayuda → Manual técnico** (`/manual-tecnico/`, solo administradores) |
+| Colección de Postman | Probar la API sin el panel (por ejemplo, abrir y cerrar la válvula) | [`docs/SmartDrop.postman_collection.json`](../docs/SmartDrop.postman_collection.json) o el botón **Colección de Postman** del manual técnico |
+| Manual del administrador | Administradores | Web: **Ayuda → Manual del administrador** (`/manual-admin/`). App: menú lateral |
+| Manual de usuario | Usuarios comunes | Web: **Cuenta → Manual de usuario** (`/manual/`). App: menú lateral |
+
+### Manual técnico: qué trae
+
+El manual técnico completo está en [`docs/MANUAL_TECNICO.md`](../docs/MANUAL_TECNICO.md). Sus partes:
+
+1. [Arquitectura general](../docs/MANUAL_TECNICO.md#1-arquitectura-general): cómo se conectan la web, la app, el ESP32, MQTT y Supabase.
+2. [Stack tecnológico](../docs/MANUAL_TECNICO.md#2-stack-tecnologico): lenguajes, librerías y servicios.
+3. [Flujo de datos](../docs/MANUAL_TECNICO.md#3-flujo-de-datos): de los sensores al usuario, el comando de la electroválvula y Gotita.
+4. [Modelo de datos](../docs/MANUAL_TECNICO.md#4-modelo-de-datos-diagrama-er): diagrama ER de Supabase y bases locales.
+5. [API](../docs/MANUAL_TECNICO.md#5-api-documentation): rutas de cuenta, agua, lecturas, válvula, reportes, predicción y Gotita.
+6. [Despliegue](../docs/MANUAL_TECNICO.md#6-deployment): dependencias, `.env`, migraciones, servidor y ESP32.
+7. [Configuración del ESP32](../docs/MANUAL_TECNICO.md#7-configuracion-del-esp32).
+8. [Solución de problemas](../docs/MANUAL_TECNICO.md#8-troubleshooting).
+9. [Documentación del código fuente](../docs/MANUAL_TECNICO.md#9-documentacion-del-codigo-fuente).
+10. [Seguridad](../docs/MANUAL_TECNICO.md#10-seguridad).
+11. [Pruebas](../docs/MANUAL_TECNICO.md#11-pruebas).
+
+Si cambias algo de la arquitectura, la API o el ESP32, actualiza también `docs/MANUAL_TECNICO.md`: la página
+`/manual-tecnico/` lo lee directo de ese archivo, así que se actualiza sola.
+
 ## Guía rápida para el equipo
 
 Pasos para que el proyecto funcione en tu laptop. **Las llaves nunca van en este repositorio**: Eliseo las pasa por

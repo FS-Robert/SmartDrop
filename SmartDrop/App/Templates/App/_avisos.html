@@ -1,0 +1,11 @@
+{# Avisos de la página (éxito en verde, error en rojo, lo demás en azul). #}
+{% if messages %}
+  <div class="stack stack--sm page-messages admin-messages">
+  {% for message in messages %}
+    <div class="notice {% if message.tags == 'success' %}notice--ok{% elif message.tags == 'error' %}notice--bad{% elif message.tags == 'warning' %}notice--warn{% else %}notice--info{% endif %}" role="{% if message.tags == 'error' %}alert{% else %}status{% endif %}">
+      <i class="ti ti-{% if message.tags == 'success' %}check{% elif message.tags == 'error' %}alert-triangle{% else %}info-circle{% endif %}" aria-hidden="true"></i>
+      <div><p>{{ message }}</p></div>
+    </div>
+  {% endfor %}
+  </div>
+{% endif %}

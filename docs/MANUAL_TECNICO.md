@@ -304,7 +304,7 @@ erDiagram
 
 | Base | Tablas propias | Para qué |
 |---|---|---|
-| `db.sqlite3` (alias `default`) | `App_usuario` (copia local de la cuenta para la sesión web), `preferencias_usuario`, `gotita_conversacion`, `gotita_mensaje`, `ajuste_comunidad`, sesiones de Django, lista negra de JWT | Sesiones y datos propios del backend |
+| `db.sqlite3` (alias `default`) | `App_usuario` (copia local de la cuenta para la sesión web), `preferencias_usuario`, `gotita_conversacion`, `gotita_mensaje`, `ajuste_comunidad`, `registro_manual` (lecturas escritas a mano, aparte de las de los sensores), `interrupcion_servicio` (hora en que volvió el agua de cada reporte "No llega agua"; con ella se calcula la duración del corte), sesiones de Django, lista negra de JWT | Sesiones y datos propios del backend |
 | `ml_timeseries.sqlite3` (alias `timeseries`) | `ml_zone`, `ml_home`, `ml_sensor_reading`, `ml_consumption_aggregate`, `ml_model_artifact`, predicciones y estado del monitor | Motor de predicción; el enrutador está en `ml_engine/routers.py` |
 
 ## 5. API Documentation
@@ -449,7 +449,13 @@ curl -X POST https://<dominio>/api/valvula/1/control/ \
 | `/admin-consumo/exportar/` | El reporte en Excel (.xlsx) |
 | `/valvulas/` | Electroválvulas: estado, comandos, temporizador e historial |
 | `/admin/prediccion/` y `/admin/prediccion/fugas/` | Predicción de suministro y de fugas |
-| `/admin-reportes/` | Problemas reportados por los usuarios |
+| `/admin-reportes/` | Problemas reportados por los usuarios, con filtros de estado, tipo, zona y fechas (`?zona=&desde=&hasta=`) y resumen de cortes de agua (PB042) |
+| `/alertas/` | Historial de alertas con filtros de estado y fechas; el administrador cambia el estado de cada alerta |
+| `/alertas/<id>/estado/` (POST) | Guarda el estado nuevo de una alerta: `pendiente`, `confirmada`, `descartada` o `resuelta` |
+| `/registro-manual/` | Registro manual de consumo (L) y nivel (%) cuando un sensor no está disponible; se guarda en `registro_manual` |
+
+En todos los filtros por fecha, si la fecha de inicio es posterior a la de fin se muestra un error y no se genera el
+reporte ni la descarga hasta que el rango sea válido.
 
 ## 6. Deployment
 

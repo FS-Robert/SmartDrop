@@ -1,0 +1,44 @@
+{% load static %}<!-- Buscador dentro del manual y descarga en PDF (PB045). Funciona sin JavaScript para que sirva también en la app. -->
+<div class="manual-herramientas no-imprimir">
+  <form method="get" class="manual-buscador" role="search" aria-label="Buscar en el manual">
+    {% for clave, valor in ocultos %}<input type="hidden" name="{{ clave }}" value="{{ valor }}">{% endfor %}
+    <label class="manual-buscador-label" for="manual-q">Buscar en el manual</label>
+    <div class="manual-buscador-fila">
+      <input class="field-input" type="search" id="manual-q" name="q" value="{{ q }}" maxlength="80"
+        placeholder="Ej.: cómo reportar fuga" autocomplete="off">
+      <button type="submit" class="btn btn--primary"><i class="ti ti-search" aria-hidden="true"></i>Buscar</button>
+    </div>
+  </form>
+  {% if pdf %}
+  <a class="btn btn--secondary manual-descargar" href="{% static pdf %}" download="SmartDrop-manual-de-usuario.pdf">
+    <i class="ti ti-file-type-pdf" aria-hidden="true"></i>Descargar manual para uso sin internet (PDF)
+  </a>
+  {% endif %}
+</div>
+
+{% if q %}
+<section class="manual-resultados no-imprimir" aria-labelledby="manual-resultados-titulo">
+  {% if resultados %}
+    <h2 class="manual-resultados-titulo" id="manual-resultados-titulo">
+      {{ resultados|length }} {% if resultados|length == 1 %}sección{% else %}secciones{% endif %} para “{{ q }}”
+    </h2>
+    <ol>
+      {% for r in resultados %}
+      <li><a href="#{{ r.id }}"><strong>{{ r.titulo }}</strong></a><span>{{ r.extracto }}</span></li>
+      {% endfor %}
+    </ol>
+  {% else %}
+    <h2 class="manual-resultados-titulo" id="manual-resultados-titulo">No encontramos “{{ q }}” en el manual</h2>
+    <p>Prueba con otra palabra, por ejemplo “fuga”, “consumo”, “alertas” o “contraseña”.</p>
+  {% endif %}
+  <a class="manual-resultados-quitar" href="?{{ sin_busqueda }}">Quitar búsqueda</a>
+</section>
+{% if resultados %}
+<style>
+  {% for r in resultados %}#{{ r.id }}{% if not forloop.last %}, {% endif %}{% endfor %} {
+    outline: 3px solid var(--c-agua, #0b8fd6); outline-offset: 6px; border-radius: 12px;
+  }
+  #{{ resultados.0.id }} { background: var(--c-agua-soft, #e3f3fc); }
+</style>
+{% endif %}
+{% endif %}

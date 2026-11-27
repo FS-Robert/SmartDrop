@@ -19,6 +19,12 @@
       <span>Reporte #{{ reporte.id_reporte }}</span>
       <span>{{ reporte.autor_nombre }}</span>
       <time datetime="{{ reporte.fecha_reporte }}">{{ reporte.fecha_reporte|fecha_corta }}</time>
+      {% if reporte.es_corte %}
+      <span class="reporte-corte"><i class="ti ti-map-pin" aria-hidden="true"></i> {{ reporte.zona }}</span>
+      <span class="reporte-corte"><i class="ti ti-clock" aria-hidden="true"></i>
+        {% if reporte.duracion_seg is not None %}Corte de {{ reporte.duracion_seg|duracion_texto }}{% if reporte.duracion_aprox %} (aprox.){% endif %}{% elif reporte.estado == 'resuelto' %}Resuelto sin hora de regreso{% else %}Sin agua todavía{% endif %}
+      </span>
+      {% endif %}
     </div>
   </div>
   <div class="page-actions">
@@ -107,6 +113,14 @@
             </select>
           </div>
         </div>
+        {% if reporte.es_corte %}
+        <div class="field">
+          <label class="field-label" for="gestion-restablecido">Hora en que volvió el agua</label>
+          <p class="field-hint">Con esta hora se calcula cuánto duró el corte. Si la dejas vacía y marcas Resuelto, se usa la hora de ahora.</p>
+          <input type="datetime-local" name="restablecido" id="gestion-restablecido" class="field-input"
+            value="{% if reporte.restablecido %}{{ reporte.restablecido|date:'Y-m-d\TH:i' }}{% endif %}">
+        </div>
+        {% endif %}
         <div class="field">
           <label class="field-label" for="respuesta_admin">Respuesta oficial</label>
           <p class="field-hint">La verá la persona que hizo el reporte.</p>

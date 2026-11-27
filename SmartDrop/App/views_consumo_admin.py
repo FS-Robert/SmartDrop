@@ -59,12 +59,17 @@ def admin_consumo(request):
             messages.success(request, f'Listo: el límite de la comunidad ahora es {valor:g} m³ al mes por vivienda.')
         return redirect(f"{reverse('admin_consumo')}?{request.GET.urlencode()}")
 
-    try:
-        datos = _datos(request)
-    except supabase_client.SupabaseError:
-        logger.exception('No se pudo armar el reporte de consumo')
-        messages.error(request, 'No se pudieron cargar las viviendas. Inténtalo de nuevo en un momento.')
-        datos = None
+    rango_error = consumo_admin.rango_invertido(request.GET)
+    datos = None
+    if rango_error:
+        # Fechas al revés: no se arma el reporte hasta que el rango sea válido (PB038).
+        messages.error(request, consumo_admin.MENSAJE_RANGO_INVERTIDO)
+    else:
+        try:
+            datos = _datos(request)
+        except supabase_client.SupabaseError:
+            logger.exception('No se pudo armar el reporte de consumo')
+            messages.error(request, 'No se pudieron cargar las viviendas. Inténtalo de nuevo en un momento.')
 
     zona = request.GET.get('zona', '')
     hay_rango = request.GET.get('desde') and request.GET.get('hasta')
@@ -77,6 +82,7 @@ def admin_consumo(request):
         'hasta_txt': request.GET.get('hasta', ''),
         'consulta': request.GET.urlencode(),
         'aumento_pct': round(consumo_admin.AUMENTO_ANORMAL * 100),
+        'rango_error': rango_error,
     }
     if datos:
         contexto['grafica_zonas'] = {
@@ -182,6 +188,9 @@ def libro_excel(datos, usuarios):
 def admin_consumo_exportar(request):
     if not is_admin(request.user):
         return redirect('dashboard')
+    if consumo_admin.rango_invertido(request.GET):
+        messages.error(request, consumo_admin.MENSAJE_RANGO_INVERTIDO)
+        return redirect(f"{reverse('admin_consumo')}?{request.GET.urlencode()}")
     try:
         datos = _datos(request)
     except supabase_client.SupabaseError:
@@ -202,6 +211,10 @@ def admin_consumo_usuario(request, id_vivienda):
     """Consumo de un usuario (su vivienda) día por día, con su gráfica."""
     if not is_admin(request.user):
         return redirect('dashboard')
+    if consumo_admin.rango_invertido(request.GET):
+        # Fechas al revés: se avisa y se regresa a la misma vivienda sin el rango malo (PB038).
+        messages.error(request, consumo_admin.MENSAJE_RANGO_INVERTIDO)
+        return redirect('admin_consumo_usuario', id_vivienda=id_vivienda)
     desde, hasta, etiqueta = consumo_admin.periodo_desde_parametros(request.GET)
     try:
         datos = consumo_admin.detalle(id_vivienda, desde, hasta)
