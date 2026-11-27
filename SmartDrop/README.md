@@ -72,6 +72,27 @@ python manage.py runserver
 Abre `http://localhost:8000` y recarga con `Ctrl + F5`. Los dos `migrate` se pueden repetir sin problema; si
 falta el segundo, la página *Predicción de suministro* falla con `no such column`.
 
+### Actualización del Sprint 4 (web): qué hacer
+
+El Sprint 4 agrega dos tablas nuevas: `registro_manual` (PB054, registro de datos históricos) e
+`interrupcion_servicio` (PB042, hora de restablecimiento y duración de los cortes). Sin el `migrate` esas pantallas
+fallan.
+
+**En tu laptop:** los pasos de *Ya lo tenía instalado* de arriba (`git pull`, `pip install`, los dos `migrate`).
+
+**En el servidor (para que la web publicada y la app tengan los cambios):**
+
+1. Subir el código: desde tu PC, `deploy\desplegar.ps1` (o `deploy\actualizar.ps1` si el servidor ya estaba
+   instalado).
+2. El script `deploy/actualizar.sh` corre solo en el servidor:
+   `python manage.py migrate`, `python manage.py migrate --database=timeseries`, `python manage.py collectstatic`
+   y reinicia el servicio. Si lo haces a mano, son esos tres comandos y `sudo systemctl restart smartdrop`.
+3. Revisar que todo quedó: `sudo systemctl status smartdrop` y abrir en el navegador *Registro manual*, *Problemas
+   reportados* (columna de duración) y el *Manual de usuario* (buscador y botón del PDF).
+
+**Si cambias el texto del manual de usuario**, vuelve a generar el PDF antes de subir:
+`python manage.py manual_pdf` (usa Microsoft Edge y deja el archivo en `App/Static/App/manual/`).
+
 ### Primera vez
 
 1. Clona el repositorio y crea el entorno virtual (ver [Instalación del backend](#instalación-del-backend)).
