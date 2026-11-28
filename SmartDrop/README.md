@@ -93,6 +93,45 @@ fallan.
 **Si cambias el texto del manual de usuario**, vuelve a generar el PDF antes de subir:
 `python manage.py manual_pdf` (usa Microsoft Edge y deja el archivo en `App/Static/App/manual/`).
 
+### Protección de la válvula (PB052 y calidad del agua)
+
+El servidor cierra y bloquea las válvulas solo, con las lecturas que ya manda el ESP32 (**no hay que cambiar el
+ESP32**):
+
+| Situación | Qué pasa |
+|---|---|
+| Tanque bajo el 10 % | Aviso al administrador: "Nivel bajo del tanque". |
+| Tanque en 8 % o menos (3 lecturas seguidas) | Se cierran las válvulas abiertas. El botón dice **"Bloqueado - Nivel insuficiente"**. Todos los usuarios reciben "Suministro suspendido". |
+| Tanque sobre el 30 % (3 lecturas seguidas) | Se quita el bloqueo por nivel. **La válvula no se abre sola**: solo se vuelve a habilitar el botón. |
+| Agua Pobre o Inaceptable (3 lecturas seguidas) | Se cierran las válvulas aunque el tanque esté lleno. El botón dice **"Bloqueado - Calidad del agua pobre"**. El administrador recibe el aviso de revisar el tanque y filtrar el agua. |
+| Agua apta otra vez (3 lecturas seguidas) | Se quita el bloqueo por calidad. |
+
+El botón de abrir (y el temporizador) solo funciona cuando el nivel y la calidad están bien, en la web y en la app.
+Cerrar siempre se puede. Se piden 3 lecturas seguidas para que una lectura falsa no cierre la válvula.
+
+**Qué hay que hacer:**
+
+- **En tu laptop:** `git pull` y `python manage.py migrate` (crea la tabla `bloqueo_valvula`). En tu laptop la
+  protección no actúa sola, porque la ingesta de lecturas está apagada (`MQTT_INGESTA_ENABLED`, ver *Qué NO
+  encender en tu laptop*).
+- **En el servidor:** subir el código con `deploy\actualizar.ps1`; `deploy/actualizar.sh` ya corre el `migrate`.
+  Es el servidor el que recibe las lecturas y cierra la válvula, así que **tiene que estar encendido**.
+
+**Prueba física (con el servidor actualizado y encendido, y el ESP32 encendido):**
+
+1. Abrir la válvula desde la web.
+2. Nivel: bajar el agua del tanque hasta 8 % o menos. En unos segundos (3 lecturas) la válvula se cierra, la página
+   de *Electroválvulas* muestra "Bloqueado - Nivel insuficiente" y el botón de abrir queda apagado. Llenar sobre el
+   30 %: el botón se vuelve a habilitar, pero la válvula sigue cerrada hasta que alguien la abra.
+3. Calidad: con el tanque lleno, poner el sensor TDS en agua con sal (Pobre). La válvula se cierra y sale
+   "Bloqueado - Calidad del agua pobre". Al pasar el sensor a agua limpia se habilita el botón.
+4. Revisar en el historial de movimientos que el cierre aparece como **Automático** con su razón, y en la app que
+   llegaron los avisos.
+
+**Si el botón se queda bloqueado** (por ejemplo, al terminar las pruebas), en el servidor:
+`python manage.py shell -c "from App.models import BloqueoValvula; BloqueoValvula.objects.update(activo=False)"`.
+Con la siguiente lectura mala se vuelve a bloquear.
+
 ### Primera vez
 
 1. Clona el repositorio y crea el entorno virtual (ver [Instalación del backend](#instalación-del-backend)).
