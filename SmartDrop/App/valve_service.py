@@ -233,6 +233,10 @@ def ejecutar_comando(valvula_id, comando, *, duracion_seg=None, id_usuario=None,
     if comando == 'cerrar':
         duracion_seg = None
     valvula_id = int(valvula_id)
+    if comando == 'abrir':
+        # Con el tanque casi vacío o el agua mala no se deja abrir (ni desde la web, la app ni el temporizador).
+        from .proteccion_agua import revisar_apertura
+        revisar_apertura()
 
     rows = supabase_client.select('valvula', _VALVE_COLUMNS, {'id_valvula': f'eq.{valvula_id}', 'limit': '1'})
     valvula = rows[0] if rows else None

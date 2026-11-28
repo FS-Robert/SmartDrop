@@ -207,3 +207,28 @@ class InterrupcionServicio(models.Model):
 
     def __str__(self):
         return f'Reporte #{self.id_reporte} · restablecido {self.restablecido:%d/%m/%Y %H:%M}'
+
+
+class BloqueoValvula(models.Model):
+    """Motivo por el que las válvulas no se pueden abrir (PB052 y calidad del agua).
+
+    Hay una fila por motivo: "nivel" (el tanque bajó al 8 %) y "calidad" (el agua salió Pobre o
+    Inaceptable). Mientras alguna esté activa, el botón "Abrir válvula" queda bloqueado en la web y
+    en la app. Se guarda en la base local para que un reinicio del servidor no lo olvide.
+    """
+
+    MOTIVOS = (('nivel', 'Nivel insuficiente'), ('calidad', 'Calidad del agua'), ('aviso_nivel', 'Aviso de nivel bajo'))
+
+    motivo = models.CharField(max_length=20, choices=MOTIVOS, unique=True)
+    activo = models.BooleanField(default=False)
+    valor = models.CharField(max_length=60, blank=True, help_text='Última lectura que lo activó (por ejemplo "6 %" o "Pobre, 1192 ppm").')
+    desde = models.DateTimeField(null=True, blank=True)
+    actualizado = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'bloqueo_valvula'
+        verbose_name = 'bloqueo de válvula'
+        verbose_name_plural = 'bloqueos de válvula'
+
+    def __str__(self):
+        return f"{self.get_motivo_display()}: {'activo' if self.activo else 'sin bloqueo'}"

@@ -26,6 +26,16 @@
   </div>
 {% endif %}
 
+{% for bloqueo in bloqueos %}
+  <div class="notice notice--bad valve-message valve-block-message" role="alert">
+    <i class="ti ti-lock" aria-hidden="true"></i>
+    <div>
+      <p class="notice-title">{{ bloqueo.titulo }}</p>
+      <p>{{ bloqueo.aviso }}{% if bloqueo.valor %} Última lectura: {{ bloqueo.valor }}.{% endif %}</p>
+    </div>
+  </div>
+{% endfor %}
+
 <p class="valve-live-message" id="valve-live-message" role="status" aria-live="polite"></p>
 
 {% if valvulas %}
@@ -59,8 +69,8 @@
         <div class="valve-actions">
           <form class="valve-command-form" method="post" action="{% url 'valvula_comando' valvula.id_valvula %}">
             {% csrf_token %}
-            <button class="btn btn--primary btn--block valve-button valve-button-open" type="submit" name="comando" value="abrir" data-valve-action="abrir" {% if valvula.estado_actual|lower == 'abierta' %}disabled{% endif %}>
-              <i class="ti ti-lock-open" aria-hidden="true"></i><span>Abrir válvula</span>
+            <button class="btn btn--primary btn--block valve-button valve-button-open" type="submit" name="comando" value="abrir" data-valve-action="abrir" {% if valvula.estado_actual|lower == 'abierta' or bloqueos %}disabled{% endif %}>
+              <i class="ti ti-lock-open" aria-hidden="true"></i><span>{% if bloqueos %}{{ bloqueos.0.titulo }}{% else %}Abrir válvula{% endif %}</span>
             </button>
           </form>
           <form class="valve-command-form" method="post" action="{% url 'valvula_comando' valvula.id_valvula %}">
@@ -75,15 +85,15 @@
           <legend class="valve-timer-label">Abrir por un tiempo</legend>
           <p class="field-hint">Se cierra sola al terminar. Máximo 120 segundos.</p>
           <div class="chip-row valve-timer-buttons">
-            <button type="button" class="chip valve-timer-button" data-duration="10">10 s</button>
-            <button type="button" class="chip valve-timer-button" data-duration="30">30 s</button>
-            <button type="button" class="chip valve-timer-button" data-duration="60">60 s</button>
-            <button type="button" class="chip valve-timer-button" data-duration="120">120 s</button>
+            <button type="button" class="chip valve-timer-button" data-duration="10"{% if bloqueos %} disabled{% endif %}>10 s</button>
+            <button type="button" class="chip valve-timer-button" data-duration="30"{% if bloqueos %} disabled{% endif %}>30 s</button>
+            <button type="button" class="chip valve-timer-button" data-duration="60"{% if bloqueos %} disabled{% endif %}>60 s</button>
+            <button type="button" class="chip valve-timer-button" data-duration="120"{% if bloqueos %} disabled{% endif %}>120 s</button>
           </div>
           <div class="valve-timer-custom">
             <label class="sr-only" for="duracion-{{ valvula.id_valvula }}">Segundos personalizados</label>
-            <input type="number" id="duracion-{{ valvula.id_valvula }}" class="valve-custom-duration" min="1" max="120" inputmode="numeric" placeholder="Segundos">
-            <button type="button" class="btn btn--secondary valve-button valve-button-open valve-timer-apply" data-valve-action="abrir">Abrir con temporizador</button>
+            <input type="number" id="duracion-{{ valvula.id_valvula }}" class="valve-custom-duration" min="1" max="120" inputmode="numeric" placeholder="Segundos"{% if bloqueos %} disabled{% endif %}>
+            <button type="button" class="btn btn--secondary valve-button valve-button-open valve-timer-apply" data-valve-action="abrir"{% if bloqueos %} disabled{% endif %}>Abrir con temporizador</button>
           </div>
         </fieldset>
 
@@ -463,6 +473,16 @@
     document.querySelectorAll('[data-valve-open-info]').forEach(renderOpenInfo);
   }, 1000);
 
+  // Si el tanque está casi vacío o el agua está mala, los botones de abrir se quedan apagados.
+  let valvulasBloqueadas = {{ bloqueos|yesno:'true,false' }};
+
+  function aplicarBloqueo(card) {
+    if (!valvulasBloqueadas || !card) return;
+    card.querySelectorAll('.valve-button-open, .valve-timer-button, .valve-custom-duration').forEach(item => {
+      item.disabled = true;
+    });
+  }
+
   function updateValveStatus(card, result) {
     const isOpen = result.estado_nuevo === 'abierta';
     setStatusPill(card, isOpen, isOpen ? 'Abierta' : 'Cerrada');
@@ -472,6 +492,7 @@
     const closeButton = card.querySelector('.valve-button-close');
     if (openButton) openButton.disabled = isOpen;
     if (closeButton) closeButton.disabled = !isOpen;
+    aplicarBloqueo(card);
 
     const timerStatus = card.querySelector('[data-valve-timer-status]');
     const countdownValue = timerStatus?.querySelector('.valve-timer-countdown-value');
@@ -556,6 +577,7 @@
         const closeButton = card?.querySelector('.valve-button-close');
         if (openButton) openButton.disabled = false;
         if (closeButton) closeButton.disabled = true;
+        aplicarBloqueo(card);
 
         timerStatus.dataset.timerEndAt = '';
         timerStatus.dataset.duration = '0';
@@ -625,6 +647,7 @@
       }
 
       const result = await response.json();
+      if (result.bloqueada) valvulasBloqueadas = true;
       if (!response.ok || !result.ok) throw new Error(result.error || 'No se pudo ejecutar el comando.');
 
       updateValveStatus(card, result);
@@ -651,6 +674,7 @@
       const closeButton = card.querySelector('.valve-button-close');
       if (pill && openButton) openButton.disabled = isOpen;
       if (pill && closeButton) closeButton.disabled = !isOpen;
+      aplicarBloqueo(card);
     }
   }
 

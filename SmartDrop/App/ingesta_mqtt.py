@@ -127,6 +127,18 @@ def _estado_valvula(datos):
         })
 
 
+def _proteger(regla, *lectura):
+    """Pasa la lectura a la protección de válvulas (nivel bajo o agua mala). Si falla, la lectura igual se guarda."""
+    from . import proteccion_agua
+    try:
+        if regla == 'nivel':
+            proteccion_agua.revisar_nivel(*lectura)
+        else:
+            proteccion_agua.revisar_calidad(*lectura)
+    except Exception:
+        logger.exception('Falló la protección de válvulas (%s)', regla)
+
+
 def procesar_mensaje(topico, cuerpo):
     """Procesa un mensaje de `smartdrop/{id_vivienda}/{tipo}` igual que lo hacía consumer.js."""
     from ml_engine.leaks.realtime import revisar_lectura
@@ -165,6 +177,7 @@ def procesar_mensaje(topico, cuerpo):
                 'id_tanque': tanque['id_tanque'], 'nivel_cm': distancia, 'porcentaje_llenado': porcentaje,
                 'es_valido': True,
             }, return_representation=False)
+            _proteger('nivel', porcentaje)
         agua = _agua_cm(porcentaje, _numero((tanque or {}).get('altura_total')))
         if agua is None:
             # Sin % o sin altura del tanque no se puede saber cuánta agua hay: mejor no guardar un dato al revés.
@@ -181,6 +194,8 @@ def procesar_mensaje(topico, cuerpo):
         return
     datos['valor'] = valor
     _guardar_lectura(id_sensor, id_vivienda, valor)
+    if tipo == 'tds':
+        _proteger('calidad', datos.get('calidad'), valor)
     if tipo == 'tds' and datos.get('calidad') in CALIDADES_CRITICAS:
         _incidente_calidad(id_sensor, datos)
     elif tipo in ('flujo', 'presion'):

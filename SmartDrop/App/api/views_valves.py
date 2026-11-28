@@ -6,6 +6,7 @@ from rest_framework.views import APIView
 
 from .. import supabase_client, valve_service
 from ..mqtt_service import MqttError, publish_command
+from ..proteccion_agua import ValvulaBloqueada
 from ..queries import is_admin, owner_id, users_by_id
 from ..ratelimit import client_ip
 from .permissions import IsAdministrator, IsAuthenticatedUser
@@ -153,6 +154,8 @@ class MobileValvulaCommandView(APIView):
                 origen='app',
                 publish=publish_command,
             )
+        except ValvulaBloqueada as exc:
+            return Response({'error': str(exc), 'bloqueada': True}, status=status.HTTP_409_CONFLICT)
         except valve_service.ValvulaNoEncontrada:
             return Response({'error': 'Válvula no encontrada o sin topic MQTT.'}, status=status.HTTP_404_NOT_FOUND)
         except MqttError as exc:

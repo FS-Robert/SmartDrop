@@ -26,6 +26,7 @@ from .models import Usuario
 from .seguridad import fila_csv, limitar
 from . import views_reportes
 from .mqtt_service import MqttError, publish_command
+from .proteccion_agua import ValvulaBloqueada, bloqueos_activos
 from .queries import (
     NO_DATA,
     LinkViviendaError,
@@ -1241,6 +1242,7 @@ def valvulas(request):
             'origen': request.GET.get('origen', ''),
         },
         'error': error,
+        'bloqueos': bloqueos_activos(),
         'ultima_actualizacion': 'hace unos segundos',
     })
 
@@ -1301,6 +1303,11 @@ def valvula_comando(request, valvula_id):
                 'timer_remaining': resultado['timer_remaining'],
                 'duracion_programada': resultado['duracion_programada'],
             })
+        return redirect('valvulas')
+    except ValvulaBloqueada as exc:
+        if _json_requested(request):
+            return JsonResponse({'ok': False, 'error': str(exc), 'bloqueada': True}, status=409)
+        messages.error(request, str(exc))
         return redirect('valvulas')
     except (MqttError, supabase_client.SupabaseError, ValueError, TypeError) as exc:
         if _json_requested(request):
