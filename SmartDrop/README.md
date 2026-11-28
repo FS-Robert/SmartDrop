@@ -95,8 +95,9 @@ fallan.
 
 ### Protección de la válvula (PB052 y calidad del agua)
 
-El servidor cierra y bloquea las válvulas solo, con las lecturas que ya manda el ESP32 (**no hay que cambiar el
-ESP32**):
+La web cierra y bloquea las válvulas sola, con las lecturas que ya manda el ESP32 (**no hay que cambiar el
+ESP32**). Esto lo hace la laptop que tiene encendida la recepción de lecturas (`MQTT_INGESTA_ENABLED=1`), que
+reemplaza al consumer:
 
 | Situación | Qué pasa |
 |---|---|
@@ -109,15 +110,26 @@ ESP32**):
 El botón de abrir (y el temporizador) solo funciona cuando el nivel y la calidad están bien, en la web y en la app.
 Cerrar siempre se puede. Se piden 3 lecturas seguidas para que una lectura falsa no cierre la válvula.
 
-**Qué hay que hacer:**
+**Qué hay que hacer (todo el equipo):** en la carpeta del repositorio,
 
-- **En tu laptop:** `git pull` y `python manage.py migrate` (crea la tabla `bloqueo_valvula`). En tu laptop la
-  protección no actúa sola, porque la ingesta de lecturas está apagada (`MQTT_INGESTA_ENABLED`, ver *Qué NO
-  encender en tu laptop*).
-- **En el servidor:** subir el código con `deploy\actualizar.ps1`; `deploy/actualizar.sh` ya corre el `migrate`.
-  Es el servidor el que recibe las lecturas y cierra la válvula, así que **tiene que estar encendido**.
+```powershell
+git pull
+.venv\Scripts\Activate.ps1
+cd SmartDrop
+python manage.py migrate
+```
 
-**Prueba física (con el servidor actualizado y encendido, y el ESP32 encendido):**
+Eso crea la tabla `bloqueo_valvula`. Nadie más tiene que cambiar su `.env`.
+
+**Solo la laptop que va a recibir las lecturas del ESP32** (una sola a la vez):
+
+1. En su `.env` poner `MQTT_INGESTA_ENABLED=1`. Necesita también `MQTT_BROKER_HOST`, `MQTT_USERNAME` y
+   `MQTT_PASSWORD` (Eliseo los pasa en privado).
+2. Apagar el consumer si estaba corriendo, para que cada lectura no se guarde dos veces.
+3. Levantar la web con `python manage.py runserver` y dejarla abierta: si la web se apaga, nada cierra la válvula.
+4. Al terminar, volver a poner `MQTT_INGESTA_ENABLED=0`.
+
+**Prueba física (con la web levantada en esa laptop y el ESP32 encendido):**
 
 1. Abrir la válvula desde la web.
 2. Nivel: bajar el agua del tanque hasta 8 % o menos. En unos segundos (3 lecturas) la válvula se cierra, la página
@@ -128,7 +140,7 @@ Cerrar siempre se puede. Se piden 3 lecturas seguidas para que una lectura falsa
 4. Revisar en el historial de movimientos que el cierre aparece como **Automático** con su razón, y en la app que
    llegaron los avisos.
 
-**Si el botón se queda bloqueado** (por ejemplo, al terminar las pruebas), en el servidor:
+**Si el botón se queda bloqueado** (por ejemplo, al terminar las pruebas), en la carpeta `SmartDrop`:
 `python manage.py shell -c "from App.models import BloqueoValvula; BloqueoValvula.objects.update(activo=False)"`.
 Con la siguiente lectura mala se vuelve a bloquear.
 
