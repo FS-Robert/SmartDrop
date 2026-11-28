@@ -772,6 +772,26 @@ class AlertasExportTests(TestCase):
 		self.assertContains(self.client.get(reverse('alertas_historial')), 'Descargar CSV')
 		self.assertEqual(self.client.get(reverse('alertas_export'))['Content-Type'], 'text/csv; charset=utf-8')
 
+	@patch('App.views_reportes.supabase_client.select')
+	def test_csv_de_alertas_con_la_hora_de_el_salvador(self, select):
+		# La alerta #1345 se guardó 19:42 en hora UTC; en la pantalla y en el CSV debe salir 13:42.
+		select.return_value = [{
+			'id_alerta': 1345, 'fecha_creacion': '2026-11-11T19:42:10.5+00:00', 'tipo_alerta': 'fuga',
+			'prioridad': 'alta', 'mensaje': 'Posible fuga', 'estado_confirmacion': 'pendiente',
+		}]
+		self.client.force_login(self.admin)
+		contenido = self.client.get(reverse('alertas_export')).content.decode('utf-8-sig')
+		self.assertIn('11/11/2026 13:42', contenido)
+		self.assertNotIn('+00:00', contenido)
+
+	def test_fecha_csv_acepta_texto_fecha_y_vacio(self):
+		from datetime import datetime, timezone as dt_timezone
+		from .views_reportes import _fecha_csv
+		self.assertEqual(_fecha_csv('2026-10-26T07:39:47.860904+00:00'), '26/10/2026 01:39')
+		self.assertEqual(_fecha_csv(datetime(2026, 10, 26, 7, 39, tzinfo=dt_timezone.utc)), '26/10/2026 01:39')
+		self.assertEqual(_fecha_csv(None), '')
+		self.assertEqual(_fecha_csv('no es fecha'), 'no es fecha')
+
 class FlowConsumptionTests(TestCase):
 	def setUp(self):
 		from . import queries

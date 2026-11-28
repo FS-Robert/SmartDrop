@@ -17,7 +17,7 @@ import os
 import re
 import uuid
 from urllib.parse import urlencode
-from datetime import datetime
+from datetime import datetime, timezone as dt_timezone
 
 from django.conf import settings
 from django.contrib import messages
@@ -814,6 +814,27 @@ def _avisar_autor_del_reporte(reporte_id, reporte, estado_nuevo, respuesta):
         logger.exception('No se pudo avisar al autor del reporte %s', reporte_id)
 
 
+def _fecha_csv(valor):
+    """Fecha para el CSV en hora de El Salvador y fácil de leer (por ejemplo 26/10/2026 01:39).
+
+    Supabase guarda las fechas en hora UTC; sin esto el CSV salía con 6 horas de diferencia
+    frente a lo que se ve en la pantalla. Si la fecha no se entiende, se deja tal como vino.
+    """
+    if not valor:
+        return ''
+    fecha = valor
+    if isinstance(valor, str):
+        try:
+            fecha = datetime.fromisoformat(valor.strip().replace('Z', '+00:00'))
+        except ValueError:
+            return valor
+    if not isinstance(fecha, datetime):
+        return str(valor)
+    if timezone.is_naive(fecha):
+        fecha = fecha.replace(tzinfo=dt_timezone.utc)
+    return timezone.localtime(fecha).strftime('%d/%m/%Y %H:%M')
+
+
 @login_required(login_url='login')
 @limitar('exportar', por='usuario', metodos=('GET',))
 def admin_reportes_export(request):
@@ -858,7 +879,7 @@ def admin_reportes_export(request):
 
         writer.writerow(fila_csv([
             reporte.get('id_reporte'),
-            reporte.get('fecha_reporte'),
+            _fecha_csv(reporte.get('fecha_reporte')),
             _tipo_label(reporte.get('tipo_problema')),
             (reporte.get('descripcion') or '').replace('\n', ' '),
             reporte.get('ubicacion') or '',
@@ -866,9 +887,9 @@ def admin_reportes_export(request):
             reporte.get('prioridad') or '',
             reporte.get('id_usuario') or '',
             (reporte.get('respuesta_admin') or '').replace('\n', ' '),
-            reporte.get('fecha_atencion') or '',
+            _fecha_csv(reporte.get('fecha_atencion')),
             reporte.get('zona') or '',
-            reporte['restablecido'].isoformat() if reporte.get('restablecido') else '',
+            _fecha_csv(reporte.get('restablecido')),
             minutos,
         ]))
     return response
@@ -1022,7 +1043,7 @@ def alertas_export(request):
     for alerta in alertas:
         writer.writerow(fila_csv([
             alerta.get('id_alerta'),
-            alerta.get('fecha_creacion'),
+            _fecha_csv(alerta.get('fecha_creacion')),
             alerta.get('tipo_alerta'),
             alerta.get('prioridad'),
             (alerta.get('mensaje') or '').replace('\n', ' '),

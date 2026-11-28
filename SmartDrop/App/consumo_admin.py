@@ -10,6 +10,7 @@ ajusta a la cantidad de días que se están viendo (por ejemplo, la mitad si son
 """
 import logging
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, time as dt_time, timedelta
 
 from django.conf import settings
@@ -162,14 +163,18 @@ def _registrado(ids_vivienda, desde, hasta):
     return total
 
 
-def _medido(desde, hasta):
-    """({(id_vivienda, día): litros}, {id_vivienda: zona}, última hora sincronizada) desde la copia local."""
+def _medido(desde, hasta, desde_ultima=None):
+    """({(id_vivienda, día): litros}, {id_vivienda: zona}, última hora sincronizada) desde la copia local.
+
+    Si se da `desde_ultima`, la "última hora sincronizada" solo se busca desde ese día en adelante.
+    """
     from ml_engine.models import ConsumptionAggregate, Home
 
     hogares = {h.pk: h for h in Home.objects.filter(source='real', source_ref_vivienda_id__isnull=False)}
     zonas = {h.source_ref_vivienda_id: (h.meta or {}).get('zona') or h.zone.name for h in hogares.values()}
     litros = defaultdict(float)
     ultima = None
+    inicio_ultima = _medianoche(desde_ultima or desde)
     filas = ConsumptionAggregate.objects.filter(
         home_id__in=hogares.keys(), period='hourly',
         period_start__gte=_medianoche(desde), period_start__lt=_medianoche(hasta + timedelta(days=1)),
@@ -177,7 +182,8 @@ def _medido(desde, hasta):
     for home_id, inicio, valor in filas.iterator():
         dia = timezone.localtime(inicio).date()
         litros[(hogares[home_id].source_ref_vivienda_id, dia)] += max(0.0, valor or 0.0)
-        ultima = inicio if ultima is None or inicio > ultima else ultima
+        if inicio >= inicio_ultima and (ultima is None or inicio > ultima):
+            ultima = inicio
     return litros, zonas, ultima
 
 
@@ -199,6 +205,11 @@ def _consumo_por_dia(ids_vivienda, desde, hasta, fuentes=None):
     ids_fuente = sorted({fuentes.get(i, i) for i in ids_vivienda})
     registrado = _registrado(ids_fuente, desde, hasta)
     medido, zonas, ultima = _medido(desde, hasta)
+    return _armar_por_dia(ids_vivienda, desde, hasta, fuentes, registrado, medido), zonas, ultima
+
+
+def _armar_por_dia(ids_vivienda, desde, hasta, fuentes, registrado, medido):
+    """{id_vivienda: {día: litros}} con lo registrado si hay y, si no, lo medido por el flujo."""
     por_dia = {}
     for id_vivienda in ids_vivienda:
         fuente = fuentes.get(id_vivienda, id_vivienda)
@@ -207,7 +218,7 @@ def _consumo_por_dia(ids_vivienda, desde, hasta, fuentes=None):
             valor = registrado.get((fuente, dia), 0.0)
             dias[dia] = valor if valor > 0 else medido.get((fuente, dia), 0.0)
         por_dia[id_vivienda] = dias
-    return por_dia, zonas, ultima
+    return por_dia
 
 
 # ── Reporte ─────────────────────────────────────────────────────────────────
@@ -231,9 +242,18 @@ def reporte(desde, hasta, limite_mes=None):
     anterior_desde = anterior_hasta - timedelta(days=dias - 1)
 
     fuentes = _fuentes(viviendas)
-    actual, zonas, ultima = _consumo_por_dia(ids, desde, hasta, fuentes)
-    anterior, _, _ = _consumo_por_dia(ids, anterior_desde, anterior_hasta, fuentes)
-    duenos = users_by_id((v.get('id_usuario_propietario') for v in viviendas), 'id_usuario,nombre,apellido,correo')
+    ids_fuente = sorted({fuentes.get(i, i) for i in ids})
+    # Para que la primera consulta no tarde: el periodo actual y el anterior se piden juntos en una sola
+    # consulta, y los nombres de los dueños se piden al mismo tiempo, en vez de esperar uno tras otro.
+    with ThreadPoolExecutor(max_workers=2) as hilos:
+        pedido_registrado = hilos.submit(_registrado, ids_fuente, anterior_desde, hasta)
+        pedido_duenos = hilos.submit(
+            users_by_id, [v.get('id_usuario_propietario') for v in viviendas], 'id_usuario,nombre,apellido,correo')
+        medido, zonas, ultima = _medido(anterior_desde, hasta, desde_ultima=desde)
+        registrado = pedido_registrado.result()
+        duenos = pedido_duenos.result()
+    actual = _armar_por_dia(ids, desde, hasta, fuentes, registrado, medido)
+    anterior = _armar_por_dia(ids, anterior_desde, anterior_hasta, fuentes, registrado, medido)
 
     limite_periodo = round(limite_mes * dias / DIAS_DEL_MES, 3)
     usuarios = []

@@ -111,6 +111,25 @@ class ReporteConsumoTests(TestCase):
         self.assertTrue(carla['anormal'])
         self.assertEqual(datos['anterior_desde'], date(2026, 10, 1))
 
+    def test_pide_el_consumo_una_sola_vez_para_los_dos_periodos(self):
+        # PERF-01: antes se pedía a Supabase el periodo actual y luego el anterior; ahora va todo en una consulta.
+        self._medir(1, date(2026, 10, 5), 400)               # periodo elegido
+        self._medir(1, date(2026, 9, 20), 100)               # periodo anterior
+        tablas = []
+        falso = _select_falso([])
+
+        def select(tabla, columnas='*', params=None):
+            tablas.append(tabla)
+            return falso(tabla, columnas, params)
+
+        with patch('App.consumo_admin.supabase_client.select', side_effect=select), \
+                patch('App.consumo_admin.users_by_id', return_value=DUENOS):
+            datos = consumo_admin.reporte(date(2026, 10, 1), HOY)
+        self.assertEqual(tablas.count('consumo'), 1)
+        ana = next(u for u in datos['usuarios'] if u['id_vivienda'] == 1)
+        self.assertEqual((ana['m3'], ana['m3_anterior']), (0.4, 0.1))
+        self.assertEqual(datos['ultima_lectura'].date(), date(2026, 10, 5))
+
     def test_solo_cuenta_el_periodo_elegido(self):
         self._medir(1, date(2026, 9, 30), 5000)
         self._medir(1, date(2026, 10, 2), 300)
